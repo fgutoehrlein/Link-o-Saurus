@@ -1,4 +1,3 @@
-```md
 # AGENTS.md — Link-O-Saurus (Codex Assistant Guide)
 
 Dieses Dokument definiert, **wie der Codex-Agent arbeiten soll**, um an der Browser-Erweiterung **Link-O-Saurus** (Chrome + Firefox, WebExtension, offline-first) zu entwickeln.  
@@ -158,4 +157,3 @@ Akzeptanzkriterium vor Merge: **Alle Tests grün.**
 Codex soll in **kleinen, getesteten Schritten** arbeiten, Fokus auf **Performance**, **Portabilität**, **Datensouveränität**, und **klare, minimalistische UI**.
 
 Link-O-Saurus ist **leicht, schnell, zuverlässig, offline-first.**
-```
