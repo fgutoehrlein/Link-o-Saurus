@@ -14,6 +14,9 @@ importers:
       dexie:
         specifier: ^4.0.4
         version: 4.2.1
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       flexsearch:
         specifier: ^0.7.31
         version: 0.7.43
@@ -824,6 +827,9 @@ packages:
   fake-indexeddb@5.0.2:
     resolution: {integrity: sha512-cB507r5T3D55DfclY01GLkninZLfU7HXV/mhVRTnTRm5k2u+fY7Fof2dBkr80p5t7G7dlA/G5dI87QiMdPpMCQ==}
     engines: {node: '>=18'}
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -1886,6 +1892,8 @@ snapshots:
       strip-final-newline: 3.0.0
 
   fake-indexeddb@5.0.2: {}
+
+  fflate@0.8.2: {}
 
   fill-range@7.1.1:
     dependencies:

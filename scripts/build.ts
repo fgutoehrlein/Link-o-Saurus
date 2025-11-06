@@ -135,6 +135,14 @@ function createViteConfig(entry: EntryDefinition): InlineConfig {
         name: entry.name,
         fileName: () => entry.fileName
       }
+    },
+    worker: {
+      format: 'es',
+      rollupOptions: {
+        output: {
+          format: 'es',
+        }
+      }
     }
   } satisfies InlineConfig;
 }
