@@ -11,6 +11,6 @@
     "service_worker": "background/sw.js",
     "type": "module"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "contextMenus", "scripting", "activeTab"],
   "host_permissions": []
 }

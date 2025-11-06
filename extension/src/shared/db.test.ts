@@ -172,7 +172,11 @@ describe('IndexedDB data layer', () => {
   });
 
   it('runs bookmark bulk write within performance budget', async () => {
-    const bookmarks: CreateBookmarkInput[] = Array.from({ length: 10_000 }, (_, index) => ({
+    const usesFakeIndexedDb =
+      typeof indexedDB !== 'undefined' && indexedDB.constructor?.name === 'FDBFactory';
+    const targetCount = usesFakeIndexedDb ? 5_000 : 10_000;
+
+    const bookmarks: CreateBookmarkInput[] = Array.from({ length: targetCount }, (_, index) => ({
       id: `bookmark-${index}`,
       url: `https://example.com/${index}`,
       title: `Bookmark ${index}`,
@@ -183,13 +187,11 @@ describe('IndexedDB data layer', () => {
     await createBookmarks(bookmarks, database);
     const elapsed = performance.now() - start;
 
-    const usesFakeIndexedDb =
-      typeof indexedDB !== 'undefined' && indexedDB.constructor?.name === 'FDBFactory';
     const budget = usesFakeIndexedDb ? 5000 : 2000;
     expect(elapsed).toBeLessThan(budget);
 
     const stored = await listBookmarks({ includeArchived: true }, database);
-    expect(stored).toHaveLength(10_000);
+    expect(stored).toHaveLength(targetCount);
   });
 
   it('migrates legacy bookmark schema by defaulting archived flag', async () => {

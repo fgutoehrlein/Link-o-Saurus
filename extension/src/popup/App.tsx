@@ -1,4 +1,4 @@
-import { FunctionalComponent, JSX } from 'preact';
+import { ComponentChildren, FunctionalComponent, JSX } from 'preact';
 import {
   useCallback,
   useEffect,
@@ -8,6 +8,7 @@ import {
   useState,
 } from 'preact/hooks';
 import { FixedSizeList, ListChildComponentProps } from 'react-window';
+import type { FixedSizeListProps } from 'react-window';
 import './App.css';
 
 type Board = {
@@ -162,6 +163,12 @@ const BookmarkRow: FunctionalComponent<
     </div>
   );
 };
+
+const VirtualizedList = FixedSizeList as unknown as FunctionalComponent<
+  FixedSizeListProps<BookmarkRowData> & {
+    children: (props: ListChildComponentProps<BookmarkRowData>) => ComponentChildren;
+  }
+>;
 
 const App: FunctionalComponent = () => {
   const bookmarksResource = useAsyncResource(async () => {
@@ -340,7 +347,10 @@ const App: FunctionalComponent = () => {
 
   const handleDragOver = useCallback((index: number, event: DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    const transfer = event.dataTransfer;
+    if (transfer) {
+      transfer.dropEffect = 'move';
+    }
   }, []);
 
   const handleDrop = useCallback((index: number, event: DragEvent) => {
@@ -476,7 +486,7 @@ const App: FunctionalComponent = () => {
               Lädt …
             </div>
           ) : (
-            <FixedSizeList
+            <VirtualizedList
               height={Math.max(1, listSize.height)}
               width={Math.max(1, listSize.width)}
               itemSize={64}
@@ -495,8 +505,8 @@ const App: FunctionalComponent = () => {
               }}
               itemKey={(index, data) => data.bookmarks[index]?.id ?? index}
             >
-              {BookmarkRow}
-            </FixedSizeList>
+              {(props) => BookmarkRow(props)}
+            </VirtualizedList>
           )}
         </div>
       </section>
