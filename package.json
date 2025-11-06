@@ -10,7 +10,8 @@
     "build:firefox": "tsx scripts/build.ts build firefox",
     "zip:chrome": "tsx scripts/zip.ts chrome",
     "zip:firefox": "tsx scripts/zip.ts firefox",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "comlink": "^4.4.1",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.7.0",
+    "@types/adm-zip": "^0.5.7",
     "@types/chrome": "^0.0.246",
     "@types/node": "^20.11.30",
     "@types/react": "^19.2.2",

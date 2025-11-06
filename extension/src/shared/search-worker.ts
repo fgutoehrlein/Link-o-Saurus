@@ -1,5 +1,6 @@
 import { expose } from 'comlink';
 import { Document } from 'flexsearch';
+import type { EnrichedDocumentSearchResultSetUnit, Id } from 'flexsearch';
 import type { Bookmark } from './types';
 
 type BookmarkDocument = Pick<
@@ -163,15 +164,20 @@ const query = async (
   }
 
   const aggregated = new Map<string, SearchHit>();
-  const rawResults = index.search<true>(queryText, {
+  const rawResults = index.search<true>(queryText, undefined, {
     enrich: true,
     limit: effectiveLimit * 2,
-  });
+  }) as EnrichedDocumentSearchResultSetUnit<BookmarkDocument>[];
 
   for (const fieldResult of rawResults) {
     const weight = FIELD_WEIGHTS[fieldResult.field] ?? 1;
     fieldResult.result.forEach((entry, resultIndex) => {
-      const docId = String(Array.isArray(entry.id) ? entry.id[0] : entry.id);
+      const identifierList = entry.id as Id[];
+      const primaryId = identifierList[0];
+      if (typeof primaryId === 'undefined') {
+        return;
+      }
+      const docId = String(primaryId);
       const bookmarkDoc = documents.get(docId) ?? entry.doc;
       if (!bookmarkDoc || !matchesFilters(bookmarkDoc, filters)) {
         return;

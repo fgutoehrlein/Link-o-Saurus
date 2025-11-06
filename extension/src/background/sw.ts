@@ -284,7 +284,9 @@ function presentFeathermarksQuickDialog({
       }
     };
 
-    const cleanup = (result: { action: 'save'; category?: string; tags: string[] } | { action: 'cancel' }) => {
+    const cleanup = (
+      result: { action: 'save'; categoryId?: string; tags: string[] } | { action: 'cancel' },
+    ) => {
       window.removeEventListener('keydown', onKeyDown);
       overlay.remove();
       resolve(result);
