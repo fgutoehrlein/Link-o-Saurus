@@ -1,0 +1,27 @@
+{
+  "name": "feathermarks",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:chrome": "tsx scripts/build.ts dev chrome --watch",
+    "dev:firefox": "tsx scripts/build.ts dev firefox --watch",
+    "build:chrome": "tsx scripts/build.ts build chrome",
+    "build:firefox": "tsx scripts/build.ts build firefox",
+    "zip:chrome": "tsx scripts/zip.ts chrome",
+    "zip:firefox": "tsx scripts/zip.ts firefox"
+  },
+  "dependencies": {
+    "preact": "^10.19.6"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.7.0",
+    "@types/chrome": "^0.0.246",
+    "@types/node": "^20.11.30",
+    "adm-zip": "^0.5.10",
+    "chokidar": "^3.5.3",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.3",
+    "vite": "^5.1.4"
+  }
+}

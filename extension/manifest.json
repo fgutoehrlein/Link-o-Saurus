@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Feathermarks",
+  "version": "0.0.1",
+  "description": "Minimal scaffold for the Feathermarks browser extension.",
+  "action": {
+    "default_popup": "popup/index.html"
+  },
+  "options_page": "options/index.html",
+  "background": {
+    "service_worker": "background/sw.js",
+    "type": "module"
+  },
+  "permissions": ["storage"],
+  "host_permissions": []
+}
