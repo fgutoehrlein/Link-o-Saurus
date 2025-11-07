@@ -4,6 +4,7 @@ import type {
   Bookmark,
   Category,
   Comment,
+  ReadLater,
   Rule,
   SessionPack,
   Tag,
@@ -85,6 +86,19 @@ export type UpdateCommentInput = Partial<Pick<Comment, 'author' | 'body'>>;
 
 type BookmarkInput = CreateBookmarkInput;
 
+export type SaveReadLaterInput = {
+  bookmarkId: string;
+  dueAt: number;
+  snoozedUntil?: number | null;
+  priority?: ReadLater['priority'] | null;
+};
+
+export type UpdateReadLaterInput = {
+  dueAt?: number;
+  snoozedUntil?: number | null;
+  priority?: ReadLater['priority'] | null;
+};
+
 export type CreateTagInput = {
   id?: string;
   path: string;
@@ -108,6 +122,39 @@ const BOOKMARK_DEFAULTS = {
 };
 
 const ensureTimestamp = (value: number | undefined): number => value ?? Date.now();
+
+const ensureFiniteTimestamp = (value: number, label: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+  return Math.floor(value);
+};
+
+const normalizeOptionalTimestamp = (
+  value: number | null | undefined,
+  label: string,
+): number | undefined => {
+  if (value === null || typeof value === 'undefined') {
+    return undefined;
+  }
+  return ensureFiniteTimestamp(value, label);
+};
+
+const normalizeReadLaterPriority = (
+  value: ReadLater['priority'] | null | undefined,
+): ReadLater['priority'] | undefined => {
+  if (value === null || typeof value === 'undefined') {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === 'low' || normalized === 'med' || normalized === 'high') {
+    return normalized as ReadLater['priority'];
+  }
+  throw new Error('Read later priority must be one of: low, med, high');
+};
 
 type TagDelta = {
   path: string;
@@ -203,6 +250,7 @@ export class LinkOSaurusDB extends Dexie {
   categories!: Table<Category, string>;
   bookmarks!: Table<Bookmark, string>;
   comments!: Table<Comment, string>;
+  readLater!: Table<ReadLater, string>;
   sessions!: Table<SessionPack, string>;
   userSettings!: Table<UserSettingsRecord, string>;
   tags!: Table<Tag, string>;
@@ -329,6 +377,19 @@ export class LinkOSaurusDB extends Dexie {
       tags: 'id, &path, &name, usageCount, *slugParts',
       rules: 'id, enabled, name',
     });
+
+    this.version(7).stores({
+      boards: 'id, sortOrder, updatedAt',
+      categories: 'id, boardId, sortOrder',
+      bookmarks:
+        'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+      comments: 'id, bookmarkId, createdAt',
+      sessions: 'id, savedAt',
+      userSettings: 'id',
+      tags: 'id, &path, &name, usageCount, *slugParts',
+      rules: 'id, enabled, name',
+      readLater: 'bookmarkId, dueAt, snoozedUntil',
+    });
   }
 }
 
@@ -386,6 +447,56 @@ const normalizeComment = (comment: CreateCommentInput): Comment => {
     body,
     createdAt: ensureTimestamp(comment.createdAt),
   };
+};
+
+const normalizeReadLater = (input: SaveReadLaterInput): ReadLater => {
+  const bookmarkId = input.bookmarkId.trim();
+  if (!bookmarkId) {
+    throw new Error('Read later bookmark id must not be empty');
+  }
+
+  const dueAt = ensureFiniteTimestamp(input.dueAt, 'Read later dueAt');
+  const snoozedUntil = normalizeOptionalTimestamp(
+    input.snoozedUntil,
+    'Read later snoozedUntil',
+  );
+  const priority = normalizeReadLaterPriority(input.priority);
+
+  const record: ReadLater = {
+    bookmarkId,
+    dueAt,
+  };
+
+  if (typeof snoozedUntil === 'number') {
+    record.snoozedUntil = snoozedUntil;
+  }
+  if (priority) {
+    record.priority = priority;
+  }
+
+  return record;
+};
+
+const mergeReadLater = (
+  existing: ReadLater,
+  changes: UpdateReadLaterInput,
+): ReadLater =>
+  normalizeReadLater({
+    bookmarkId: existing.bookmarkId,
+    dueAt: changes.dueAt ?? existing.dueAt,
+    snoozedUntil:
+      typeof changes.snoozedUntil !== 'undefined'
+        ? changes.snoozedUntil
+        : existing.snoozedUntil,
+    priority:
+      typeof changes.priority !== 'undefined' ? changes.priority : existing.priority,
+  });
+
+const computeReadLaterActivationTime = (entry: ReadLater): number => {
+  if (typeof entry.snoozedUntil === 'number') {
+    return Math.max(entry.dueAt, entry.snoozedUntil);
+  }
+  return entry.dueAt;
 };
 
 const normalizeBoard = (board: CreateBoardInput): Board => ({
@@ -1161,6 +1272,107 @@ export const deleteComment = async (
   });
 };
 
+export const saveReadLater = async (
+  input: SaveReadLaterInput,
+  database?: LinkOSaurusDB,
+): Promise<ReadLater> => {
+  const dbInstance = withDatabase(database);
+  const record = normalizeReadLater(input);
+  await runWriteTransaction(dbInstance, dbInstance.readLater, async () => {
+    await dbInstance.readLater.put(record);
+  });
+  return record;
+};
+
+export const updateReadLater = async (
+  bookmarkId: string,
+  changes: UpdateReadLaterInput,
+  database?: LinkOSaurusDB,
+): Promise<ReadLater> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = bookmarkId.trim();
+  if (!trimmedId) {
+    throw new Error('Read later bookmark id must not be empty');
+  }
+
+  let next: ReadLater | undefined;
+  await runWriteTransaction(dbInstance, dbInstance.readLater, async () => {
+    const existing = await dbInstance.readLater.get(trimmedId);
+    if (!existing) {
+      throw new Error(`Read later entry for ${trimmedId} not found`);
+    }
+    const merged = mergeReadLater(existing, changes);
+    await dbInstance.readLater.put(merged);
+    next = merged;
+  });
+
+  if (!next) {
+    throw new Error(`Read later entry for ${trimmedId} not found after update`);
+  }
+  return next;
+};
+
+export const deleteReadLater = async (
+  bookmarkId: string,
+  database?: LinkOSaurusDB,
+): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = bookmarkId.trim();
+  if (!trimmedId) {
+    return;
+  }
+  await runWriteTransaction(dbInstance, dbInstance.readLater, async () => {
+    await dbInstance.readLater.delete(trimmedId);
+  });
+};
+
+export const getReadLater = async (
+  bookmarkId: string,
+  database?: LinkOSaurusDB,
+): Promise<ReadLater | undefined> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = bookmarkId.trim();
+  if (!trimmedId) {
+    return undefined;
+  }
+  return dbInstance.readLater.get(trimmedId);
+};
+
+export const listReadLater = async (database?: LinkOSaurusDB): Promise<ReadLater[]> => {
+  const dbInstance = withDatabase(database);
+  const entries = await dbInstance.readLater.toArray();
+  return entries.sort(
+    (a, b) =>
+      computeReadLaterActivationTime(a) - computeReadLaterActivationTime(b) ||
+      a.bookmarkId.localeCompare(b.bookmarkId),
+  );
+};
+
+export const listDueReadLater = async (
+  options: { at?: number; limit?: number } = {},
+  database?: LinkOSaurusDB,
+): Promise<ReadLater[]> => {
+  const dbInstance = withDatabase(database);
+  const { at = Date.now(), limit } = options;
+  const threshold = ensureFiniteTimestamp(at, 'Read later query time');
+  const entries = await dbInstance.readLater.where('dueAt').belowOrEqual(threshold).toArray();
+  const due = entries
+    .filter(
+      (entry) => typeof entry.snoozedUntil !== 'number' || entry.snoozedUntil <= threshold,
+    )
+    .sort(
+      (a, b) =>
+        computeReadLaterActivationTime(a) - computeReadLaterActivationTime(b) ||
+        a.bookmarkId.localeCompare(b.bookmarkId),
+    );
+
+  if (typeof limit === 'number') {
+    return due.slice(0, Math.max(0, limit));
+  }
+
+  return due;
+};
+
 export const createTag = async (
   input: CreateTagInput,
   database?: LinkOSaurusDB,
@@ -1359,6 +1571,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
       dbInstance.boards,
       dbInstance.categories,
       dbInstance.bookmarks,
+      dbInstance.readLater,
       dbInstance.sessions,
       dbInstance.userSettings,
       dbInstance.tags,
@@ -1369,6 +1582,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
         dbInstance.boards.clear(),
         dbInstance.categories.clear(),
         dbInstance.bookmarks.clear(),
+        dbInstance.readLater.clear(),
         dbInstance.sessions.clear(),
         dbInstance.userSettings.clear(),
         dbInstance.tags.clear(),

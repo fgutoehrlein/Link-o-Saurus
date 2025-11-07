@@ -12,6 +12,7 @@ import type { FixedSizeListProps } from 'react-window';
 import './App.css';
 import SessionManager from './SessionManager';
 import CommentsSection from './CommentsSection';
+import ReadLaterList from './ReadLaterList';
 import type { Tag } from '../shared/types';
 import {
   canonicalizeTagId,
@@ -905,6 +906,7 @@ const App: FunctionalComponent = () => {
       </section>
       <aside class="pane detail-pane" aria-label="Details und Sessions">
         <header class="pane-header">Details & Sessions</header>
+        <ReadLaterList />
         {batchPending ? (
           <div class="spinner" aria-live="polite">
             Aktion läuft …

@@ -39,6 +39,13 @@ export type Comment = {
   createdAt: number;
 };
 
+export type ReadLater = {
+  bookmarkId: EntityId;
+  dueAt: number;
+  snoozedUntil?: number;
+  priority?: 'low' | 'med' | 'high';
+};
+
 export type Tag = {
   id: EntityId;
   name: string;

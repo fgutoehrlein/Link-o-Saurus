@@ -5,6 +5,7 @@ import {
   getSession,
   getUserSettings,
   listCategories,
+  listDueReadLater,
   saveUserSettings,
 } from '../shared/db';
 import type { CreateSessionInput } from '../shared/db';
@@ -24,6 +25,58 @@ let newTabOverrideActive = false;
 let newTabListenerRegistered = false;
 
 console.log('[Feathermarks] background service worker initialized');
+
+const READ_LATER_ALARM_NAME = 'link-o-saurus:read-later-refresh';
+const READ_LATER_REFRESH_INTERVAL_MINUTES = 1;
+const READ_LATER_BADGE_COLOR = '#DC2626';
+
+const formatBadgeCount = (count: number): string => {
+  if (count <= 0) {
+    return '';
+  }
+  if (count > 99) {
+    return '99+';
+  }
+  return `${count}`;
+};
+
+const updateReadLaterBadge = async (): Promise<number> => {
+  if (!chrome.action?.setBadgeText) {
+    return 0;
+  }
+
+  try {
+    const dueEntries = await listDueReadLater();
+    const count = dueEntries.length;
+    const text = formatBadgeCount(count);
+    await chrome.action.setBadgeBackgroundColor({ color: READ_LATER_BADGE_COLOR });
+    await chrome.action.setBadgeText({ text });
+    return count;
+  } catch (error) {
+    console.error('[Feathermarks] Failed to update read later badge', error);
+    try {
+      await chrome.action.setBadgeText({ text: '' });
+    } catch (innerError) {
+      console.warn('[Feathermarks] Unable to reset badge text', innerError);
+    }
+    return 0;
+  }
+};
+
+const ensureReadLaterAlarm = async (): Promise<void> => {
+  try {
+    const existing = await chrome.alarms.get(READ_LATER_ALARM_NAME);
+    if (existing) {
+      return;
+    }
+    await chrome.alarms.create(READ_LATER_ALARM_NAME, {
+      delayInMinutes: 0.1,
+      periodInMinutes: READ_LATER_REFRESH_INTERVAL_MINUTES,
+    });
+  } catch (error) {
+    console.error('[Feathermarks] Failed to register read later alarm', error);
+  }
+};
 
 const isSystemNewTabUrl = (url: string | undefined): boolean => {
   if (!url) {
@@ -114,13 +167,27 @@ const registerContextMenu = (): void => {
 
 chrome.runtime.onInstalled.addListener(() => {
   registerContextMenu();
+  void ensureReadLaterAlarm();
+  void updateReadLaterBadge();
   console.log('[Feathermarks] extension installed');
 });
 
-chrome.runtime.onStartup?.addListener(registerContextMenu);
+chrome.runtime.onStartup?.addListener(() => {
+  registerContextMenu();
+  void ensureReadLaterAlarm();
+  void updateReadLaterBadge();
+});
 
 // Ensure the context menu exists when the service worker starts lazily.
 registerContextMenu();
+void ensureReadLaterAlarm();
+void updateReadLaterBadge();
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm?.name === READ_LATER_ALARM_NAME) {
+    void updateReadLaterBadge();
+  }
+});
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== CONTEXT_MENU_ID || !tab?.id) {
@@ -601,6 +668,10 @@ const handleBackgroundRequest = async (
     case 'settings.applyNewTab': {
       const applied = await applyNewTabOverride(message.enabled);
       return { type: 'settings.applyNewTab.result', enabled: applied };
+    }
+    case 'readLater.refreshBadge': {
+      const count = await updateReadLaterBadge();
+      return { type: 'readLater.refreshBadge.result', count };
     }
     default:
       throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);
