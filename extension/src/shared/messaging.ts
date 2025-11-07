@@ -5,7 +5,8 @@ type SessionMessageType =
   | 'session.openAll'
   | 'session.openSelected'
   | 'session.delete'
-  | 'settings.applyNewTab';
+  | 'settings.applyNewTab'
+  | 'readLater.refreshBadge';
 
 type SessionResponseType =
   | 'session.saveCurrentWindow.result'
@@ -13,6 +14,7 @@ type SessionResponseType =
   | 'session.openSelected.result'
   | 'session.delete.result'
   | 'settings.applyNewTab.result'
+  | 'readLater.refreshBadge.result'
   | 'session.error';
 
 export type BackgroundRequest =
@@ -20,7 +22,8 @@ export type BackgroundRequest =
   | { type: 'session.openAll'; sessionId: string }
   | { type: 'session.openSelected'; sessionId: string; tabIndexes: number[] }
   | { type: 'session.delete'; sessionId: string }
-  | { type: 'settings.applyNewTab'; enabled: boolean };
+  | { type: 'settings.applyNewTab'; enabled: boolean }
+  | { type: 'readLater.refreshBadge' };
 
 export type BackgroundResponse =
   | { type: 'session.saveCurrentWindow.result'; session: SessionPack }
@@ -28,6 +31,7 @@ export type BackgroundResponse =
   | { type: 'session.openSelected.result'; opened: number }
   | { type: 'session.delete.result'; sessionId: string }
   | { type: 'settings.applyNewTab.result'; enabled: boolean }
+  | { type: 'readLater.refreshBadge.result'; count: number }
   | { type: 'session.error'; error: string };
 
 export type BackgroundResponseSuccess = Exclude<BackgroundResponse, { type: 'session.error' }>;
@@ -38,6 +42,7 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'session.openSelected',
   'session.delete',
   'settings.applyNewTab',
+  'readLater.refreshBadge',
 ]);
 
 const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
@@ -47,6 +52,7 @@ const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
   'session.delete.result',
   'session.error',
   'settings.applyNewTab.result',
+  'readLater.refreshBadge.result',
 ]);
 
 export const isBackgroundRequest = (value: unknown): value is BackgroundRequest => {

@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { performance } from 'node:perf_hooks';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BookmarkListOptions,
@@ -23,27 +23,33 @@ import {
   deleteBookmark,
   deleteCategory,
   deleteComment,
+  deleteReadLater,
   deleteSession,
   deleteTag,
   getBookmark,
+  getReadLater,
   getSession,
   getUserSettings,
   getTag,
   listBoards,
   listBookmarks,
   listComments,
+  listDueReadLater,
   listPinnedBookmarks,
   listCategories,
+  listReadLater,
   listRules,
   listSessions,
   listTags,
   saveUserSettings,
+  saveReadLater,
   decrementTagUsage,
   incrementTagUsage,
   updateBoard,
   updateBookmark,
   updateCategory,
   updateComment,
+  updateReadLater,
   updateRule,
   updateSession,
   updateTag,
@@ -473,6 +479,96 @@ describe('IndexedDB data layer', () => {
 
     const stored = await listBookmarks({ includeArchived: true }, database);
     expect(stored).toHaveLength(targetCount);
+  });
+
+  describe('read later entries', () => {
+    it('saves and retrieves entries with optional fields', async () => {
+      const dueAt = Date.now() + 60_000;
+      await saveReadLater(
+        {
+          bookmarkId: 'bookmark-123',
+          dueAt,
+          snoozedUntil: dueAt + 30_000,
+          priority: 'high',
+        },
+        database,
+      );
+
+      const stored = await getReadLater('bookmark-123', database);
+      expect(stored).toMatchObject({
+        bookmarkId: 'bookmark-123',
+        dueAt,
+        snoozedUntil: dueAt + 30_000,
+        priority: 'high',
+      });
+
+      const all = await listReadLater(database);
+      expect(all.map((entry) => entry.bookmarkId)).toEqual(['bookmark-123']);
+    });
+
+    it('respects snooze windows when listing due entries', async () => {
+      const now = Date.now();
+      await saveReadLater(
+        { bookmarkId: 'due-now', dueAt: now - 60_000 },
+        database,
+      );
+      await saveReadLater(
+        {
+          bookmarkId: 'snoozed',
+          dueAt: now - 120_000,
+          snoozedUntil: now + 120_000,
+        },
+        database,
+      );
+      await saveReadLater(
+        { bookmarkId: 'future', dueAt: now + 360_000 },
+        database,
+      );
+
+      const due = await listDueReadLater({ at: now }, database);
+      expect(due.map((entry) => entry.bookmarkId)).toEqual(['due-now']);
+
+      await updateReadLater(
+        'snoozed',
+        { snoozedUntil: now + 30_000 },
+        database,
+      );
+
+      const afterSnooze = await listDueReadLater({ at: now + 60_000 }, database);
+      expect(afterSnooze.map((entry) => entry.bookmarkId)).toEqual([
+        'due-now',
+        'snoozed',
+      ]);
+    });
+
+    it('handles locale-sensitive boundaries when evaluating due dates', async () => {
+      vi.useFakeTimers();
+      try {
+        const reference = new Date('2024-03-31T00:30:00+02:00');
+        vi.setSystemTime(reference);
+
+        await saveReadLater(
+          { bookmarkId: 'dst-check', dueAt: reference.getTime() - 15_000 },
+          database,
+        );
+
+        const due = await listDueReadLater({}, database);
+        expect(due).toHaveLength(1);
+        expect(due[0]?.bookmarkId).toBe('dst-check');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('allows deleting read later entries', async () => {
+      const dueAt = Date.now() + 90_000;
+      await saveReadLater({ bookmarkId: 'to-remove', dueAt }, database);
+
+      await deleteReadLater('to-remove', database);
+
+      const stored = await getReadLater('to-remove', database);
+      expect(stored).toBeUndefined();
+    });
   });
 
   it('migrates legacy bookmark schema by defaulting archived flag', async () => {
