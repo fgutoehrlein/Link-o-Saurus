@@ -16,23 +16,30 @@ import {
   createCategory,
   createDatabase,
   createSession,
+  createTag,
   deleteBoard,
   deleteBookmark,
   deleteCategory,
   deleteSession,
+  deleteTag,
   getBookmark,
   getSession,
   getUserSettings,
+  getTag,
   listBoards,
   listBookmarks,
   listPinnedBookmarks,
   listCategories,
   listSessions,
+  listTags,
   saveUserSettings,
+  decrementTagUsage,
+  incrementTagUsage,
   updateBoard,
   updateBookmark,
   updateCategory,
   updateSession,
+  updateTag,
 } from './db';
 
 const uniqueDbName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -102,6 +109,26 @@ describe('IndexedDB data layer', () => {
     expect(storedBookmark?.categoryId).toBeUndefined();
   });
 
+  it('manages tag lifecycle and usage counters', async () => {
+    const created = await createTag({ name: 'Design' }, database);
+    expect(created.id).toBe('design');
+    expect(created.usageCount).toBe(0);
+
+    await incrementTagUsage('Design', database);
+    let tag = await getTag('design', database);
+    expect(tag?.usageCount).toBe(1);
+
+    const updated = await updateTag('design', { usageCount: 5 }, database);
+    expect(updated.usageCount).toBe(5);
+
+    await decrementTagUsage('Design', database);
+    tag = await getTag('design', database);
+    expect(tag?.usageCount).toBe(4);
+
+    await deleteTag('design', database);
+    expect(await listTags(database)).toHaveLength(0);
+  });
+
   it('filters bookmarks and updates archive flag', async () => {
     await createBookmark(
       {
@@ -137,6 +164,35 @@ describe('IndexedDB data layer', () => {
       database,
     );
     expect(updated.archived).toBe(true);
+  });
+
+  it('adjusts tag usage counts when bookmark tags change', async () => {
+    await createBookmark(
+      {
+        id: 'bookmark-tags-1',
+        url: 'https://design.example',
+        title: 'Design reference',
+        tags: ['Design', 'UI'],
+      },
+      database,
+    );
+
+    let tags = await listTags(database);
+    const findTag = (name: string) => tags.find((tag) => tag.name === name);
+    expect(findTag('Design')?.usageCount).toBe(1);
+    expect(findTag('UI')?.usageCount).toBe(1);
+
+    await updateBookmark('bookmark-tags-1', { tags: ['Design', 'UX'] }, database);
+
+    tags = await listTags(database);
+    expect(findTag('Design')?.usageCount).toBe(1);
+    expect(findTag('UI')?.usageCount ?? 0).toBe(0);
+    expect(findTag('UX')?.usageCount).toBe(1);
+
+    await deleteBookmark('bookmark-tags-1', database);
+    tags = await listTags(database);
+    expect(findTag('Design')?.usageCount ?? 0).toBe(0);
+    expect(findTag('UX')?.usageCount ?? 0).toBe(0);
   });
 
   it('returns pinned bookmarks sorted by recency without archived entries', async () => {

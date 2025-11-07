@@ -34,6 +34,24 @@ const FIELD_WEIGHTS: Record<string, number> = {
   notes: 1,
 };
 
+const normalizeTagList = (tags?: string[]): string[] => {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of tags ?? []) {
+    const trimmed = tag.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
+};
+
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
 
@@ -54,18 +72,21 @@ function createDocumentIndex() {
   });
 }
 
-const toDocument = (bookmark: Bookmark): BookmarkDocument => ({
-  id: bookmark.id,
-  title: bookmark.title ?? '',
-  url: bookmark.url ?? '',
-  notes: bookmark.notes ?? '',
-  tags: [...(bookmark.tags ?? [])],
-  pinned: bookmark.pinned ?? false,
-  archived: bookmark.archived ?? false,
-  createdAt: bookmark.createdAt,
-  updatedAt: bookmark.updatedAt,
-  normalizedTags: (bookmark.tags ?? []).map((tag) => tag.toLowerCase()),
-});
+const toDocument = (bookmark: Bookmark): BookmarkDocument => {
+  const tags = normalizeTagList(bookmark.tags);
+  return {
+    id: bookmark.id,
+    title: bookmark.title ?? '',
+    url: bookmark.url ?? '',
+    notes: bookmark.notes ?? '',
+    tags,
+    pinned: bookmark.pinned ?? false,
+    archived: bookmark.archived ?? false,
+    createdAt: bookmark.createdAt,
+    updatedAt: bookmark.updatedAt,
+    normalizedTags: tags.map((tag) => tag.toLowerCase()),
+  };
+};
 
 const yieldToEventLoop = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -209,5 +230,12 @@ const api = {
 
 export type SearchWorker = typeof api;
 
-expose(api);
+if (
+  typeof self !== 'undefined' &&
+  typeof (self as { addEventListener?: unknown }).addEventListener === 'function'
+) {
+  expose(api);
+}
+
+export { rebuildIndex, updateDoc, removeDoc, query };
 

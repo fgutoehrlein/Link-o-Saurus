@@ -31,6 +31,12 @@ export type Bookmark = {
   lastVisitedAt?: number;
 };
 
+export type Tag = {
+  id: EntityId;
+  name: string;
+  usageCount: number;
+};
+
 export type SessionPack = {
   id: EntityId;
   title: string;
