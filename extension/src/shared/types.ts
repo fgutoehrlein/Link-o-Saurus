@@ -65,3 +65,22 @@ export type UserSettings = {
 };
 
 export type EntityMap<T extends { id: EntityId }> = Record<EntityId, T>;
+
+export type RuleConditions = {
+  host?: string;
+  urlIncludes?: string[];
+  mime?: string;
+};
+
+export type RuleActions = {
+  addTags?: string[];
+  setCategoryId?: EntityId;
+};
+
+export type Rule = {
+  id: EntityId;
+  name: string;
+  conditions: RuleConditions;
+  actions: RuleActions;
+  enabled: boolean;
+};

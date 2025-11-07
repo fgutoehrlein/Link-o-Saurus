@@ -4,6 +4,7 @@ import type {
   Bookmark,
   Category,
   Comment,
+  Rule,
   SessionPack,
   Tag,
   UserSettings,
@@ -92,6 +93,13 @@ export type CreateTagInput = {
 };
 
 export type UpdateTagInput = Partial<Omit<Tag, 'id'>>;
+
+export type CreateRuleInput = Omit<Rule, 'id'> & { id?: string };
+
+export type UpdateRuleInput = Partial<Omit<Rule, 'id'>> & {
+  conditions?: Partial<Rule['conditions']>;
+  actions?: Partial<Rule['actions']>;
+};
 
 const BOOKMARK_DEFAULTS = {
   archived: false,
@@ -198,6 +206,7 @@ export class LinkOSaurusDB extends Dexie {
   sessions!: Table<SessionPack, string>;
   userSettings!: Table<UserSettingsRecord, string>;
   tags!: Table<Tag, string>;
+  rules!: Table<Rule, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -308,6 +317,18 @@ export class LinkOSaurusDB extends Dexie {
       userSettings: 'id',
       tags: 'id, &path, &name, usageCount, *slugParts',
     });
+
+    this.version(6).stores({
+      boards: 'id, sortOrder, updatedAt',
+      categories: 'id, boardId, sortOrder',
+      bookmarks:
+        'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+      comments: 'id, bookmarkId, createdAt',
+      sessions: 'id, savedAt',
+      userSettings: 'id',
+      tags: 'id, &path, &name, usageCount, *slugParts',
+      rules: 'id, enabled, name',
+    });
   }
 }
 
@@ -412,6 +433,326 @@ const toTagRecord = (input: CreateTagInput): Tag => {
     slugParts: metadata.slugParts,
     usageCount: Math.max(0, input.usageCount ?? 0),
   };
+};
+
+const uniqueStrings = (values: string[], keySelector: (value: string) => string = (value) => value): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const key = keySelector(value);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+};
+
+const normalizeRule = (input: CreateRuleInput): Rule => {
+  const idCandidate = typeof input.id === 'string' ? input.id.trim() : '';
+  const name = input.name?.trim();
+  if (!name) {
+    throw new Error('Rule name must not be empty');
+  }
+
+  const normalizedConditions: Rule['conditions'] = {};
+  const host = input.conditions?.host?.trim();
+  if (host) {
+    normalizedConditions.host = host.toLowerCase();
+  }
+
+  const urlIncludes = uniqueStrings(
+    (input.conditions?.urlIncludes ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+    (value) => value.toLowerCase(),
+  );
+  if (urlIncludes.length > 0) {
+    normalizedConditions.urlIncludes = urlIncludes;
+  }
+
+  const mime = input.conditions?.mime?.trim();
+  if (mime) {
+    normalizedConditions.mime = mime.toLowerCase();
+  }
+
+  const normalizedActions: Rule['actions'] = {};
+  const addTags = uniqueStrings(
+    (input.actions?.addTags ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0),
+    (value) => {
+      const canonical = canonicalizeTagId(value);
+      return canonical || value.toLowerCase();
+    },
+  );
+  if (addTags.length > 0) {
+    normalizedActions.addTags = addTags;
+  }
+
+  const setCategoryId = input.actions?.setCategoryId?.trim();
+  if (setCategoryId) {
+    normalizedActions.setCategoryId = setCategoryId;
+  }
+
+  if (Object.keys(normalizedConditions).length === 0) {
+    throw new Error('Rule must define at least one condition');
+  }
+
+  if (Object.keys(normalizedActions).length === 0) {
+    throw new Error('Rule must define at least one action');
+  }
+
+  return {
+    id: idCandidate || createId(),
+    name,
+    conditions: normalizedConditions,
+    actions: normalizedActions,
+    enabled: input.enabled ?? true,
+  };
+};
+
+const getEnabledRules = async (dbInstance: LinkOSaurusDB): Promise<Rule[]> => {
+  const rules = await dbInstance.rules.toArray();
+  return rules.filter((rule) => rule.enabled);
+};
+
+type BookmarkCandidate = BookmarkInput & { mime?: string };
+
+type RuleEvaluationContext = {
+  host: string | null;
+  lowerUrl: string;
+  mime?: string;
+};
+
+const normalizeHost = (value: string): string => value.replace(/^www\./, '').toLowerCase();
+
+const createRuleContext = (bookmark: BookmarkCandidate): RuleEvaluationContext => {
+  let host: string | null = null;
+  try {
+    const parsed = new URL(bookmark.url);
+    host = parsed.hostname;
+  } catch {
+    host = null;
+  }
+
+  return {
+    host,
+    lowerUrl: bookmark.url.toLowerCase(),
+    mime: bookmark.mime?.toLowerCase(),
+  };
+};
+
+const hostMatches = (expected: string | undefined, actual: string | null): boolean => {
+  if (!expected) {
+    return true;
+  }
+  if (!actual) {
+    return false;
+  }
+  const normalizedExpected = normalizeHost(expected);
+  const normalizedActual = normalizeHost(actual);
+  return (
+    normalizedActual === normalizedExpected ||
+    normalizedActual.endsWith(`.${normalizedExpected}`)
+  );
+};
+
+const urlIncludesMatch = (segments: string[] | undefined, url: string): boolean => {
+  if (!segments || segments.length === 0) {
+    return true;
+  }
+  for (const segment of segments) {
+    if (!url.includes(segment.toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const mimeMatches = (expected: string | undefined, actual: string | undefined): boolean => {
+  if (!expected) {
+    return true;
+  }
+  return actual === expected;
+};
+
+const ruleMatchesBookmark = (rule: Rule, context: RuleEvaluationContext): boolean => {
+  return (
+    hostMatches(rule.conditions.host, context.host) &&
+    urlIncludesMatch(rule.conditions.urlIncludes, context.lowerUrl) &&
+    mimeMatches(rule.conditions.mime, context.mime)
+  );
+};
+
+const addTagIfMissing = (tags: string[], tag: string): void => {
+  const trimmed = tag.trim();
+  if (!trimmed) {
+    return;
+  }
+  const canonical = canonicalizeTagId(trimmed) || trimmed.toLowerCase();
+  const exists = tags.some((existing) => {
+    const existingCanonical = canonicalizeTagId(existing) || existing.toLowerCase();
+    return existingCanonical === canonical;
+  });
+  if (!exists) {
+    tags.push(trimmed);
+  }
+};
+
+const applyRuleActions = (bookmark: BookmarkCandidate, rule: Rule): BookmarkCandidate => {
+  const tags = [...(bookmark.tags ?? [])];
+  if (rule.actions.addTags) {
+    for (const tag of rule.actions.addTags) {
+      addTagIfMissing(tags, tag);
+    }
+  }
+
+  const next: BookmarkCandidate = {
+    ...bookmark,
+    tags,
+  };
+
+  if (rule.actions.setCategoryId && !next.categoryId) {
+    next.categoryId = rule.actions.setCategoryId;
+  }
+
+  return next;
+};
+
+const applyRulesToBookmarkSync = (bookmark: BookmarkCandidate, rules: Rule[]): BookmarkCandidate => {
+  if (rules.length === 0) {
+    return { ...bookmark };
+  }
+
+  let result: BookmarkCandidate = { ...bookmark };
+  const context = createRuleContext(result);
+
+  for (const rule of rules) {
+    if (!rule.enabled) {
+      continue;
+    }
+    if (!ruleMatchesBookmark(rule, context)) {
+      continue;
+    }
+    result = applyRuleActions(result, rule);
+  }
+
+  if (result.tags && result.tags.length === 0) {
+    delete result.tags;
+  }
+
+  return result;
+};
+
+const applyRulesInternal = async (
+  bookmark: BookmarkCandidate,
+  dbInstance: LinkOSaurusDB,
+  cachedRules?: Rule[],
+): Promise<BookmarkCandidate> => {
+  const rules = cachedRules ?? (await getEnabledRules(dbInstance));
+  if (rules.length === 0) {
+    return { ...bookmark };
+  }
+  return applyRulesToBookmarkSync(bookmark, rules);
+};
+
+const sortRulesByName = (rules: Rule[]): Rule[] =>
+  [...rules].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+export const listRules = async (database?: LinkOSaurusDB): Promise<Rule[]> => {
+  const dbInstance = withDatabase(database);
+  const rules = await dbInstance.rules.toArray();
+  return sortRulesByName(rules);
+};
+
+export const getRule = async (id: string, database?: LinkOSaurusDB): Promise<Rule | undefined> => {
+  const dbInstance = withDatabase(database);
+  const trimmed = id.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return dbInstance.rules.get(trimmed);
+};
+
+export const createRule = async (
+  rule: CreateRuleInput,
+  database?: LinkOSaurusDB,
+): Promise<Rule> => {
+  const dbInstance = withDatabase(database);
+  const record = normalizeRule(rule);
+  await runWriteTransaction(dbInstance, dbInstance.rules, async () => {
+    const existing = await dbInstance.rules.get(record.id);
+    if (existing) {
+      throw new Error(`Rule ${record.id} already exists`);
+    }
+    await dbInstance.rules.put(record);
+  });
+  return record;
+};
+
+export const updateRule = async (
+  id: string,
+  changes: UpdateRuleInput,
+  database?: LinkOSaurusDB,
+): Promise<Rule> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    throw new Error('Rule id must not be empty');
+  }
+
+  let next: Rule | undefined;
+  await runWriteTransaction(dbInstance, dbInstance.rules, async () => {
+    const current = await dbInstance.rules.get(trimmedId);
+    if (!current) {
+      throw new Error(`Rule ${trimmedId} not found`);
+    }
+
+    const merged: CreateRuleInput = {
+      ...current,
+      ...changes,
+      id: current.id,
+      conditions: {
+        ...current.conditions,
+        ...changes.conditions,
+      },
+      actions: {
+        ...current.actions,
+        ...changes.actions,
+      },
+    };
+
+    const normalized = normalizeRule(merged);
+    await dbInstance.rules.put(normalized);
+    next = normalized;
+  });
+
+  if (!next) {
+    throw new Error(`Rule ${trimmedId} not found after update`);
+  }
+  return next;
+};
+
+export const deleteRule = async (id: string, database?: LinkOSaurusDB): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    return;
+  }
+  await runWriteTransaction(dbInstance, dbInstance.rules, async () => {
+    await dbInstance.rules.delete(trimmedId);
+  });
+};
+
+export const applyRules = async (
+  bookmark: CreateBookmarkInput,
+  database?: LinkOSaurusDB,
+): Promise<CreateBookmarkInput> => {
+  const dbInstance = withDatabase(database);
+  const result = await applyRulesInternal(bookmark, dbInstance);
+  return { ...result };
 };
 
 export const createBoard = async (
@@ -554,7 +895,8 @@ export const createBookmark = async (
   database?: LinkOSaurusDB,
 ): Promise<Bookmark> => {
   const dbInstance = withDatabase(database);
-  const record = normalizeBookmark(bookmark);
+  const enriched = await applyRulesInternal(bookmark, dbInstance);
+  const record = normalizeBookmark(enriched);
   await runWriteTransaction(
     dbInstance,
     [dbInstance.bookmarks, dbInstance.tags],
@@ -571,7 +913,8 @@ export const createBookmarks = async (
   database?: LinkOSaurusDB,
 ): Promise<Bookmark[]> => {
   const dbInstance = withDatabase(database);
-  const records = bookmarks.map((bookmark) => normalizeBookmark(bookmark));
+  const rules = await getEnabledRules(dbInstance);
+  const records = bookmarks.map((bookmark) => normalizeBookmark(applyRulesToBookmarkSync(bookmark, rules)));
   await runWriteTransaction(
     dbInstance,
     [dbInstance.bookmarks, dbInstance.tags],
@@ -1019,6 +1362,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
       dbInstance.sessions,
       dbInstance.userSettings,
       dbInstance.tags,
+      dbInstance.rules,
     ],
     async () => {
       await Promise.all([
@@ -1028,6 +1372,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
         dbInstance.sessions.clear(),
         dbInstance.userSettings.clear(),
         dbInstance.tags.clear(),
+        dbInstance.rules.clear(),
       ]);
     },
   );

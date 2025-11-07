@@ -16,6 +16,7 @@ import {
   createCategory,
   createComment,
   createDatabase,
+  createRule,
   createSession,
   createTag,
   deleteBoard,
@@ -33,6 +34,7 @@ import {
   listComments,
   listPinnedBookmarks,
   listCategories,
+  listRules,
   listSessions,
   listTags,
   saveUserSettings,
@@ -42,9 +44,11 @@ import {
   updateBookmark,
   updateCategory,
   updateComment,
+  updateRule,
   updateSession,
   updateTag,
 } from './db';
+import { canonicalizeTagId } from './tag-utils';
 
 const uniqueDbName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -199,6 +203,109 @@ describe('IndexedDB data layer', () => {
     tags = await listTags(database);
     expect(findTag('Design')?.usageCount ?? 0).toBe(0);
     expect(findTag('UX')?.usageCount ?? 0).toBe(0);
+  });
+
+  it('manages smart rules and applies them when saving bookmarks', async () => {
+    await createBoard({ id: 'board-news', title: 'News board', sortOrder: 0 }, database);
+    await createCategory(
+      { id: 'cat-news', boardId: 'board-news', title: 'News', sortOrder: 0 },
+      database,
+    );
+
+    const createdRules = await Promise.all([
+      createRule(
+        {
+          name: 'Category assignment',
+          conditions: { host: 'example.com' },
+          actions: { setCategoryId: 'cat-news' },
+          enabled: true,
+        },
+        database,
+      ),
+      createRule(
+        {
+          name: 'Host tag',
+          conditions: { host: 'example.com' },
+          actions: { addTags: ['News'] },
+          enabled: true,
+        },
+        database,
+      ),
+      createRule(
+        {
+          name: 'Newsletter detector',
+          conditions: { urlIncludes: ['newsletter'] },
+          actions: { addTags: ['Newsletter'] },
+          enabled: true,
+        },
+        database,
+      ),
+      createRule(
+        {
+          name: 'Disabled rule',
+          conditions: { host: 'example.com' },
+          actions: { addTags: ['Disabled'] },
+          enabled: true,
+        },
+        database,
+      ),
+      createRule(
+        {
+          name: 'Other domain',
+          conditions: { host: 'other.com' },
+          actions: { addTags: ['Other'] },
+          enabled: true,
+        },
+        database,
+      ),
+    ]);
+
+    const disabledRule = createdRules.find((rule) => rule.name === 'Disabled rule');
+    expect(disabledRule).toBeDefined();
+    if (disabledRule) {
+      await updateRule(disabledRule.id, { enabled: false }, database);
+    }
+
+    const storedRules = await listRules(database);
+    expect(storedRules).toHaveLength(5);
+    expect(storedRules.find((rule) => rule.name === 'Disabled rule')?.enabled).toBe(false);
+
+    const bookmark = await createBookmark(
+      {
+        id: 'rule-test-1',
+        url: 'https://www.example.com/newsletter/welcome',
+        title: 'Example newsletter',
+        tags: ['News'],
+      },
+      database,
+    );
+
+    expect(bookmark.categoryId).toBe('cat-news');
+    expect(bookmark.tags).toContain('News');
+    expect(bookmark.tags).toContain('Newsletter');
+    expect(bookmark.tags.some((tag) => tag.toLowerCase() === 'disabled')).toBe(false);
+    expect(bookmark.tags.some((tag) => tag.toLowerCase() === 'other')).toBe(false);
+
+    const canonicalTags = bookmark.tags.map((tag) => canonicalizeTagId(tag));
+    expect(new Set(canonicalTags).size).toBe(bookmark.tags.length);
+
+    const [bulkMatched] = await createBookmarks(
+      [
+        {
+          id: 'rule-test-2',
+          url: 'https://example.com/watch',
+          title: 'Example watch',
+          tags: [],
+        },
+      ],
+      database,
+    );
+
+    expect(bulkMatched.categoryId).toBe('cat-news');
+    expect(bulkMatched.tags.some((tag) => tag.toLowerCase() === 'news')).toBe(true);
+    expect(bulkMatched.tags.some((tag) => tag.toLowerCase() === 'newsletter')).toBe(false);
+    const canonicalBulkTags = bulkMatched.tags.map((tag) => canonicalizeTagId(tag));
+    expect(new Set(canonicalBulkTags).size).toBe(bulkMatched.tags.length);
   });
 
   it('returns pinned bookmarks sorted by recency without archived entries', async () => {
