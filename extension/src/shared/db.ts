@@ -1,5 +1,13 @@
 import Dexie, { Table } from 'dexie';
-import type { Board, Bookmark, Category, SessionPack, Tag, UserSettings } from './types';
+import type {
+  Board,
+  Bookmark,
+  Category,
+  Comment,
+  SessionPack,
+  Tag,
+  UserSettings,
+} from './types';
 import {
   canonicalizeTagId,
   createTagFromMetadata,
@@ -14,6 +22,13 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'system',
   newTabEnabled: false,
   hotkeys: {},
+};
+
+const createId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `id-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 };
 
 export interface FaviconCache {
@@ -59,6 +74,13 @@ export type CreateSessionInput = SessionPack;
 export type UpdateSessionInput = Partial<Omit<SessionPack, 'id' | 'tabs'>> & {
   tabs?: SessionPack['tabs'];
 };
+
+export type CreateCommentInput = Omit<Comment, 'id' | 'createdAt'> & {
+  id?: string;
+  createdAt?: number;
+};
+
+export type UpdateCommentInput = Partial<Pick<Comment, 'author' | 'body'>>;
 
 type BookmarkInput = CreateBookmarkInput;
 
@@ -172,6 +194,7 @@ export class LinkOSaurusDB extends Dexie {
   boards!: Table<Board, string>;
   categories!: Table<Category, string>;
   bookmarks!: Table<Bookmark, string>;
+  comments!: Table<Comment, string>;
   sessions!: Table<SessionPack, string>;
   userSettings!: Table<UserSettingsRecord, string>;
   tags!: Table<Tag, string>;
@@ -274,6 +297,17 @@ export class LinkOSaurusDB extends Dexie {
           }
         });
       });
+
+    this.version(5).stores({
+      boards: 'id, sortOrder, updatedAt',
+      categories: 'id, boardId, sortOrder',
+      bookmarks:
+        'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+      comments: 'id, bookmarkId, createdAt',
+      sessions: 'id, savedAt',
+      userSettings: 'id',
+      tags: 'id, &path, &name, usageCount, *slugParts',
+    });
   }
 }
 
@@ -303,6 +337,33 @@ const normalizeBookmark = (bookmark: BookmarkInput): Bookmark => {
     archived: bookmark.archived ?? BOOKMARK_DEFAULTS.archived,
     pinned: bookmark.pinned ?? BOOKMARK_DEFAULTS.pinned,
     visitCount: bookmark.visitCount ?? 0,
+  };
+};
+
+const normalizeComment = (comment: CreateCommentInput): Comment => {
+  const bookmarkId = comment.bookmarkId.trim();
+  if (!bookmarkId) {
+    throw new Error('Comment bookmark id must not be empty');
+  }
+
+  const author = comment.author.trim();
+  if (!author) {
+    throw new Error('Comment author must not be empty');
+  }
+
+  const body = comment.body.trim();
+  if (!body) {
+    throw new Error('Comment body must not be empty');
+  }
+
+  const id = comment.id && comment.id.trim().length > 0 ? comment.id.trim() : createId();
+
+  return {
+    id,
+    bookmarkId,
+    author,
+    body,
+    createdAt: ensureTimestamp(comment.createdAt),
   };
 };
 
@@ -652,12 +713,17 @@ export const deleteBookmark = async (
   database?: LinkOSaurusDB,
 ): Promise<void> => {
   const dbInstance = withDatabase(database);
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    return;
+  }
   await runWriteTransaction(
     dbInstance,
-    [dbInstance.bookmarks, dbInstance.tags],
+    [dbInstance.bookmarks, dbInstance.tags, dbInstance.comments],
     async () => {
-      const existing = await dbInstance.bookmarks.get(id);
-      await dbInstance.bookmarks.delete(id);
+      const existing = await dbInstance.bookmarks.get(trimmedId);
+      await dbInstance.bookmarks.delete(trimmedId);
+      await dbInstance.comments.where('bookmarkId').equals(trimmedId).delete();
       if (existing) {
         const previousTags = normalizeTagList(existing.tags);
         if (previousTags.length) {
@@ -666,6 +732,90 @@ export const deleteBookmark = async (
       }
     },
   );
+};
+
+export const createComment = async (
+  comment: CreateCommentInput,
+  database?: LinkOSaurusDB,
+): Promise<Comment> => {
+  const dbInstance = withDatabase(database);
+  const record = normalizeComment(comment);
+  await runWriteTransaction(dbInstance, dbInstance.comments, async () => {
+    const existing = await dbInstance.comments.get(record.id);
+    if (existing) {
+      throw new Error(`Comment ${record.id} already exists`);
+    }
+    await dbInstance.comments.put(record);
+  });
+  return record;
+};
+
+export const listComments = async (
+  bookmarkId: string,
+  database?: LinkOSaurusDB,
+): Promise<Comment[]> => {
+  const trimmed = bookmarkId.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const dbInstance = withDatabase(database);
+  const comments = await dbInstance.comments.where('bookmarkId').equals(trimmed).toArray();
+  return comments.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+};
+
+export const updateComment = async (
+  id: string,
+  changes: UpdateCommentInput,
+  database?: LinkOSaurusDB,
+): Promise<Comment> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    throw new Error('Comment id must not be empty');
+  }
+
+  const patch: Partial<Comment> = {};
+  if (typeof changes.author === 'string') {
+    const author = changes.author.trim();
+    if (!author) {
+      throw new Error('Comment author must not be empty');
+    }
+    patch.author = author;
+  }
+  if (typeof changes.body === 'string') {
+    const body = changes.body.trim();
+    if (!body) {
+      throw new Error('Comment body must not be empty');
+    }
+    patch.body = body;
+  }
+
+  await runWriteTransaction(dbInstance, dbInstance.comments, async () => {
+    const updated = await dbInstance.comments.update(trimmedId, patch);
+    if (!updated) {
+      throw new Error(`Comment ${id} not found`);
+    }
+  });
+
+  const next = await dbInstance.comments.get(trimmedId);
+  if (!next) {
+    throw new Error(`Comment ${id} not found after update`);
+  }
+  return next;
+};
+
+export const deleteComment = async (
+  id: string,
+  database?: LinkOSaurusDB,
+): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const trimmedId = id.trim();
+  if (!trimmedId) {
+    return;
+  }
+  await runWriteTransaction(dbInstance, dbInstance.comments, async () => {
+    await dbInstance.comments.delete(trimmedId);
+  });
 };
 
 export const createTag = async (

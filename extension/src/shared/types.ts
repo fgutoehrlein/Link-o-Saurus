@@ -31,6 +31,14 @@ export type Bookmark = {
   lastVisitedAt?: number;
 };
 
+export type Comment = {
+  id: EntityId;
+  bookmarkId: EntityId;
+  author: string;
+  body: string;
+  createdAt: number;
+};
+
 export type Tag = {
   id: EntityId;
   name: string;
