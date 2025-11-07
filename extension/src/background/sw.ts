@@ -1,4 +1,14 @@
-import { createBookmark, listCategories } from '../shared/db';
+import {
+  createBookmark,
+  createSession,
+  deleteSession,
+  getSession,
+  listCategories,
+} from '../shared/db';
+import type { CreateSessionInput } from '../shared/db';
+import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging';
+import { isBackgroundRequest } from '../shared/messaging';
+import type { SessionPack } from '../shared/types';
 
 const CONTEXT_MENU_ID = 'feathermarks-context-save';
 
@@ -357,3 +367,175 @@ function showFeathermarksToast(message: string): void {
     setTimeout(() => toast.remove(), 200);
   }, 2200);
 }
+
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'file:', 'ftp:']);
+
+const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
+  const url = tab.url ?? tab.pendingUrl;
+  if (!url) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(url);
+    if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch (error) {
+    console.warn('[Feathermarks] Ungültige Tab-URL übersprungen', error);
+    return undefined;
+  }
+};
+
+const ensureTabsPermission = async (): Promise<void> => {
+  const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+  if (hasPermission) {
+    return;
+  }
+  const granted = await chrome.permissions.request({ permissions: ['tabs'] });
+  if (!granted) {
+    throw new Error('Berechtigung für Tabs wurde nicht erteilt.');
+  }
+};
+
+const saveCurrentWindowAsSession = async (title?: string): Promise<SessionPack> => {
+  await ensureTabsPermission();
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const sessionTabs = tabs
+    .map((tab) => {
+      const url = resolveTabUrl(tab);
+      if (!url) {
+        return undefined;
+      }
+      const sanitized: SessionPack['tabs'][number] = { url };
+      if (tab.title && tab.title.trim().length > 0) {
+        sanitized.title = tab.title;
+      }
+      if (tab.favIconUrl && tab.favIconUrl.trim().length > 0) {
+        sanitized.favIconUrl = tab.favIconUrl;
+      }
+      return sanitized;
+    })
+    .filter((tab): tab is SessionPack['tabs'][number] => Boolean(tab));
+
+  if (sessionTabs.length === 0) {
+    throw new Error('Keine speicherbaren Tabs im aktuellen Fenster gefunden.');
+  }
+
+  const trimmedTitle = title?.trim();
+  const sessionTitle =
+    trimmedTitle && trimmedTitle.length > 0
+      ? trimmedTitle
+      : `Fenster vom ${new Date().toLocaleString()}`;
+
+  const session: CreateSessionInput = {
+    id: crypto.randomUUID(),
+    title: sessionTitle,
+    tabs: sessionTabs,
+    savedAt: Date.now(),
+  };
+
+  await createSession(session);
+  return session;
+};
+
+const openTabsInNewWindow = async (tabs: SessionPack['tabs']): Promise<void> => {
+  if (!tabs.length) {
+    return;
+  }
+  const [first, ...rest] = tabs;
+  const createdWindow = await chrome.windows.create({ url: first.url, focused: true });
+  const windowId = createdWindow.id;
+  if (!windowId || rest.length === 0) {
+    return;
+  }
+
+  for (const tab of rest) {
+    await chrome.tabs.create({ windowId, url: tab.url, active: false });
+  }
+};
+
+const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promise<void> => {
+  if (!tabs.length) {
+    return;
+  }
+
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const windowId = activeTab?.windowId;
+  if (!windowId) {
+    await openTabsInNewWindow(tabs);
+    return;
+  }
+
+  for (let index = 0; index < tabs.length; index += 1) {
+    const tab = tabs[index];
+    await chrome.tabs.create({ windowId, url: tab.url, active: index === 0 });
+  }
+};
+
+const handleBackgroundRequest = async (
+  message: BackgroundRequest,
+): Promise<BackgroundResponse> => {
+  switch (message.type) {
+    case 'session.saveCurrentWindow': {
+      const session = await saveCurrentWindowAsSession(message.title);
+      return { type: 'session.saveCurrentWindow.result', session };
+    }
+    case 'session.openAll': {
+      await ensureTabsPermission();
+      const session = await getSession(message.sessionId);
+      if (!session) {
+        throw new Error('Session konnte nicht gefunden werden.');
+      }
+      const tabs = session.tabs.filter((tab) => Boolean(tab.url));
+      if (!tabs.length) {
+        throw new Error('Diese Session enthält keine gültigen Tabs.');
+      }
+      await openTabsInNewWindow(tabs);
+      return { type: 'session.openAll.result', opened: tabs.length };
+    }
+    case 'session.openSelected': {
+      await ensureTabsPermission();
+      const session = await getSession(message.sessionId);
+      if (!session) {
+        throw new Error('Session konnte nicht gefunden werden.');
+      }
+      const uniqueIndexes = Array.from(new Set(message.tabIndexes))
+        .filter((index) => Number.isInteger(index) && index >= 0)
+        .sort((a, b) => a - b);
+      const tabs = uniqueIndexes
+        .map((index) => session.tabs[index])
+        .filter((tab): tab is SessionPack['tabs'][number] => Boolean(tab?.url));
+      if (!tabs.length) {
+        throw new Error('Bitte wähle mindestens einen Tab aus.');
+      }
+      await openTabsInCurrentWindow(tabs);
+      return { type: 'session.openSelected.result', opened: tabs.length };
+    }
+    case 'session.delete': {
+      await deleteSession(message.sessionId);
+      return { type: 'session.delete.result', sessionId: message.sessionId };
+    }
+    default:
+      throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);
+  }
+};
+
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (!isBackgroundRequest(message)) {
+    return;
+  }
+
+  (async () => {
+    try {
+      const response = await handleBackgroundRequest(message);
+      sendResponse(response);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : 'Unbekannter Fehler beim Session-Handling.';
+      sendResponse({ type: 'session.error', error: messageText });
+    }
+  })();
+
+  return true;
+});

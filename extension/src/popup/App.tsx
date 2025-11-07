@@ -10,6 +10,7 @@ import {
 import { FixedSizeList, ListChildComponentProps } from 'react-window';
 import type { FixedSizeListProps } from 'react-window';
 import './App.css';
+import SessionManager from './SessionManager';
 
 type Board = {
   id: string;
@@ -510,8 +511,8 @@ const App: FunctionalComponent = () => {
           )}
         </div>
       </section>
-      <aside class="pane detail-pane" aria-label="Details">
-        <header class="pane-header">Details & Batch</header>
+      <aside class="pane detail-pane" aria-label="Details und Sessions">
+        <header class="pane-header">Details & Sessions</header>
         {batchPending ? (
           <div class="spinner" aria-live="polite">
             Aktion läuft …
@@ -536,6 +537,7 @@ const App: FunctionalComponent = () => {
         ) : (
           <p class="detail-placeholder">Mehrfachauswahl für Batch-Aktionen verwenden.</p>
         )}
+        <SessionManager />
       </aside>
     </main>
   );
