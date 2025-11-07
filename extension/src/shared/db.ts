@@ -380,6 +380,27 @@ export const listBookmarks = async (
   return collection.toArray();
 };
 
+export const listPinnedBookmarks = async (
+  options: { limit?: number } = {},
+  database?: LinkOSaurusDB,
+): Promise<Bookmark[]> => {
+  const dbInstance = withDatabase(database);
+  const { limit } = options;
+
+  const pinned = await dbInstance.bookmarks
+    .toCollection()
+    .filter((bookmark) => (bookmark.pinned ?? false) && !(bookmark.archived ?? false))
+    .toArray();
+
+  pinned.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  if (typeof limit === 'number') {
+    return pinned.slice(0, Math.max(0, limit));
+  }
+
+  return pinned;
+};
+
 export const deleteBookmark = async (
   id: string,
   database?: LinkOSaurusDB,

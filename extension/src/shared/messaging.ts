@@ -4,26 +4,30 @@ type SessionMessageType =
   | 'session.saveCurrentWindow'
   | 'session.openAll'
   | 'session.openSelected'
-  | 'session.delete';
+  | 'session.delete'
+  | 'settings.applyNewTab';
 
 type SessionResponseType =
   | 'session.saveCurrentWindow.result'
   | 'session.openAll.result'
   | 'session.openSelected.result'
   | 'session.delete.result'
+  | 'settings.applyNewTab.result'
   | 'session.error';
 
 export type BackgroundRequest =
   | { type: 'session.saveCurrentWindow'; title?: string }
   | { type: 'session.openAll'; sessionId: string }
   | { type: 'session.openSelected'; sessionId: string; tabIndexes: number[] }
-  | { type: 'session.delete'; sessionId: string };
+  | { type: 'session.delete'; sessionId: string }
+  | { type: 'settings.applyNewTab'; enabled: boolean };
 
 export type BackgroundResponse =
   | { type: 'session.saveCurrentWindow.result'; session: SessionPack }
   | { type: 'session.openAll.result'; opened: number }
   | { type: 'session.openSelected.result'; opened: number }
   | { type: 'session.delete.result'; sessionId: string }
+  | { type: 'settings.applyNewTab.result'; enabled: boolean }
   | { type: 'session.error'; error: string };
 
 export type BackgroundResponseSuccess = Exclude<BackgroundResponse, { type: 'session.error' }>;
@@ -33,6 +37,7 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'session.openAll',
   'session.openSelected',
   'session.delete',
+  'settings.applyNewTab',
 ]);
 
 const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
@@ -41,6 +46,7 @@ const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
   'session.openSelected.result',
   'session.delete.result',
   'session.error',
+  'settings.applyNewTab.result',
 ]);
 
 export const isBackgroundRequest = (value: unknown): value is BackgroundRequest => {
