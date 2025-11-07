@@ -78,6 +78,19 @@ html {
   transition: background 0.15s ease;
 }
 
+.tag-cloud .tag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.tag-count {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
 .tag-item:hover {
   background: rgba(59, 130, 246, 0.3);
 }
@@ -210,19 +223,119 @@ html {
 }
 
 .detail-tags {
+  display: block;
+}
+
+.tag-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.detail-tag {
-  padding: 4px 8px;
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 999px;
   background: rgba(59, 130, 246, 0.2);
 }
 
-.detail-tag--empty {
+.tag-chip__label {
+  font-size: 12px;
+}
+
+.tag-chip__remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
+}
+
+.tag-chip__remove:hover,
+.tag-chip__remove:focus-visible {
+  color: rgba(59, 130, 246, 0.9);
+}
+
+.tag-chip--empty {
   background: rgba(148, 163, 184, 0.12);
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.tag-input-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tag-input {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(148, 163, 184, 0.16);
+  color: inherit;
+}
+
+.tag-input:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.45);
+  outline-offset: 1px;
+}
+
+.tag-suggestion-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(30, 41, 59, 0.92);
+  max-height: 160px;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+.tag-suggestion-item {
+  margin: 0;
+}
+
+.tag-suggestion-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tag-suggestion-button:hover,
+.tag-suggestion-button:focus-visible {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.tag-suggestion-count {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.72);
 }
 
 .detail-placeholder {

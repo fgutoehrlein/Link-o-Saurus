@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Board, Bookmark, Category, SessionPack, UserSettings } from './types';
+import type { Board, Bookmark, Category, SessionPack, Tag, UserSettings } from './types';
 
 export const DB_NAME = 'link-o-saurus';
 export const USER_SETTINGS_KEY = 'user-settings';
@@ -55,6 +55,14 @@ export type UpdateSessionInput = Partial<Omit<SessionPack, 'id' | 'tabs'>> & {
 
 type BookmarkInput = CreateBookmarkInput;
 
+export type CreateTagInput = {
+  id?: string;
+  name: string;
+  usageCount?: number;
+};
+
+export type UpdateTagInput = Partial<Omit<Tag, 'id'>>;
+
 const BOOKMARK_DEFAULTS = {
   archived: false,
   pinned: false,
@@ -63,12 +71,117 @@ const BOOKMARK_DEFAULTS = {
 
 const ensureTimestamp = (value: number | undefined): number => value ?? Date.now();
 
+const normalizeTagName = (name: string): string => name.trim();
+
+const canonicalizeTagId = (name: string): string => normalizeTagName(name).toLowerCase();
+
+const normalizeTagList = (tags?: string[]): string[] => {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of tags ?? []) {
+    const cleaned = normalizeTagName(tag);
+    if (!cleaned) {
+      continue;
+    }
+    const id = canonicalizeTagId(cleaned);
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    normalized.push(cleaned);
+  }
+  return normalized;
+};
+
+type TagDelta = {
+  name: string;
+  delta: number;
+};
+
+const addTagDelta = (map: Map<string, TagDelta>, name: string, delta: number) => {
+  if (!delta) {
+    return;
+  }
+  const cleaned = normalizeTagName(name);
+  if (!cleaned) {
+    return;
+  }
+  const id = canonicalizeTagId(cleaned);
+  const existing = map.get(id);
+  if (existing) {
+    existing.delta += delta;
+    existing.name = cleaned;
+    if (existing.delta === 0) {
+      map.delete(id);
+    }
+    return;
+  }
+  map.set(id, { name: cleaned, delta });
+};
+
+const changeTagUsage = async (
+  dbInstance: LinkOSaurusDB,
+  name: string,
+  delta: number,
+): Promise<Tag | undefined> => {
+  const cleaned = normalizeTagName(name);
+  if (!cleaned || delta === 0) {
+    const id = canonicalizeTagId(cleaned);
+    return cleaned ? dbInstance.tags.get(id) : undefined;
+  }
+
+  const id = canonicalizeTagId(cleaned);
+  let existing = await dbInstance.tags.get(id);
+  if (!existing) {
+    existing = await dbInstance.tags.where('name').equals(cleaned).first();
+  }
+  if (!existing) {
+    if (delta < 0) {
+      return undefined;
+    }
+    const record: Tag = {
+      id,
+      name: cleaned,
+      usageCount: delta,
+    };
+    await dbInstance.tags.put(record);
+    return record;
+  }
+
+  const nextCount = Math.max(0, existing.usageCount + delta);
+  const nextName = delta > 0 ? cleaned : existing.name;
+  const updated: Tag = { ...existing, name: nextName, usageCount: nextCount };
+  await dbInstance.tags.put(updated);
+  return updated;
+};
+
+const applyTagDeltas = async (
+  dbInstance: LinkOSaurusDB,
+  deltas: Map<string, TagDelta>,
+): Promise<void> => {
+  for (const delta of deltas.values()) {
+    await changeTagUsage(dbInstance, delta.name, delta.delta);
+  }
+};
+
+const updateTagUsageForDiff = async (
+  dbInstance: LinkOSaurusDB,
+  previousTags: string[],
+  nextTags: string[],
+): Promise<void> => {
+  const deltas = new Map<string, TagDelta>();
+  previousTags.forEach((tag) => addTagDelta(deltas, tag, -1));
+  nextTags.forEach((tag) => addTagDelta(deltas, tag, 1));
+  await applyTagDeltas(dbInstance, deltas);
+};
+
 export class LinkOSaurusDB extends Dexie {
   boards!: Table<Board, string>;
   categories!: Table<Category, string>;
   bookmarks!: Table<Bookmark, string>;
   sessions!: Table<SessionPack, string>;
   userSettings!: Table<UserSettingsRecord, string>;
+  tags!: Table<Tag, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -101,6 +214,44 @@ export class LinkOSaurusDB extends Dexie {
             }
           });
       });
+
+    this.version(3)
+      .stores({
+        boards: 'id, sortOrder, updatedAt',
+        categories: 'id, boardId, sortOrder',
+        bookmarks:
+          'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+        sessions: 'id, savedAt',
+        userSettings: 'id',
+        tags: 'id, &name, usageCount',
+      })
+      .upgrade(async (tx) => {
+        const tagUsage = new Map<string, { name: string; usageCount: number }>();
+        await tx
+          .table('bookmarks')
+          .toCollection()
+          .modify((raw) => {
+            const bookmark = raw as Bookmark;
+            const normalized = normalizeTagList(bookmark.tags);
+            bookmark.tags = normalized;
+            normalized.forEach((tag) => {
+              const id = canonicalizeTagId(tag);
+              const entry = tagUsage.get(id);
+              if (entry) {
+                entry.usageCount += 1;
+              } else {
+                tagUsage.set(id, { name: tag, usageCount: 1 });
+              }
+            });
+          });
+
+        const tagTable = tx.table('tags') as Table<Tag, string>;
+        await Promise.all(
+          Array.from(tagUsage.entries()).map(([id, info]) =>
+            tagTable.put({ id, name: info.name, usageCount: info.usageCount }),
+          ),
+        );
+      });
   }
 }
 
@@ -120,10 +271,11 @@ const runWriteTransaction = async <T>(
 const normalizeBookmark = (bookmark: BookmarkInput): Bookmark => {
   const createdAt = ensureTimestamp(bookmark.createdAt);
   const updatedAt = ensureTimestamp(bookmark.updatedAt);
+  const tags = normalizeTagList(bookmark.tags ?? BOOKMARK_DEFAULTS.tags);
   return {
     ...BOOKMARK_DEFAULTS,
     ...bookmark,
-    tags: [...(bookmark.tags ?? BOOKMARK_DEFAULTS.tags)],
+    tags,
     createdAt,
     updatedAt,
     archived: bookmark.archived ?? BOOKMARK_DEFAULTS.archived,
@@ -155,6 +307,22 @@ const normalizeSettings = (settings: UserSettings): UserSettingsRecord => ({
 });
 
 const withDatabase = (database?: LinkOSaurusDB): LinkOSaurusDB => database ?? db;
+
+const toTagRecord = (input: CreateTagInput): Tag => {
+  const name = normalizeTagName(input.name);
+  if (!name) {
+    throw new Error('Tag name must not be empty');
+  }
+  const id = input.id ? canonicalizeTagId(input.id) : canonicalizeTagId(name);
+  if (!id) {
+    throw new Error('Tag id must not be empty');
+  }
+  return {
+    id,
+    name,
+    usageCount: Math.max(0, input.usageCount ?? 0),
+  };
+};
 
 export const createBoard = async (
   board: CreateBoardInput,
@@ -297,8 +465,13 @@ export const createBookmark = async (
 ): Promise<Bookmark> => {
   const dbInstance = withDatabase(database);
   const record = normalizeBookmark(bookmark);
-  await runWriteTransaction(dbInstance, dbInstance.bookmarks, () =>
-    dbInstance.bookmarks.put(record),
+  await runWriteTransaction(
+    dbInstance,
+    [dbInstance.bookmarks, dbInstance.tags],
+    async () => {
+      await dbInstance.bookmarks.put(record);
+      await updateTagUsageForDiff(dbInstance, [], record.tags);
+    },
   );
   return record;
 };
@@ -309,19 +482,39 @@ export const createBookmarks = async (
 ): Promise<Bookmark[]> => {
   const dbInstance = withDatabase(database);
   const records = bookmarks.map((bookmark) => normalizeBookmark(bookmark));
-  await runWriteTransaction(dbInstance, dbInstance.bookmarks, async () => {
-    if (records.length > 0) {
-      try {
-        await dbInstance.bookmarks.bulkAdd(records);
-      } catch (error) {
-        if (error instanceof Dexie.BulkError) {
-          await dbInstance.bookmarks.bulkPut(records);
-        } else {
-          throw error;
+  await runWriteTransaction(
+    dbInstance,
+    [dbInstance.bookmarks, dbInstance.tags],
+    async () => {
+      const existing = records.length
+        ? await dbInstance.bookmarks
+            .where('id')
+            .anyOf(records.map((record) => record.id))
+            .toArray()
+        : [];
+
+      const existingById = new Map<string, Bookmark>(
+        existing.map((bookmark) => [bookmark.id, { ...bookmark, tags: normalizeTagList(bookmark.tags) }]),
+      );
+
+      if (records.length > 0) {
+        try {
+          await dbInstance.bookmarks.bulkAdd(records);
+        } catch (error) {
+          if (error instanceof Dexie.BulkError) {
+            await dbInstance.bookmarks.bulkPut(records);
+          } else {
+            throw error;
+          }
         }
       }
-    }
-  });
+
+      for (const record of records) {
+        const previous = existingById.get(record.id);
+        await updateTagUsageForDiff(dbInstance, previous ? previous.tags : [], record.tags);
+      }
+    },
+  );
   return records;
 };
 
@@ -331,19 +524,39 @@ export const updateBookmark = async (
   database?: LinkOSaurusDB,
 ): Promise<Bookmark> => {
   const dbInstance = withDatabase(database);
+  const sanitizedTags = changes.tags ? normalizeTagList(changes.tags) : undefined;
   const patch: Partial<Bookmark> = {
     ...changes,
     updatedAt: ensureTimestamp(changes.updatedAt),
   };
+  if (sanitizedTags) {
+    patch.tags = sanitizedTags;
+  } else {
+    delete patch.tags;
+  }
 
-  await runWriteTransaction(dbInstance, dbInstance.bookmarks, async () => {
-    const updated = await dbInstance.bookmarks.update(id, patch);
-    if (!updated) {
-      throw new Error(`Bookmark ${id} not found`);
-    }
-  });
+  let next: Bookmark | undefined;
+  await runWriteTransaction(
+    dbInstance,
+    [dbInstance.bookmarks, dbInstance.tags],
+    async () => {
+      const current = await dbInstance.bookmarks.get(id);
+      if (!current) {
+        throw new Error(`Bookmark ${id} not found`);
+      }
+      const previousTags = normalizeTagList(current.tags);
+      const nextTags = sanitizedTags ?? previousTags;
+      const updatedRecord: Bookmark = {
+        ...current,
+        ...patch,
+        tags: nextTags,
+      };
+      await dbInstance.bookmarks.put(updatedRecord);
+      await updateTagUsageForDiff(dbInstance, previousTags, nextTags);
+      next = updatedRecord;
+    },
+  );
 
-  const next = await dbInstance.bookmarks.get(id);
   if (!next) {
     throw new Error(`Bookmark ${id} not found after update`);
   }
@@ -406,8 +619,111 @@ export const deleteBookmark = async (
   database?: LinkOSaurusDB,
 ): Promise<void> => {
   const dbInstance = withDatabase(database);
-  await runWriteTransaction(dbInstance, dbInstance.bookmarks, () =>
-    dbInstance.bookmarks.delete(id),
+  await runWriteTransaction(
+    dbInstance,
+    [dbInstance.bookmarks, dbInstance.tags],
+    async () => {
+      const existing = await dbInstance.bookmarks.get(id);
+      await dbInstance.bookmarks.delete(id);
+      if (existing) {
+        const previousTags = normalizeTagList(existing.tags);
+        if (previousTags.length) {
+          await updateTagUsageForDiff(dbInstance, previousTags, []);
+        }
+      }
+    },
+  );
+};
+
+export const createTag = async (
+  input: CreateTagInput,
+  database?: LinkOSaurusDB,
+): Promise<Tag> => {
+  const dbInstance = withDatabase(database);
+  const record = toTagRecord(input);
+  await runWriteTransaction(dbInstance, dbInstance.tags, async () => {
+    const existing = await dbInstance.tags.get(record.id);
+    if (existing) {
+      throw new Error(`Tag ${record.id} already exists`);
+    }
+    await dbInstance.tags.put(record);
+  });
+  return record;
+};
+
+export const updateTag = async (
+  id: string,
+  changes: UpdateTagInput,
+  database?: LinkOSaurusDB,
+): Promise<Tag> => {
+  const dbInstance = withDatabase(database);
+  const normalizedId = canonicalizeTagId(id);
+  const patch: Partial<Tag> = {};
+  if (typeof changes.name === 'string') {
+    const name = normalizeTagName(changes.name);
+    if (!name) {
+      throw new Error('Tag name must not be empty');
+    }
+    patch.name = name;
+  }
+  if (typeof changes.usageCount === 'number') {
+    patch.usageCount = Math.max(0, changes.usageCount);
+  }
+
+  await runWriteTransaction(dbInstance, dbInstance.tags, async () => {
+    const updated = await dbInstance.tags.update(normalizedId, patch);
+    if (!updated) {
+      throw new Error(`Tag ${id} not found`);
+    }
+  });
+
+  const next = await dbInstance.tags.get(normalizedId);
+  if (!next) {
+    throw new Error(`Tag ${id} not found after update`);
+  }
+  return next;
+};
+
+export const deleteTag = async (
+  id: string,
+  database?: LinkOSaurusDB,
+): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const normalizedId = canonicalizeTagId(id);
+  await runWriteTransaction(dbInstance, dbInstance.tags, () => dbInstance.tags.delete(normalizedId));
+};
+
+export const getTag = async (id: string, database?: LinkOSaurusDB): Promise<Tag | undefined> => {
+  const dbInstance = withDatabase(database);
+  const normalizedId = canonicalizeTagId(id);
+  return dbInstance.tags.get(normalizedId);
+};
+
+export const listTags = async (database?: LinkOSaurusDB): Promise<Tag[]> => {
+  const dbInstance = withDatabase(database);
+  const tags = await dbInstance.tags.toArray();
+  return tags.sort(
+    (a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name),
+  );
+};
+
+export const incrementTagUsage = async (
+  name: string,
+  database?: LinkOSaurusDB,
+): Promise<Tag | undefined> => {
+  const dbInstance = withDatabase(database);
+  return runWriteTransaction(dbInstance, dbInstance.tags, () =>
+    changeTagUsage(dbInstance, name, 1),
+  );
+};
+
+export const decrementTagUsage = async (
+  name: string,
+  database?: LinkOSaurusDB,
+): Promise<Tag | undefined> => {
+  const dbInstance = withDatabase(database);
+  return runWriteTransaction(dbInstance, dbInstance.tags, () =>
+    changeTagUsage(dbInstance, name, -1),
   );
 };
 
@@ -495,7 +811,14 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
   const dbInstance = withDatabase(database);
   await runWriteTransaction(
     dbInstance,
-    [dbInstance.boards, dbInstance.categories, dbInstance.bookmarks, dbInstance.sessions, dbInstance.userSettings],
+    [
+      dbInstance.boards,
+      dbInstance.categories,
+      dbInstance.bookmarks,
+      dbInstance.sessions,
+      dbInstance.userSettings,
+      dbInstance.tags,
+    ],
     async () => {
       await Promise.all([
         dbInstance.boards.clear(),
@@ -503,6 +826,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
         dbInstance.bookmarks.clear(),
         dbInstance.sessions.clear(),
         dbInstance.userSettings.clear(),
+        dbInstance.tags.clear(),
       ]);
     },
   );

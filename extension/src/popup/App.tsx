@@ -11,16 +11,41 @@ import { FixedSizeList, ListChildComponentProps } from 'react-window';
 import type { FixedSizeListProps } from 'react-window';
 import './App.css';
 import SessionManager from './SessionManager';
+import type { Tag } from '../shared/types';
+
+const TAG_FILTER_PATTERN = /tag:(?:"([^"]+)"|'([^']+)'|([^\s]+))/gi;
+
+const normalizeTagName = (name: string): string => name.trim();
+
+const canonicalizeTagId = (name: string): string => normalizeTagName(name).toLowerCase();
+
+const formatTagToken = (tag: string): string =>
+  `tag:${tag.includes(' ') ? `"${tag}"` : tag}`;
+
+const parseSearchQuery = (
+  value: string,
+): {
+  readonly text: string;
+  readonly tags: string[];
+} => {
+  const tags: string[] = [];
+  const cleaned = value.replace(TAG_FILTER_PATTERN, (_, doubleQuoted, singleQuoted, unquoted) => {
+    const tag = (doubleQuoted ?? singleQuoted ?? unquoted ?? '').trim();
+    if (tag) {
+      tags.push(tag);
+    }
+    return ' ';
+  });
+  return {
+    text: cleaned.replace(/\s+/g, ' ').trim(),
+    tags,
+  };
+};
 
 type Board = {
   id: string;
   label: string;
   count: number;
-};
-
-type Tag = {
-  id: string;
-  label: string;
 };
 
 type Bookmark = {
@@ -186,9 +211,16 @@ const App: FunctionalComponent = () => {
     return fakeData;
   });
 
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
+  useEffect(() => {
+    if (bookmarksResource.data) {
+      setBookmarks(bookmarksResource.data);
+    }
+  }, [bookmarksResource.data]);
+
   const boardsResource = useAsyncResource(async () => {
     await wait(10);
-    const bookmarks = bookmarksResource.data ?? [];
     const boardCounts = bookmarks.reduce<Record<string, number>>(
       (acc, bookmark) => {
         acc[bookmark.boardId] = (acc[bookmark.boardId] ?? 0) + 1;
@@ -205,17 +237,52 @@ const App: FunctionalComponent = () => {
       },
       { id: 'archive', label: 'Archive', count: 0 },
     ] satisfies Board[];
-  }, [bookmarksResource.data]);
+  }, [bookmarks]);
 
   const tagsResource = useAsyncResource(async () => {
     await wait(10);
     return [
-      { id: 'inbox', label: 'Inbox' },
-      { id: 'reading', label: 'Reading' },
-      { id: 'important', label: 'Important' },
-      { id: 'inspiration', label: 'Inspiration' },
+      { id: 'inbox', name: 'Inbox', usageCount: 0 },
+      { id: 'reading', name: 'Reading', usageCount: 0 },
+      { id: 'important', name: 'Important', usageCount: 0 },
+      { id: 'inspiration', name: 'Inspiration', usageCount: 0 },
     ] satisfies Tag[];
   });
+
+  const [tags, setTags] = useState<Tag[]>([]);
+
+  useEffect(() => {
+    if (tagsResource.data) {
+      setTags(tagsResource.data);
+    }
+  }, [tagsResource.data]);
+
+  useEffect(() => {
+    setTags((current) => {
+      const usage = new Map<string, Tag>();
+      current.forEach((tag) => {
+        usage.set(tag.id, { ...tag, usageCount: 0 });
+      });
+      bookmarks.forEach((bookmark) => {
+        bookmark.tags.forEach((tagName) => {
+          const normalized = normalizeTagName(tagName);
+          if (!normalized) {
+            return;
+          }
+          const id = canonicalizeTagId(normalized);
+          const existing = usage.get(id);
+          if (existing) {
+            usage.set(id, { ...existing, name: normalized, usageCount: existing.usageCount + 1 });
+          } else {
+            usage.set(id, { id, name: normalized, usageCount: 1 });
+          }
+        });
+      });
+      return Array.from(usage.values()).sort(
+        (a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name),
+      );
+    });
+  }, [bookmarks]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -225,12 +292,106 @@ const App: FunctionalComponent = () => {
   const lastSelectedIndex = useRef<number | null>(null);
   const [batchPending, setBatchPending] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const tagInputRef = useRef<HTMLInputElement | null>(null);
+  const [tagInputValue, setTagInputValue] = useState('');
+
+  const parsedSearch = useMemo(() => parseSearchQuery(searchTerm), [searchTerm]);
 
   const handleSearchInput = useCallback(
     (event: JSX.TargetedEvent<HTMLInputElement, Event>) => {
       setSearchTerm(event.currentTarget.value);
     },
     [],
+  );
+
+  const handleSidebarTagClick = useCallback((tagName: string) => {
+    const normalized = normalizeTagName(tagName);
+    if (!normalized) {
+      return;
+    }
+    setSearchTerm((prev) => {
+      const { text, tags: existingTags } = parseSearchQuery(prev);
+      const existingIds = new Set(existingTags.map(canonicalizeTagId));
+      const normalizedId = canonicalizeTagId(normalized);
+      if (existingIds.has(normalizedId)) {
+        return prev;
+      }
+      const tokens = [...existingTags, normalized].map((tag) => formatTagToken(tag));
+      const prefix = text.length ? `${text} ` : '';
+      return `${prefix}${tokens.join(' ')}`.trim();
+    });
+  }, []);
+
+  const addTagToBookmark = useCallback(
+    (bookmarkId: string, tagName: string) => {
+      const cleaned = normalizeTagName(tagName);
+      if (!cleaned) {
+        return;
+      }
+      const tagId = canonicalizeTagId(cleaned);
+      setBookmarks((prev) =>
+        prev.map((bookmark) => {
+          if (bookmark.id !== bookmarkId) {
+            return bookmark;
+          }
+          const existing = new Set(bookmark.tags.map(canonicalizeTagId));
+          if (existing.has(tagId)) {
+            return bookmark;
+          }
+          return { ...bookmark, tags: [...bookmark.tags, cleaned] };
+        }),
+      );
+      setTagInputValue('');
+    },
+    [setBookmarks],
+  );
+
+  const removeTagFromBookmark = useCallback(
+    (bookmarkId: string, tagName: string) => {
+      const targetId = canonicalizeTagId(tagName);
+      setBookmarks((prev) =>
+        prev.map((bookmark) => {
+          if (bookmark.id !== bookmarkId) {
+            return bookmark;
+          }
+          return {
+            ...bookmark,
+            tags: bookmark.tags.filter((tag) => canonicalizeTagId(tag) !== targetId),
+          };
+        }),
+      );
+    },
+    [setBookmarks],
+  );
+
+  const handleTagInputChange = useCallback(
+    (event: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+      setTagInputValue(event.currentTarget.value);
+    },
+    [],
+  );
+
+  const handleTagInputKeyDown = useCallback(
+    (bookmarkId: string, event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ',') {
+        event.preventDefault();
+        if (tagInputValue.trim()) {
+          addTagToBookmark(bookmarkId, tagInputValue);
+        }
+      } else if (event.key === 'Escape') {
+        setTagInputValue('');
+        (event.target as HTMLInputElement | null)?.blur();
+      }
+    },
+    [addTagToBookmark, tagInputValue],
+  );
+
+  const handleTagSuggestion = useCallback(
+    (bookmarkId: string, tagName: string) => {
+      addTagToBookmark(bookmarkId, tagName);
+      tagInputRef.current?.focus();
+    },
+    [addTagToBookmark],
   );
 
   const runBatchAction = useCallback(
@@ -245,8 +406,6 @@ const App: FunctionalComponent = () => {
     },
     [selectedIds],
   );
-
-  const bookmarks = bookmarksResource.data ?? [];
 
   useEffect(() => {
     if (!bookmarks.length) {
@@ -268,10 +427,21 @@ const App: FunctionalComponent = () => {
   }, [bookmarks, orderedIds]);
 
   const filteredBookmarks = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const normalizedSearch = parsedSearch.text.toLowerCase();
+    const requiredTagIds = Array.from(
+      new Set(parsedSearch.tags.map((tag) => canonicalizeTagId(tag)).filter(Boolean)),
+    );
     return orderedBookmarks.filter((bookmark) => {
       if (activeBoard && bookmark.boardId !== activeBoard) {
         return false;
+      }
+      if (requiredTagIds.length) {
+        const bookmarkTagIds = new Set(bookmark.tags.map(canonicalizeTagId));
+        for (const tagId of requiredTagIds) {
+          if (!bookmarkTagIds.has(tagId)) {
+            return false;
+          }
+        }
       }
       if (!normalizedSearch) {
         return true;
@@ -282,7 +452,12 @@ const App: FunctionalComponent = () => {
         bookmark.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
       );
     });
-  }, [orderedBookmarks, activeBoard, searchTerm]);
+  }, [orderedBookmarks, activeBoard, parsedSearch]);
+
+  const sortedTags = useMemo(
+    () => [...tags].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name)),
+    [tags],
+  );
 
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
@@ -388,7 +563,11 @@ const App: FunctionalComponent = () => {
         console.log('[Link-O-Saurus] New bookmark action triggered');
       } else if (event.key === 't' || event.key === 'T') {
         event.preventDefault();
-        runBatchAction('tag');
+        if (selectedIds.size === 1) {
+          tagInputRef.current?.focus();
+        } else {
+          runBatchAction('tag');
+        }
       } else if (event.key === 'm' || event.key === 'M') {
         event.preventDefault();
         runBatchAction('move');
@@ -400,13 +579,26 @@ const App: FunctionalComponent = () => {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [runBatchAction]);
+  }, [runBatchAction, selectedIds.size]);
 
   const selectedFirstId = selectedIds.values().next().value as string | undefined;
   const selectedBookmark = useMemo(
     () => filteredBookmarks.find((bookmark) => bookmark.id === selectedFirstId),
     [filteredBookmarks, selectedFirstId],
   );
+
+  const tagSuggestions = useMemo(() => {
+    const normalizedQuery = tagInputValue.trim().toLowerCase();
+    const selectedTagIds = new Set((selectedBookmark?.tags ?? []).map(canonicalizeTagId));
+    return sortedTags
+      .filter((tag) => !selectedTagIds.has(tag.id))
+      .filter((tag) => !normalizedQuery || tag.name.toLowerCase().includes(normalizedQuery))
+      .slice(0, 6);
+  }, [sortedTags, selectedBookmark, tagInputValue]);
+
+  useEffect(() => {
+    setTagInputValue('');
+  }, [selectedFirstId]);
 
   const batchSummary = `${selectedIds.size} ausgewählt`;
 
@@ -428,14 +620,15 @@ const App: FunctionalComponent = () => {
         </nav>
         <header class="pane-header">Tags</header>
         <div class="tag-cloud" aria-label="Tags">
-          {(tagsResource.data ?? []).map((tag) => (
+          {sortedTags.map((tag) => (
             <button
               key={tag.id}
               type="button"
               class="tag-item"
-              onClick={() => setSearchTerm(tag.label)}
+              onClick={() => handleSidebarTagClick(tag.name)}
             >
-              #{tag.label}
+              <span>#{tag.name}</span>
+              <span class="tag-count">{tag.usageCount}</span>
             </button>
           ))}
         </div>
@@ -523,15 +716,57 @@ const App: FunctionalComponent = () => {
             <p class="detail-url">{selectedBookmark.url}</p>
             <p>Erstellt: {new Date(selectedBookmark.createdAt).toLocaleString()}</p>
             <div class="detail-tags">
-              {selectedBookmark.tags.length ? (
-                selectedBookmark.tags.map((tag) => (
-                  <span key={tag} class="detail-tag">
-                    #{tag}
-                  </span>
-                ))
-              ) : (
-                <span class="detail-tag detail-tag--empty">Keine Tags</span>
-              )}
+              <div class="tag-editor" role="group" aria-label="Tags bearbeiten">
+                <div class="tag-chip-list">
+                  {selectedBookmark.tags.length ? (
+                    selectedBookmark.tags.map((tag) => (
+                      <span key={tag} class="tag-chip">
+                        <span class="tag-chip__label">#{tag}</span>
+                        <button
+                          type="button"
+                          class="tag-chip__remove"
+                          aria-label={`Tag ${tag} entfernen`}
+                          onClick={() => removeTagFromBookmark(selectedBookmark.id, tag)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span class="tag-chip tag-chip--empty">Keine Tags</span>
+                  )}
+                </div>
+                <div class="tag-input-row">
+                  <input
+                    ref={tagInputRef}
+                    class="tag-input"
+                    type="text"
+                    value={tagInputValue}
+                    onInput={handleTagInputChange}
+                    onKeyDown={(event: KeyboardEvent) =>
+                      handleTagInputKeyDown(selectedBookmark.id, event)}
+                    placeholder="Tag hinzufügen (Enter)"
+                    aria-label="Tag hinzufügen"
+                  />
+                  {tagSuggestions.length ? (
+                    <ul class="tag-suggestion-list" role="listbox">
+                      {tagSuggestions.map((tag) => (
+                        <li key={tag.id} class="tag-suggestion-item">
+                          <button
+                            type="button"
+                            class="tag-suggestion-button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => handleTagSuggestion(selectedBookmark.id, tag.name)}
+                          >
+                            <span>#{tag.name}</span>
+                            <span class="tag-suggestion-count">{tag.usageCount}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
