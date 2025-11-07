@@ -38,8 +38,7 @@ html {
   color: rgba(226, 232, 240, 0.72);
 }
 
-.sidebar .board-list,
-.sidebar .tag-cloud {
+.sidebar .board-list {
   padding: 8px;
   display: grid;
   gap: 6px;
@@ -68,31 +67,104 @@ html {
   color: rgba(226, 232, 240, 0.6);
 }
 
-.tag-item {
-  border: none;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: rgba(59, 130, 246, 0.15);
-  color: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease;
+.tag-tree-container {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+  overflow: hidden;
+  min-height: 140px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(30, 41, 59, 0.45);
 }
 
-.tag-cloud .tag-item {
+.tag-tree-container > div {
+  flex: 1 1 auto;
+}
+
+.tag-tree-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  color: inherit;
+  height: 28px;
+}
+
+.tag-tree-row__content {
+  display: flex;
+  align-items: center;
   gap: 6px;
   width: 100%;
 }
 
-.tag-count {
-  font-size: 11px;
+.tag-tree-toggle {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: rgba(226, 232, 240, 0.7);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 }
 
-.tag-item:hover {
-  background: rgba(59, 130, 246, 0.3);
+.tag-tree-toggle:hover,
+.tag-tree-toggle:focus-visible {
+  background: rgba(59, 130, 246, 0.22);
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.tag-tree-toggle--spacer {
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(148, 163, 184, 0.45);
+  font-size: 10px;
+}
+
+.tag-tree-label {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.tag-tree-label.is-active,
+.tag-tree-label:hover,
+.tag-tree-label:focus-visible {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.tag-tree-label__text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-tree-label__count {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.tag-tree-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.7);
 }
 
 .bookmark-pane {

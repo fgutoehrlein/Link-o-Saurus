@@ -55,6 +55,20 @@ describe('search worker tag filtering', () => {
     expect(unmatchedHits).toHaveLength(0);
   });
 
+  it('matches hierarchical tag prefixes', async () => {
+    await rebuildIndex([
+      createBookmark({ id: 'd1', title: 'React patterns', tags: ['dev/js/react'] }),
+      createBookmark({ id: 'd2', title: 'Vue recipes', tags: ['dev/js/vue'] }),
+      createBookmark({ id: 'd3', title: 'Python tips', tags: ['dev/python'] }),
+    ]);
+
+    const jsHits = await query('', { tags: ['dev/js'] });
+    expect(jsHits.map((hit) => hit.id).sort()).toEqual(['d1', 'd2']);
+
+    const reactHits = await query('', { tags: ['dev/js/react'] });
+    expect(reactHits.map((hit) => hit.id)).toEqual(['d1']);
+  });
+
   it('updates tag indexes when a bookmark document changes', async () => {
     await rebuildIndex([
       createBookmark({ id: 'd', title: 'UX research', tags: ['Design'] }),

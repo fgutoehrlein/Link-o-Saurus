@@ -1,5 +1,12 @@
 import Dexie, { Table } from 'dexie';
 import type { Board, Bookmark, Category, SessionPack, Tag, UserSettings } from './types';
+import {
+  canonicalizeTagId,
+  createTagFromMetadata,
+  deriveTagMetadata,
+  normalizeTagList,
+  normalizeTagPath,
+} from './tag-utils';
 
 export const DB_NAME = 'link-o-saurus';
 export const USER_SETTINGS_KEY = 'user-settings';
@@ -57,7 +64,8 @@ type BookmarkInput = CreateBookmarkInput;
 
 export type CreateTagInput = {
   id?: string;
-  name: string;
+  path: string;
+  name?: string;
   usageCount?: number;
 };
 
@@ -71,30 +79,8 @@ const BOOKMARK_DEFAULTS = {
 
 const ensureTimestamp = (value: number | undefined): number => value ?? Date.now();
 
-const normalizeTagName = (name: string): string => name.trim();
-
-const canonicalizeTagId = (name: string): string => normalizeTagName(name).toLowerCase();
-
-const normalizeTagList = (tags?: string[]): string[] => {
-  const normalized: string[] = [];
-  const seen = new Set<string>();
-  for (const tag of tags ?? []) {
-    const cleaned = normalizeTagName(tag);
-    if (!cleaned) {
-      continue;
-    }
-    const id = canonicalizeTagId(cleaned);
-    if (seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    normalized.push(cleaned);
-  }
-  return normalized;
-};
-
 type TagDelta = {
-  name: string;
+  path: string;
   delta: number;
 };
 
@@ -102,21 +88,21 @@ const addTagDelta = (map: Map<string, TagDelta>, name: string, delta: number) =>
   if (!delta) {
     return;
   }
-  const cleaned = normalizeTagName(name);
+  const cleaned = normalizeTagPath(name);
   if (!cleaned) {
     return;
   }
-  const id = canonicalizeTagId(cleaned);
-  const existing = map.get(id);
+  const metadata = deriveTagMetadata(cleaned);
+  const existing = map.get(metadata.canonicalId);
   if (existing) {
     existing.delta += delta;
-    existing.name = cleaned;
+    existing.path = cleaned;
     if (existing.delta === 0) {
-      map.delete(id);
+      map.delete(metadata.canonicalId);
     }
     return;
   }
-  map.set(id, { name: cleaned, delta });
+  map.set(metadata.canonicalId, { path: cleaned, delta });
 };
 
 const changeTagUsage = async (
@@ -124,33 +110,40 @@ const changeTagUsage = async (
   name: string,
   delta: number,
 ): Promise<Tag | undefined> => {
-  const cleaned = normalizeTagName(name);
-  if (!cleaned || delta === 0) {
-    const id = canonicalizeTagId(cleaned);
-    return cleaned ? dbInstance.tags.get(id) : undefined;
+  const normalized = normalizeTagPath(name);
+  if (!normalized) {
+    const id = canonicalizeTagId(name);
+    return id ? dbInstance.tags.get(id) : undefined;
   }
 
-  const id = canonicalizeTagId(cleaned);
+  if (delta === 0) {
+    const id = canonicalizeTagId(normalized);
+    return id ? dbInstance.tags.get(id) : undefined;
+  }
+
+  const metadata = deriveTagMetadata(normalized);
+  const id = metadata.canonicalId;
   let existing = await dbInstance.tags.get(id);
   if (!existing) {
-    existing = await dbInstance.tags.where('name').equals(cleaned).first();
+    existing = await dbInstance.tags.where('path').equals(metadata.path).first();
   }
   if (!existing) {
     if (delta < 0) {
       return undefined;
     }
-    const record: Tag = {
-      id,
-      name: cleaned,
-      usageCount: delta,
-    };
+    const record = createTagFromMetadata(metadata, { usageCount: delta });
     await dbInstance.tags.put(record);
     return record;
   }
 
   const nextCount = Math.max(0, existing.usageCount + delta);
-  const nextName = delta > 0 ? cleaned : existing.name;
-  const updated: Tag = { ...existing, name: nextName, usageCount: nextCount };
+  const updated: Tag = {
+    ...existing,
+    name: delta > 0 ? metadata.leafName : existing.name,
+    path: delta > 0 ? metadata.path : existing.path,
+    slugParts: delta > 0 ? metadata.slugParts : existing.slugParts,
+    usageCount: nextCount,
+  };
   await dbInstance.tags.put(updated);
   return updated;
 };
@@ -160,7 +153,7 @@ const applyTagDeltas = async (
   deltas: Map<string, TagDelta>,
 ): Promise<void> => {
   for (const delta of deltas.values()) {
-    await changeTagUsage(dbInstance, delta.name, delta.delta);
+    await changeTagUsage(dbInstance, delta.path, delta.delta);
   }
 };
 
@@ -226,7 +219,7 @@ export class LinkOSaurusDB extends Dexie {
         tags: 'id, &name, usageCount',
       })
       .upgrade(async (tx) => {
-        const tagUsage = new Map<string, { name: string; usageCount: number }>();
+        const tagUsage = new Map<string, { path: string; usageCount: number }>();
         await tx
           .table('bookmarks')
           .toCollection()
@@ -240,7 +233,7 @@ export class LinkOSaurusDB extends Dexie {
               if (entry) {
                 entry.usageCount += 1;
               } else {
-                tagUsage.set(id, { name: tag, usageCount: 1 });
+                tagUsage.set(id, { path: tag, usageCount: 1 });
               }
             });
           });
@@ -248,9 +241,38 @@ export class LinkOSaurusDB extends Dexie {
         const tagTable = tx.table('tags') as Table<Tag, string>;
         await Promise.all(
           Array.from(tagUsage.entries()).map(([id, info]) =>
-            tagTable.put({ id, name: info.name, usageCount: info.usageCount }),
+            tagTable.put(
+              createTagFromMetadata(deriveTagMetadata(info.path), {
+                id,
+                usageCount: info.usageCount,
+              }),
+            ),
           ),
         );
+      });
+
+    this.version(4)
+      .stores({
+        boards: 'id, sortOrder, updatedAt',
+        categories: 'id, boardId, sortOrder',
+        bookmarks:
+          'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+        sessions: 'id, savedAt',
+        userSettings: 'id',
+        tags: 'id, &path, &name, usageCount, *slugParts',
+      })
+      .upgrade(async (tx) => {
+        const tagTable = tx.table('tags') as Table<Tag, string>;
+        await tagTable.toCollection().modify((raw) => {
+          const tag = raw as Tag;
+          const source = tag.path ?? tag.name ?? tag.id;
+          const metadata = deriveTagMetadata(source);
+          tag.path = metadata.path;
+          tag.slugParts = metadata.slugParts;
+          if (!tag.name) {
+            tag.name = metadata.leafName;
+          }
+        });
       });
   }
 }
@@ -309,17 +331,24 @@ const normalizeSettings = (settings: UserSettings): UserSettingsRecord => ({
 const withDatabase = (database?: LinkOSaurusDB): LinkOSaurusDB => database ?? db;
 
 const toTagRecord = (input: CreateTagInput): Tag => {
-  const name = normalizeTagName(input.name);
-  if (!name) {
-    throw new Error('Tag name must not be empty');
+  const path = normalizeTagPath(input.path);
+  if (!path) {
+    throw new Error('Tag path must not be empty');
   }
-  const id = input.id ? canonicalizeTagId(input.id) : canonicalizeTagId(name);
+  const metadata = deriveTagMetadata(path);
+  const id = input.id ? canonicalizeTagId(input.id) : metadata.canonicalId;
   if (!id) {
     throw new Error('Tag id must not be empty');
   }
+  const name =
+    typeof input.name === 'string' && input.name.trim().length > 0
+      ? input.name.trim()
+      : metadata.leafName;
   return {
     id,
     name,
+    path: metadata.path,
+    slugParts: metadata.slugParts,
     usageCount: Math.max(0, input.usageCount ?? 0),
   };
 };
@@ -509,10 +538,14 @@ export const createBookmarks = async (
         }
       }
 
+      const aggregateDeltas = new Map<string, TagDelta>();
       for (const record of records) {
         const previous = existingById.get(record.id);
-        await updateTagUsageForDiff(dbInstance, previous ? previous.tags : [], record.tags);
+        const previousTags = previous ? previous.tags : [];
+        previousTags.forEach((tag) => addTagDelta(aggregateDeltas, tag, -1));
+        record.tags.forEach((tag) => addTagDelta(aggregateDeltas, tag, 1));
       }
+      await applyTagDeltas(dbInstance, aggregateDeltas);
     },
   );
   return records;
@@ -658,9 +691,27 @@ export const updateTag = async (
 ): Promise<Tag> => {
   const dbInstance = withDatabase(database);
   const normalizedId = canonicalizeTagId(id);
+  if (!normalizedId) {
+    throw new Error('Tag id must not be empty');
+  }
   const patch: Partial<Tag> = {};
+  if (typeof changes.path === 'string') {
+    const normalizedPath = normalizeTagPath(changes.path);
+    if (!normalizedPath) {
+      throw new Error('Tag path must not be empty');
+    }
+    const metadata = deriveTagMetadata(normalizedPath);
+    if (metadata.canonicalId !== normalizedId) {
+      throw new Error('Updated tag path must match tag id');
+    }
+    patch.path = metadata.path;
+    patch.slugParts = metadata.slugParts;
+    if (typeof changes.name !== 'string') {
+      patch.name = metadata.leafName;
+    }
+  }
   if (typeof changes.name === 'string') {
-    const name = normalizeTagName(changes.name);
+    const name = changes.name.trim();
     if (!name) {
       throw new Error('Tag name must not be empty');
     }

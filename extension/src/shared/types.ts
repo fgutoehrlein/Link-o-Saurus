@@ -34,6 +34,8 @@ export type Bookmark = {
 export type Tag = {
   id: EntityId;
   name: string;
+  path: string;
+  slugParts: string[];
   usageCount: number;
 };
 

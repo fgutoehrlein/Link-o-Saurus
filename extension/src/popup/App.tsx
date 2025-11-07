@@ -12,12 +12,17 @@ import type { FixedSizeListProps } from 'react-window';
 import './App.css';
 import SessionManager from './SessionManager';
 import type { Tag } from '../shared/types';
+import {
+  canonicalizeTagId,
+  createTagFromMetadata,
+  deriveTagMetadata,
+  normalizeTagPath,
+  isAncestorSlug,
+} from '../shared/tag-utils';
+import { buildTagTree, flattenTagTree } from './tag-tree';
+import type { FlattenedTagNode } from './tag-tree';
 
 const TAG_FILTER_PATTERN = /tag:(?:"([^"]+)"|'([^']+)'|([^\s]+))/gi;
-
-const normalizeTagName = (name: string): string => name.trim();
-
-const canonicalizeTagId = (name: string): string => normalizeTagName(name).toLowerCase();
 
 const formatTagToken = (tag: string): string =>
   `tag:${tag.includes(' ') ? `"${tag}"` : tag}`;
@@ -196,13 +201,109 @@ const VirtualizedList = FixedSizeList as unknown as FunctionalComponent<
   }
 >;
 
+type TagTreeRowData = {
+  readonly items: FlattenedTagNode[];
+  readonly onToggle: (path: string) => void;
+  readonly onSelect: (path: string) => void;
+  readonly activeFilters: Set<string>;
+};
+
+const TagTreeRow: FunctionalComponent<ListChildComponentProps<TagTreeRowData>> = ({
+  index,
+  style,
+  data,
+}) => {
+  const item = data.items[index];
+  const { node, depth, hasChildren, isExpanded } = item;
+  const isActive = data.activeFilters.has(node.canonicalPath);
+
+  return (
+    <div
+      class="tag-tree-row"
+      style={style as unknown as JSX.CSSProperties}
+      role="treeitem"
+      aria-level={depth + 1}
+      aria-expanded={hasChildren ? isExpanded : undefined}
+    >
+      <div class="tag-tree-row__content" style={{ paddingLeft: `${depth * 16 + 8}px` }}>
+        {hasChildren ? (
+          <button
+            type="button"
+            class="tag-tree-toggle"
+            aria-label={
+              isExpanded
+                ? `Taggruppe ${node.path} einklappen`
+                : `Taggruppe ${node.path} ausklappen`
+            }
+            onClick={() => data.onToggle(node.canonicalPath)}
+          >
+            {isExpanded ? '▾' : '▸'}
+          </button>
+        ) : (
+          <span class="tag-tree-toggle tag-tree-toggle--spacer" aria-hidden="true">
+            •
+          </span>
+        )}
+        <button
+          type="button"
+          class={`tag-tree-label${isActive ? ' is-active' : ''}`}
+          onClick={() => data.onSelect(node.path)}
+          title={node.path}
+        >
+          <span class="tag-tree-label__text">{node.label}</span>
+          <span class="tag-tree-label__count">{node.totalUsage}</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const VirtualizedTagTree = FixedSizeList as unknown as FunctionalComponent<
+  FixedSizeListProps<TagTreeRowData> & {
+    children: (props: ListChildComponentProps<TagTreeRowData>) => ComponentChildren;
+  }
+>;
+
+const TAG_TREE_EXPANDED_KEY = 'link-o-saurus:tag-tree-expanded';
+
+const loadExpandedPaths = (): Set<string> => {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+  try {
+    const raw = window.localStorage.getItem(TAG_TREE_EXPANDED_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+    }
+  } catch {
+    // Ignore persistence errors and fall back to defaults.
+  }
+  return new Set();
+};
+
 const App: FunctionalComponent = () => {
   const bookmarksResource = useAsyncResource(async () => {
     const fakeData: Bookmark[] = Array.from({ length: 5000 }).map((_, index) => ({
       id: `bookmark-${index}`,
       title: `Bookmark ${index + 1}`,
       url: `https://example.com/${index + 1}`,
-      tags: index % 3 === 0 ? ['inbox'] : index % 5 === 0 ? ['reading'] : [],
+      tags: (() => {
+        const values: string[] = [];
+        if (index % 3 === 0) {
+          values.push('Inbox');
+        }
+        if (index % 5 === 0) {
+          values.push('Dev/JS/React');
+        }
+        if (index % 7 === 0) {
+          values.push('Research/UX/Interviews');
+        }
+        return values;
+      })(),
       boardId: index % 2 === 0 ? 'inbox' : 'read-later',
       createdAt: new Date(Date.now() - index * 60000).toISOString(),
     }));
@@ -241,15 +342,14 @@ const App: FunctionalComponent = () => {
 
   const tagsResource = useAsyncResource(async () => {
     await wait(10);
-    return [
-      { id: 'inbox', name: 'Inbox', usageCount: 0 },
-      { id: 'reading', name: 'Reading', usageCount: 0 },
-      { id: 'important', name: 'Important', usageCount: 0 },
-      { id: 'inspiration', name: 'Inspiration', usageCount: 0 },
-    ] satisfies Tag[];
+    const seedPaths = ['Inbox', 'dev', 'dev/js', 'dev/js/react', 'research/ux'];
+    return seedPaths.map((path) => createTagFromMetadata(deriveTagMetadata(path)));
   });
 
   const [tags, setTags] = useState<Tag[]>([]);
+  const [expandedTagPaths, setExpandedTagPaths] = useState<Set<string>>(() =>
+    loadExpandedPaths(),
+  );
 
   useEffect(() => {
     if (tagsResource.data) {
@@ -265,24 +365,80 @@ const App: FunctionalComponent = () => {
       });
       bookmarks.forEach((bookmark) => {
         bookmark.tags.forEach((tagName) => {
-          const normalized = normalizeTagName(tagName);
+          const normalized = normalizeTagPath(tagName);
           if (!normalized) {
             return;
           }
-          const id = canonicalizeTagId(normalized);
-          const existing = usage.get(id);
+          let metadata;
+          try {
+            metadata = deriveTagMetadata(normalized);
+          } catch {
+            return;
+          }
+          const existing = usage.get(metadata.canonicalId);
           if (existing) {
-            usage.set(id, { ...existing, name: normalized, usageCount: existing.usageCount + 1 });
+            usage.set(metadata.canonicalId, {
+              ...existing,
+              name: metadata.leafName,
+              path: metadata.path,
+              slugParts: metadata.slugParts,
+              usageCount: existing.usageCount + 1,
+            });
           } else {
-            usage.set(id, { id, name: normalized, usageCount: 1 });
+            usage.set(
+              metadata.canonicalId,
+              createTagFromMetadata(metadata, { usageCount: 1 }),
+            );
           }
         });
       });
-      return Array.from(usage.values()).sort(
-        (a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name),
-      );
+      return Array.from(usage.values());
     });
   }, [bookmarks]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(
+      TAG_TREE_EXPANDED_KEY,
+      JSON.stringify(Array.from(expandedTagPaths)),
+    );
+  }, [expandedTagPaths]);
+
+  const tagTree = useMemo(() => buildTagTree(tags), [tags]);
+
+  useEffect(() => {
+    if (!tagTree.length) {
+      return;
+    }
+    setExpandedTagPaths((current) => {
+      if (current.size > 0) {
+        return current;
+      }
+      return new Set(tagTree.map((node) => node.canonicalPath));
+    });
+  }, [tagTree]);
+
+  const flattenedTagNodes = useMemo(
+    () => flattenTagTree(tagTree, expandedTagPaths),
+    [tagTree, expandedTagPaths],
+  );
+
+  const toggleTagPath = useCallback((path: string) => {
+    if (!path) {
+      return;
+    }
+    setExpandedTagPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -297,6 +453,13 @@ const App: FunctionalComponent = () => {
 
   const parsedSearch = useMemo(() => parseSearchQuery(searchTerm), [searchTerm]);
 
+  const activeTagFilterIds = useMemo(() => {
+    const ids = parsedSearch.tags
+      .map((tag) => canonicalizeTagId(tag))
+      .filter((value): value is string => Boolean(value));
+    return new Set(ids);
+  }, [parsedSearch.tags]);
+
   const handleSearchInput = useCallback(
     (event: JSX.TargetedEvent<HTMLInputElement, Event>) => {
       setSearchTerm(event.currentTarget.value);
@@ -304,19 +467,22 @@ const App: FunctionalComponent = () => {
     [],
   );
 
-  const handleSidebarTagClick = useCallback((tagName: string) => {
-    const normalized = normalizeTagName(tagName);
-    if (!normalized) {
+  const handleSidebarTagClick = useCallback((tagPath: string) => {
+    const normalizedPath = normalizeTagPath(tagPath);
+    if (!normalizedPath) {
+      return;
+    }
+    const normalizedId = canonicalizeTagId(normalizedPath);
+    if (!normalizedId) {
       return;
     }
     setSearchTerm((prev) => {
       const { text, tags: existingTags } = parseSearchQuery(prev);
-      const existingIds = new Set(existingTags.map(canonicalizeTagId));
-      const normalizedId = canonicalizeTagId(normalized);
+      const existingIds = new Set(existingTags.map((tag) => canonicalizeTagId(tag)).filter(Boolean));
       if (existingIds.has(normalizedId)) {
         return prev;
       }
-      const tokens = [...existingTags, normalized].map((tag) => formatTagToken(tag));
+      const tokens = [...existingTags, normalizedPath].map((tag) => formatTagToken(tag));
       const prefix = text.length ? `${text} ` : '';
       return `${prefix}${tokens.join(' ')}`.trim();
     });
@@ -324,11 +490,14 @@ const App: FunctionalComponent = () => {
 
   const addTagToBookmark = useCallback(
     (bookmarkId: string, tagName: string) => {
-      const cleaned = normalizeTagName(tagName);
+      const cleaned = normalizeTagPath(tagName);
       if (!cleaned) {
         return;
       }
       const tagId = canonicalizeTagId(cleaned);
+      if (!tagId) {
+        return;
+      }
       setBookmarks((prev) =>
         prev.map((bookmark) => {
           if (bookmark.id !== bookmarkId) {
@@ -349,6 +518,9 @@ const App: FunctionalComponent = () => {
   const removeTagFromBookmark = useCallback(
     (bookmarkId: string, tagName: string) => {
       const targetId = canonicalizeTagId(tagName);
+      if (!targetId) {
+        return;
+      }
       setBookmarks((prev) =>
         prev.map((bookmark) => {
           if (bookmark.id !== bookmarkId) {
@@ -428,19 +600,22 @@ const App: FunctionalComponent = () => {
 
   const filteredBookmarks = useMemo(() => {
     const normalizedSearch = parsedSearch.text.toLowerCase();
-    const requiredTagIds = Array.from(
-      new Set(parsedSearch.tags.map((tag) => canonicalizeTagId(tag)).filter(Boolean)),
-    );
+    const requiredTagIds = parsedSearch.tags
+      .map((tag) => canonicalizeTagId(tag))
+      .filter((value): value is string => Boolean(value));
     return orderedBookmarks.filter((bookmark) => {
       if (activeBoard && bookmark.boardId !== activeBoard) {
         return false;
       }
       if (requiredTagIds.length) {
-        const bookmarkTagIds = new Set(bookmark.tags.map(canonicalizeTagId));
-        for (const tagId of requiredTagIds) {
-          if (!bookmarkTagIds.has(tagId)) {
-            return false;
-          }
+        const bookmarkTagIds = bookmark.tags
+          .map((tag) => canonicalizeTagId(tag))
+          .filter((value): value is string => Boolean(value));
+        const matchesAll = requiredTagIds.every((tagId) =>
+          bookmarkTagIds.some((candidate) => isAncestorSlug(tagId, candidate)),
+        );
+        if (!matchesAll) {
+          return false;
         }
       }
       if (!normalizedSearch) {
@@ -455,10 +630,11 @@ const App: FunctionalComponent = () => {
   }, [orderedBookmarks, activeBoard, parsedSearch]);
 
   const sortedTags = useMemo(
-    () => [...tags].sort((a, b) => b.usageCount - a.usageCount || a.name.localeCompare(b.name)),
+    () => [...tags].sort((a, b) => b.usageCount - a.usageCount || a.path.localeCompare(b.path)),
     [tags],
   );
 
+  const [tagTreeRef, tagTreeSize] = useElementSize<HTMLDivElement>();
   const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
   const handleItemClick = useCallback(
@@ -589,12 +765,26 @@ const App: FunctionalComponent = () => {
 
   const tagSuggestions = useMemo(() => {
     const normalizedQuery = tagInputValue.trim().toLowerCase();
-    const selectedTagIds = new Set((selectedBookmark?.tags ?? []).map(canonicalizeTagId));
+    const selectedTagIds = new Set(
+      (selectedBookmark?.tags ?? [])
+        .map((tag) => canonicalizeTagId(tag))
+        .filter((value): value is string => Boolean(value)),
+    );
     return sortedTags
       .filter((tag) => !selectedTagIds.has(tag.id))
-      .filter((tag) => !normalizedQuery || tag.name.toLowerCase().includes(normalizedQuery))
+      .filter((tag) => !normalizedQuery || tag.path.toLowerCase().includes(normalizedQuery))
       .slice(0, 6);
   }, [sortedTags, selectedBookmark, tagInputValue]);
+
+  const tagTreeItemData = useMemo(
+    () => ({
+      items: flattenedTagNodes,
+      onToggle: toggleTagPath,
+      onSelect: handleSidebarTagClick,
+      activeFilters: activeTagFilterIds,
+    }),
+    [flattenedTagNodes, toggleTagPath, handleSidebarTagClick, activeTagFilterIds],
+  );
 
   useEffect(() => {
     setTagInputValue('');
@@ -619,18 +809,26 @@ const App: FunctionalComponent = () => {
           ))}
         </nav>
         <header class="pane-header">Tags</header>
-        <div class="tag-cloud" aria-label="Tags">
-          {sortedTags.map((tag) => (
-            <button
-              key={tag.id}
-              type="button"
-              class="tag-item"
-              onClick={() => handleSidebarTagClick(tag.name)}
+        <div
+          class="tag-tree-container"
+          aria-label="Tags"
+          role="tree"
+          ref={tagTreeRef}
+        >
+          {flattenedTagNodes.length ? (
+            <VirtualizedTagTree
+              height={Math.max(1, tagTreeSize.height)}
+              width={Math.max(1, tagTreeSize.width)}
+              itemSize={28}
+              itemCount={flattenedTagNodes.length}
+              itemData={tagTreeItemData}
+              itemKey={(index, data) => data.items[index]?.node.canonicalPath ?? index}
             >
-              <span>#{tag.name}</span>
-              <span class="tag-count">{tag.usageCount}</span>
-            </button>
-          ))}
+              {(props) => <TagTreeRow {...props} />}
+            </VirtualizedTagTree>
+          ) : (
+            <div class="tag-tree-empty">Keine Tags verfügbar</div>
+          )}
         </div>
       </section>
       <section class="pane bookmark-pane" aria-label="Bookmarks">
@@ -756,9 +954,9 @@ const App: FunctionalComponent = () => {
                             type="button"
                             class="tag-suggestion-button"
                             onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => handleTagSuggestion(selectedBookmark.id, tag.name)}
+                            onClick={() => handleTagSuggestion(selectedBookmark.id, tag.path)}
                           >
-                            <span>#{tag.name}</span>
+                            <span>#{tag.path}</span>
                             <span class="tag-suggestion-count">{tag.usageCount}</span>
                           </button>
                         </li>
