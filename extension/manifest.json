@@ -12,5 +12,6 @@
     "type": "module"
   },
   "permissions": ["storage", "contextMenus", "scripting", "activeTab"],
+  "optional_permissions": ["tabs"],
   "host_permissions": []
 }
