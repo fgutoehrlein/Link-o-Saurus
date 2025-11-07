@@ -25,6 +25,7 @@ import {
   getUserSettings,
   listBoards,
   listBookmarks,
+  listPinnedBookmarks,
   listCategories,
   listSessions,
   saveUserSettings,
@@ -136,6 +137,48 @@ describe('IndexedDB data layer', () => {
       database,
     );
     expect(updated.archived).toBe(true);
+  });
+
+  it('returns pinned bookmarks sorted by recency without archived entries', async () => {
+    const now = Date.now();
+    await createBookmark(
+      {
+        id: 'bookmark-pin-1',
+        url: 'https://first.example',
+        title: 'First',
+        tags: [],
+        pinned: true,
+        updatedAt: now - 1_000,
+      },
+      database,
+    );
+    await createBookmark(
+      {
+        id: 'bookmark-pin-2',
+        url: 'https://second.example',
+        title: 'Second',
+        tags: [],
+        pinned: true,
+        updatedAt: now - 200,
+      },
+      database,
+    );
+    await createBookmark(
+      {
+        id: 'bookmark-pin-3',
+        url: 'https://archived.example',
+        title: 'Archived',
+        tags: [],
+        pinned: true,
+        archived: true,
+      },
+      database,
+    );
+
+    const pinned = await listPinnedBookmarks({ limit: 2 }, database);
+    expect(pinned).toHaveLength(2);
+    expect(pinned[0]?.id).toBe('bookmark-pin-2');
+    expect(pinned[1]?.id).toBe('bookmark-pin-1');
   });
 
   it('performs CRUD for sessions', async () => {

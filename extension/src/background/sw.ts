@@ -3,7 +3,9 @@ import {
   createSession,
   deleteSession,
   getSession,
+  getUserSettings,
   listCategories,
+  saveUserSettings,
 } from '../shared/db';
 import type { CreateSessionInput } from '../shared/db';
 import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging';
@@ -11,8 +13,88 @@ import { isBackgroundRequest } from '../shared/messaging';
 import type { SessionPack } from '../shared/types';
 
 const CONTEXT_MENU_ID = 'feathermarks-context-save';
+const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('newtab/index.html');
+const CHROME_DEFAULT_NEW_TAB_URLS = new Set([
+  'chrome://newtab/',
+  'chrome-search://local-ntp/local-ntp.html',
+]);
+const FIREFOX_DEFAULT_NEW_TAB_URLS = new Set(['about:newtab', 'about:home']);
+
+let newTabOverrideActive = false;
+let newTabListenerRegistered = false;
 
 console.log('[Feathermarks] background service worker initialized');
+
+const isSystemNewTabUrl = (url: string | undefined): boolean => {
+  if (!url) {
+    return false;
+  }
+  if (url.startsWith('about:')) {
+    return FIREFOX_DEFAULT_NEW_TAB_URLS.has(url);
+  }
+  return CHROME_DEFAULT_NEW_TAB_URLS.has(url);
+};
+
+const handleTabCreatedForOverride = (tab: chrome.tabs.Tab): void => {
+  if (!newTabOverrideActive || !tab.id) {
+    return;
+  }
+  const candidateUrl = tab.pendingUrl ?? tab.url;
+  if (!isSystemNewTabUrl(candidateUrl)) {
+    return;
+  }
+
+  void chrome.tabs
+    .update(tab.id, { url: EXTENSION_NEW_TAB_URL })
+    .catch((error) => console.warn('[Feathermarks] Failed to override new tab', error));
+};
+
+const registerNewTabOverride = (): void => {
+  if (newTabListenerRegistered) {
+    return;
+  }
+  chrome.tabs.onCreated.addListener(handleTabCreatedForOverride);
+  newTabListenerRegistered = true;
+};
+
+const unregisterNewTabOverride = (): void => {
+  if (!newTabListenerRegistered) {
+    return;
+  }
+  chrome.tabs.onCreated.removeListener(handleTabCreatedForOverride);
+  newTabListenerRegistered = false;
+};
+
+const applyNewTabOverride = async (enabled: boolean): Promise<boolean> => {
+  if (!enabled) {
+    newTabOverrideActive = false;
+    unregisterNewTabOverride();
+    return false;
+  }
+
+  const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+  if (!hasPermission) {
+    newTabOverrideActive = false;
+    unregisterNewTabOverride();
+    return false;
+  }
+
+  registerNewTabOverride();
+  newTabOverrideActive = true;
+  return true;
+};
+
+void (async () => {
+  try {
+    const settings = await getUserSettings();
+    const applied = await applyNewTabOverride(settings.newTabEnabled);
+    if (settings.newTabEnabled && !applied) {
+      await saveUserSettings({ newTabEnabled: false });
+    }
+  } catch (error) {
+    console.error('[Feathermarks] Failed to initialize new tab override', error);
+  }
+})();
 
 const registerContextMenu = (): void => {
   chrome.contextMenus.create(
@@ -515,6 +597,10 @@ const handleBackgroundRequest = async (
     case 'session.delete': {
       await deleteSession(message.sessionId);
       return { type: 'session.delete.result', sessionId: message.sessionId };
+    }
+    case 'settings.applyNewTab': {
+      const applied = await applyNewTabOverride(message.enabled);
+      return { type: 'settings.applyNewTab.result', enabled: applied };
     }
     default:
       throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);

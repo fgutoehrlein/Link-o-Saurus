@@ -3,6 +3,11 @@ import type { Remote } from 'comlink';
 import type { FunctionalComponent } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import ImportExportWorker from '../shared/import-export-worker?worker&module';
+import {
+  getUserSettings,
+  saveUserSettings,
+} from '../shared/db';
+import { sendBackgroundMessage } from '../shared/messaging';
 import type {
   ImportExportWorkerApi,
   ImportProgressHandler,
@@ -101,6 +106,31 @@ const STYLES = `
     margin: 0;
     color: #475569;
     line-height: 1.5;
+  }
+
+  .hint {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .status {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .status.success {
+    color: #047857;
+  }
+
+  .status.error {
+    color: #b91c1c;
+  }
+
+  .status.pending {
+    color: #0ea5e9;
   }
 
   .toggle {
@@ -257,6 +287,11 @@ const STYLES = `
 const App: FunctionalComponent = () => {
   const workerRef = useRef<Worker>();
   const apiRef = useRef<Remote<ImportExportWorkerApi>>();
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [newTabEnabled, setNewTabEnabled] = useState(false);
+  const [isUpdatingNewTab, setIsUpdatingNewTab] = useState(false);
+  const [newTabMessage, setNewTabMessage] = useState<string | null>(null);
+  const [newTabError, setNewTabError] = useState<string | null>(null);
   const [dedupeEnabled, setDedupeEnabled] = useState(true);
   const [includeFavicons, setIncludeFavicons] = useState(true);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
@@ -271,6 +306,30 @@ const App: FunctionalComponent = () => {
     document.head.appendChild(style);
     return () => {
       style.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const settings = await getUserSettings();
+        if (!cancelled) {
+          setNewTabEnabled(settings.newTabEnabled);
+        }
+      } catch (err) {
+        console.error('Failed to load user settings', err);
+        if (!cancelled) {
+          setNewTabError('Einstellungen konnten nicht geladen werden.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSettings(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -299,6 +358,78 @@ const App: FunctionalComponent = () => {
     }
     return apiRef.current!;
   }, []);
+
+  const ensureNewTabPermission = useCallback(async (): Promise<boolean> => {
+    if (typeof chrome === 'undefined' || !chrome.permissions) {
+      return true;
+    }
+    const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+    if (hasPermission) {
+      return true;
+    }
+    const granted = await chrome.permissions.request({ permissions: ['tabs'] });
+    return granted;
+  }, []);
+
+  const updateNewTabPreference = useCallback(
+    async (nextEnabled: boolean) => {
+      const previous = newTabEnabled;
+      setNewTabEnabled(nextEnabled);
+      setIsUpdatingNewTab(true);
+      setNewTabError(null);
+      setNewTabMessage(null);
+      try {
+        if (nextEnabled) {
+          const granted = await ensureNewTabPermission();
+          if (!granted) {
+            throw new Error('Die Tabs-Berechtigung wurde nicht erteilt.');
+          }
+        }
+
+        await saveUserSettings({ newTabEnabled: nextEnabled });
+        const response = await sendBackgroundMessage({
+          type: 'settings.applyNewTab',
+          enabled: nextEnabled,
+        });
+
+        if (response.type !== 'settings.applyNewTab.result') {
+          throw new Error('Unerwartete Antwort vom Hintergrunddienst.');
+        }
+
+        if (nextEnabled && !response.enabled) {
+          throw new Error(
+            'Der Browser hat das Setzen von chrome_url_overrides verhindert. Prüfe die Tabs-Berechtigung.',
+          );
+        }
+
+        setNewTabEnabled(response.enabled);
+        if (response.enabled) {
+          setNewTabMessage(
+            'Neuer Tab aktiviert. Chrome übernimmt die chrome_url_overrides-Einstellung nach dem nächsten geöffneten Tab. Falls nichts passiert, lade die Erweiterung auf chrome://extensions neu. Firefox erfordert zusätzlich die Aktivierung von „Als Startseite verwenden“ in den Add-on-Einstellungen.',
+          );
+        } else {
+          setNewTabMessage(
+            'Neuer Tab deaktiviert. Der nächste neue Tab öffnet wieder die Standard-Startseite deines Browsers.',
+          );
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setNewTabError(message);
+        setNewTabEnabled(previous);
+        try {
+          await saveUserSettings({ newTabEnabled: previous });
+          void sendBackgroundMessage({ type: 'settings.applyNewTab', enabled: previous }).catch((error) => {
+            console.warn('Failed to revert new tab override after error', error);
+          });
+        } catch (persistError) {
+          console.warn('Failed to revert user settings after toggle error', persistError);
+        }
+      } finally {
+        setIsUpdatingNewTab(false);
+      }
+    },
+    [ensureNewTabPermission, newTabEnabled],
+  );
 
   const handleProgress = useCallback<ImportProgressHandler>((progress) => {
     setImportProgress(progress);
@@ -380,6 +511,34 @@ const App: FunctionalComponent = () => {
         <h1>Link-O-Saurus Datenportabilität</h1>
         <p>Importiere oder exportiere deine Bookmarks ohne die UI zu blockieren.</p>
       </header>
+
+      <section class="panel">
+        <h2>Neuer Tab (Opt-in)</h2>
+        <p>
+          Feathermarks kann als besonders schneller Startpunkt genutzt werden. Die Einstellung bleibt komplett
+          optional und lässt sich jederzeit zurücksetzen.
+        </p>
+
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={newTabEnabled}
+            disabled={isLoadingSettings || isUpdatingNewTab}
+            onChange={(event) => updateNewTabPreference(event.currentTarget.checked)}
+          />
+          <span>Feathermarks als neuen Tab verwenden</span>
+        </label>
+
+        <p class="hint">
+          Beim Aktivieren wird die <code>chrome_url_overrides</code>-Zuweisung gesetzt. Chrome lädt sie nach dem
+          Öffnen des nächsten Tabs (oder nach einem manuellen Reload unter <code>chrome://extensions</code>). Firefox
+          zeigt einen Hinweis, falls du das Add-on zusätzlich im Einstellungsdialog als Startseite freigeben musst.
+        </p>
+
+        {isUpdatingNewTab && <p class="status pending">Aktualisiere Einstellung…</p>}
+        {newTabMessage && <p class="status success">{newTabMessage}</p>}
+        {newTabError && <p class="status error">{newTabError}</p>}
+      </section>
 
       <section class="panel">
         <h2>Import</h2>
