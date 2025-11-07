@@ -3,7 +3,11 @@ import preact from '@preact/preset-vite';
 import chokidar from 'chokidar';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import type { RollupWatcher } from 'rollup';
+
+type RollupWatcher = {
+  close(): Promise<void>;
+  on(event: string, callback: (...args: unknown[]) => void): void;
+};
 
 const modeArg = process.argv[2] ?? 'build';
 const target = process.argv[3] ?? 'chrome';

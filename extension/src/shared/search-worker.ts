@@ -2,6 +2,7 @@ import { expose } from 'comlink';
 import { Document } from 'flexsearch';
 import type { EnrichedDocumentSearchResultSetUnit, Id } from 'flexsearch';
 import type { Bookmark } from './types';
+import { canonicalizeTagId, isAncestorSlug, normalizeTagList } from './tag-utils';
 
 type BookmarkDocument = Pick<
   Bookmark,
@@ -34,24 +35,6 @@ const FIELD_WEIGHTS: Record<string, number> = {
   notes: 1,
 };
 
-const normalizeTagList = (tags?: string[]): string[] => {
-  const normalized: string[] = [];
-  const seen = new Set<string>();
-  for (const tag of tags ?? []) {
-    const trimmed = tag.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    normalized.push(trimmed);
-  }
-  return normalized;
-};
-
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
 
@@ -74,6 +57,9 @@ function createDocumentIndex() {
 
 const toDocument = (bookmark: Bookmark): BookmarkDocument => {
   const tags = normalizeTagList(bookmark.tags);
+  const slugTags = tags
+    .map((tag) => canonicalizeTagId(tag))
+    .filter((tag): tag is string => Boolean(tag));
   return {
     id: bookmark.id,
     title: bookmark.title ?? '',
@@ -84,7 +70,7 @@ const toDocument = (bookmark: Bookmark): BookmarkDocument => {
     archived: bookmark.archived ?? false,
     createdAt: bookmark.createdAt,
     updatedAt: bookmark.updatedAt,
-    normalizedTags: tags.map((tag) => tag.toLowerCase()),
+    normalizedTags: slugTags,
   };
 };
 
@@ -150,12 +136,12 @@ const matchesFilters = (doc: BookmarkDocument, filters?: SearchFilters): boolean
 
   if (filters.tags && filters.tags.length > 0) {
     const normalized = doc.normalizedTags;
-    const required = filters.tags.map((tag) => tag.toLowerCase());
-    for (const tag of required) {
-      if (!normalized.includes(tag)) {
-        return false;
-      }
-    }
+    const required = filters.tags
+      .map((tag) => canonicalizeTagId(tag))
+      .filter((tag): tag is string => Boolean(tag));
+    return required.every((requiredTag) =>
+      normalized.some((candidate) => isAncestorSlug(requiredTag, candidate)),
+    );
   }
 
   return true;

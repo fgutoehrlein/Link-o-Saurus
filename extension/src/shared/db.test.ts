@@ -110,8 +110,10 @@ describe('IndexedDB data layer', () => {
   });
 
   it('manages tag lifecycle and usage counters', async () => {
-    const created = await createTag({ name: 'Design' }, database);
+    const created = await createTag({ path: 'Design' }, database);
     expect(created.id).toBe('design');
+    expect(created.path).toBe('Design');
+    expect(created.slugParts).toEqual(['design']);
     expect(created.usageCount).toBe(0);
 
     await incrementTagUsage('Design', database);
