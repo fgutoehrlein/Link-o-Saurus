@@ -18,8 +18,10 @@
     "dexie": "^4.0.4",
     "fflate": "^0.8.2",
     "flexsearch": "^0.7.31",
+    "marked": "^17.0.0",
     "preact": "^10.19.6",
-    "react-window": "^1.8.10"
+    "react-window": "^1.8.10",
+    "sanitize-html": "^2.17.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.7.0",
@@ -29,6 +31,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/react-window": "^1.8.8",
+    "@types/sanitize-html": "^2.16.0",
     "adm-zip": "^0.5.10",
     "chokidar": "^3.5.3",
     "fake-indexeddb": "^5.0.2",

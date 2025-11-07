@@ -11,6 +11,7 @@ import { FixedSizeList, ListChildComponentProps } from 'react-window';
 import type { FixedSizeListProps } from 'react-window';
 import './App.css';
 import SessionManager from './SessionManager';
+import CommentsSection from './CommentsSection';
 import type { Tag } from '../shared/types';
 import {
   canonicalizeTagId,
@@ -964,12 +965,16 @@ const App: FunctionalComponent = () => {
                     </ul>
                   ) : null}
                 </div>
-              </div>
             </div>
           </div>
-        ) : (
-          <p class="detail-placeholder">Mehrfachauswahl für Batch-Aktionen verwenden.</p>
-        )}
+          <CommentsSection
+            bookmarkId={selectedBookmark.id}
+            bookmarkTitle={selectedBookmark.title}
+          />
+        </div>
+      ) : (
+        <p class="detail-placeholder">Mehrfachauswahl für Batch-Aktionen verwenden.</p>
+      )}
         <SessionManager />
       </aside>
     </main>

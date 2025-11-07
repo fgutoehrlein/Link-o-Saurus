@@ -14,12 +14,14 @@ import {
   createBookmarks,
   createBookmark,
   createCategory,
+  createComment,
   createDatabase,
   createSession,
   createTag,
   deleteBoard,
   deleteBookmark,
   deleteCategory,
+  deleteComment,
   deleteSession,
   deleteTag,
   getBookmark,
@@ -28,6 +30,7 @@ import {
   getTag,
   listBoards,
   listBookmarks,
+  listComments,
   listPinnedBookmarks,
   listCategories,
   listSessions,
@@ -38,6 +41,7 @@ import {
   updateBoard,
   updateBookmark,
   updateCategory,
+  updateComment,
   updateSession,
   updateTag,
 } from './db';
@@ -237,6 +241,75 @@ describe('IndexedDB data layer', () => {
     expect(pinned).toHaveLength(2);
     expect(pinned[0]?.id).toBe('bookmark-pin-2');
     expect(pinned[1]?.id).toBe('bookmark-pin-1');
+  });
+
+  it('persists comments per bookmark and sorts by timestamp', async () => {
+    await createBookmark(
+      {
+        id: 'bookmark-comments-1',
+        url: 'https://comments.example',
+        title: 'Comments demo',
+        tags: [],
+      },
+      database,
+    );
+
+    await createComment(
+      {
+        id: 'comment-a',
+        bookmarkId: 'bookmark-comments-1',
+        author: 'Maya',
+        body: 'First note',
+        createdAt: 2_000,
+      },
+      database,
+    );
+    await createComment(
+      {
+        id: 'comment-b',
+        bookmarkId: 'bookmark-comments-1',
+        author: 'Noah',
+        body: 'Second note',
+        createdAt: 1_000,
+      },
+      database,
+    );
+
+    const comments = await listComments('bookmark-comments-1', database);
+    expect(comments.map((comment) => comment.id)).toEqual(['comment-b', 'comment-a']);
+
+    const updated = await updateComment('comment-b', { body: 'Second note updated' }, database);
+    expect(updated.body).toBe('Second note updated');
+
+    const refreshed = await listComments('bookmark-comments-1', database);
+    expect(refreshed[0]?.body).toBe('Second note updated');
+  });
+
+  it('removes comments when deleting a bookmark', async () => {
+    await createBookmark(
+      {
+        id: 'bookmark-comments-2',
+        url: 'https://comments.example/2',
+        title: 'More comments',
+        tags: [],
+      },
+      database,
+    );
+
+    await createComment(
+      {
+        id: 'comment-z',
+        bookmarkId: 'bookmark-comments-2',
+        author: 'Ava',
+        body: 'Keep this in mind',
+      },
+      database,
+    );
+
+    expect(await listComments('bookmark-comments-2', database)).toHaveLength(1);
+
+    await deleteBookmark('bookmark-comments-2', database);
+    expect(await listComments('bookmark-comments-2', database)).toHaveLength(0);
   });
 
   it('performs CRUD for sessions', async () => {
