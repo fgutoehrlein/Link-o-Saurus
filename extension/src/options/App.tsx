@@ -4,8 +4,12 @@ import type { FunctionalComponent } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import ImportExportWorker from '../shared/import-export-worker?worker&module';
 import {
+  createRule,
+  deleteRule,
   getUserSettings,
+  listRules,
   saveUserSettings,
+  updateRule,
 } from '../shared/db';
 import { sendBackgroundMessage } from '../shared/messaging';
 import type {
@@ -13,6 +17,7 @@ import type {
   ImportProgressHandler,
 } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress, ImportResult } from '../shared/import-export';
+import type { Rule } from '../shared/types';
 
 const formatPercent = (ratio: number | undefined): string => {
   if (typeof ratio !== 'number' || Number.isNaN(ratio)) {
@@ -58,6 +63,55 @@ const downloadBlob = (blob: Blob, filename: string) => {
 };
 
 const createWorker = (): Worker => new ImportExportWorker();
+
+type RuleFormState = {
+  name: string;
+  host: string;
+  urlIncludes: string;
+  mime: string;
+  addTags: string;
+  categoryId: string;
+};
+
+const INITIAL_RULE_FORM: RuleFormState = {
+  name: '',
+  host: '',
+  urlIncludes: '',
+  mime: '',
+  addTags: '',
+  categoryId: '',
+};
+
+const parseCsvInput = (value: string): string[] =>
+  value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+const describeRuleConditions = (rule: Rule): string => {
+  const segments: string[] = [];
+  if (rule.conditions.host) {
+    segments.push(`Host entspricht: ${rule.conditions.host}`);
+  }
+  if (rule.conditions.urlIncludes && rule.conditions.urlIncludes.length > 0) {
+    segments.push(`URL enthält: ${rule.conditions.urlIncludes.join(', ')}`);
+  }
+  if (rule.conditions.mime) {
+    segments.push(`MIME-Typ: ${rule.conditions.mime}`);
+  }
+  return segments.length > 0 ? segments.join(' · ') : '—';
+};
+
+const describeRuleActions = (rule: Rule): string => {
+  const segments: string[] = [];
+  if (rule.actions.addTags && rule.actions.addTags.length > 0) {
+    segments.push(`Tags hinzufügen: ${rule.actions.addTags.join(', ')}`);
+  }
+  if (rule.actions.setCategoryId) {
+    segments.push(`Kategorie setzen: ${rule.actions.setCategoryId}`);
+  }
+  return segments.length > 0 ? segments.join(' · ') : '—';
+};
 
 const STYLES = `
   body {
@@ -261,6 +315,155 @@ const STYLES = `
     margin: 0;
   }
 
+  .rules {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .rule-form {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .rule-form-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .rule-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: #475569;
+  }
+
+  .rule-form input {
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: #ffffff;
+    font-size: 0.95rem;
+    color: #0f172a;
+  }
+
+  .rule-form input:disabled {
+    background: #e2e8f0;
+    cursor: not-allowed;
+  }
+
+  .rule-form-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .button-secondary {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .button-secondary:hover:not(:disabled) {
+    box-shadow: 0 8px 20px rgba(148, 163, 184, 0.35);
+  }
+
+  .button-danger {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .button-danger:hover:not(:disabled) {
+    box-shadow: 0 12px 25px rgba(248, 113, 113, 0.35);
+  }
+
+  .rule-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .rule-item {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    background: #f8fafc;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .rule-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .rule-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .rule-status {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+  }
+
+  .rule-status.enabled {
+    background: #dcfce7;
+    color: #047857;
+  }
+
+  .rule-status.disabled {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+
+  .rule-details {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+  }
+
+  .rule-details dt {
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+  }
+
+  .rule-details dd {
+    margin: 0.2rem 0 0;
+    font-size: 0.9rem;
+    color: #1e293b;
+    line-height: 1.4;
+  }
+
+  .rule-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .rule-empty {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  .rule-error {
+    margin: 0;
+    color: #b91c1c;
+    font-size: 0.85rem;
+  }
+
   @media (max-width: 720px) {
     .options {
       padding: 1.5rem 1rem 2.5rem;
@@ -281,6 +484,18 @@ const STYLES = `
       width: 100%;
       justify-content: center;
     }
+
+    .rule-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .rule-actions {
+      flex-direction: column;
+    }
+
+    .rule-actions button {
+      width: 100%;
+    }
   }
 `;
 
@@ -299,6 +514,12 @@ const App: FunctionalComponent = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [isLoadingRules, setIsLoadingRules] = useState(true);
+  const [isAddingRule, setIsAddingRule] = useState(false);
+  const [ruleBusyId, setRuleBusyId] = useState<string | null>(null);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [newRule, setNewRule] = useState<RuleFormState>(INITIAL_RULE_FORM);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -333,6 +554,29 @@ const App: FunctionalComponent = () => {
     };
   }, []);
 
+  const refreshRules = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setIsLoadingRules(true);
+      }
+      try {
+        const stored = await listRules();
+        setRules(stored);
+        setRulesError(null);
+      } catch (err) {
+        console.error('Failed to load smart rules', err);
+        setRulesError('Regeln konnten nicht geladen werden.');
+      } finally {
+        setIsLoadingRules(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void refreshRules();
+  }, [refreshRules]);
+
   useEffect(() => {
     const worker = createWorker();
     const api = wrap<ImportExportWorkerApi>(worker);
@@ -348,6 +592,99 @@ const App: FunctionalComponent = () => {
       workerRef.current = undefined;
     };
   }, []);
+
+  const handleRuleInputChange = useCallback(
+    (key: keyof RuleFormState) => (event: Event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      setNewRule((previous) => ({ ...previous, [key]: input.value }));
+    },
+    [],
+  );
+
+  const handleAddRule = useCallback(
+    async (event: Event) => {
+      event.preventDefault();
+      const name = newRule.name.trim();
+      const host = newRule.host.trim();
+      const includes = parseCsvInput(newRule.urlIncludes);
+      const mime = newRule.mime.trim();
+      const tags = parseCsvInput(newRule.addTags);
+      const categoryId = newRule.categoryId.trim();
+
+      if (!name) {
+        setRulesError('Bitte einen Namen für die Regel vergeben.');
+        return;
+      }
+      if (!host && includes.length === 0 && !mime) {
+        setRulesError('Mindestens eine Bedingung angeben (Host, URL-Teil oder MIME-Typ).');
+        return;
+      }
+      if (tags.length === 0 && !categoryId) {
+        setRulesError('Mindestens eine Aktion angeben (Tags oder Kategorie).');
+        return;
+      }
+
+      setIsAddingRule(true);
+      setRulesError(null);
+      try {
+        await createRule({
+          name,
+          conditions: {
+            ...(host ? { host } : {}),
+            ...(includes.length > 0 ? { urlIncludes: includes } : {}),
+            ...(mime ? { mime } : {}),
+          },
+          actions: {
+            ...(tags.length > 0 ? { addTags: tags } : {}),
+            ...(categoryId ? { setCategoryId: categoryId } : {}),
+          },
+          enabled: true,
+        });
+        setNewRule(INITIAL_RULE_FORM);
+        await refreshRules(true);
+      } catch (err) {
+        console.error('Failed to create rule', err);
+        setRulesError('Regel konnte nicht gespeichert werden.');
+      } finally {
+        setIsAddingRule(false);
+      }
+    },
+    [newRule, refreshRules],
+  );
+
+  const handleToggleRule = useCallback(
+    async (rule: Rule) => {
+      setRuleBusyId(rule.id);
+      setRulesError(null);
+      try {
+        await updateRule(rule.id, { enabled: !rule.enabled });
+        await refreshRules(true);
+      } catch (err) {
+        console.error('Failed to update rule', err);
+        setRulesError('Regel konnte nicht aktualisiert werden.');
+      } finally {
+        setRuleBusyId(null);
+      }
+    },
+    [refreshRules],
+  );
+
+  const handleDeleteRule = useCallback(
+    async (rule: Rule) => {
+      setRuleBusyId(rule.id);
+      setRulesError(null);
+      try {
+        await deleteRule(rule.id);
+        await refreshRules(true);
+      } catch (err) {
+        console.error('Failed to delete rule', err);
+        setRulesError('Regel konnte nicht gelöscht werden.');
+      } finally {
+        setRuleBusyId(null);
+      }
+    },
+    [refreshRules],
+  );
 
   const withWorker = useCallback(async () => {
     if (!apiRef.current) {
@@ -538,6 +875,139 @@ const App: FunctionalComponent = () => {
         {isUpdatingNewTab && <p class="status pending">Aktualisiere Einstellung…</p>}
         {newTabMessage && <p class="status success">{newTabMessage}</p>}
         {newTabError && <p class="status error">{newTabError}</p>}
+      </section>
+
+      <section class="panel">
+        <h2>Smart Rules</h2>
+        <p>
+          Automatisiere die Kategorisierung neuer Bookmarks anhand von Host- oder URL-Mustern.
+          Regeln wirken auf alle Speicher-Vorgänge, inklusive Importen.
+        </p>
+
+        <form class="rule-form" onSubmit={handleAddRule}>
+          <div class="rule-form-grid">
+            <label>
+              <span>Name</span>
+              <input
+                type="text"
+                value={newRule.name}
+                onInput={handleRuleInputChange('name')}
+                placeholder="z. B. Videos"
+                required
+                disabled={isAddingRule}
+              />
+            </label>
+            <label>
+              <span>Host (optional)</span>
+              <input
+                type="text"
+                value={newRule.host}
+                onInput={handleRuleInputChange('host')}
+                placeholder="youtube.com"
+                disabled={isAddingRule}
+              />
+            </label>
+            <label>
+              <span>URL enthält (optional)</span>
+              <input
+                type="text"
+                value={newRule.urlIncludes}
+                onInput={handleRuleInputChange('urlIncludes')}
+                placeholder="playlist,watch"
+                disabled={isAddingRule}
+              />
+            </label>
+            <label>
+              <span>MIME-Typ (optional)</span>
+              <input
+                type="text"
+                value={newRule.mime}
+                onInput={handleRuleInputChange('mime')}
+                placeholder="video/mp4"
+                disabled={isAddingRule}
+              />
+            </label>
+            <label>
+              <span>Tags hinzufügen</span>
+              <input
+                type="text"
+                value={newRule.addTags}
+                onInput={handleRuleInputChange('addTags')}
+                placeholder="video, inspiration"
+                disabled={isAddingRule}
+              />
+            </label>
+            <label>
+              <span>Kategorie setzen</span>
+              <input
+                type="text"
+                value={newRule.categoryId}
+                onInput={handleRuleInputChange('categoryId')}
+                placeholder="cat-videos"
+                disabled={isAddingRule}
+              />
+            </label>
+          </div>
+          <div class="rule-form-actions">
+            <button type="submit" disabled={isAddingRule}>Regel speichern</button>
+            <span class="hint">
+              Mehrere Tags oder URL-Teile bitte mit Komma trennen. Host-Matches gelten auch für Subdomains.
+            </span>
+          </div>
+        </form>
+
+        {rulesError && (
+          <p class="rule-error" role="alert">
+            {rulesError}
+          </p>
+        )}
+
+        {isLoadingRules ? (
+          <p class="hint">Regeln werden geladen…</p>
+        ) : rules.length > 0 ? (
+          <ul class="rule-list">
+            {rules.map((rule) => (
+              <li class="rule-item" key={rule.id}>
+                <div class="rule-header">
+                  <h3>{rule.name}</h3>
+                  <span class={`rule-status ${rule.enabled ? 'enabled' : 'disabled'}`}>
+                    {rule.enabled ? 'Aktiv' : 'Inaktiv'}
+                  </span>
+                </div>
+                <dl class="rule-details">
+                  <div>
+                    <dt>Bedingungen</dt>
+                    <dd>{describeRuleConditions(rule)}</dd>
+                  </div>
+                  <div>
+                    <dt>Aktionen</dt>
+                    <dd>{describeRuleActions(rule)}</dd>
+                  </div>
+                </dl>
+                <div class="rule-actions">
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    disabled={ruleBusyId === rule.id}
+                    onClick={() => handleToggleRule(rule)}
+                  >
+                    {rule.enabled ? 'Deaktivieren' : 'Aktivieren'}
+                  </button>
+                  <button
+                    type="button"
+                    class="button-danger"
+                    disabled={ruleBusyId === rule.id}
+                    onClick={() => handleDeleteRule(rule)}
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="rule-empty">Noch keine Regeln gespeichert.</p>
+        )}
       </section>
 
       <section class="panel">
