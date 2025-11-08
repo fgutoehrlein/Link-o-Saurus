@@ -53,7 +53,7 @@ test.describe('Link-O-Saurus extension', () => {
     await context.close();
   });
 
-  test('supports bookmark, search, batch, import, and session workflows', async () => {
+  test('supports quick add, recent list, and mini search workflows', async () => {
     const page = await context.newPage();
     page.on('console', (message: ConsoleMessage) => {
       console.log(`[popup console] ${message.type()}: ${message.text()}`);
@@ -61,77 +61,34 @@ test.describe('Link-O-Saurus extension', () => {
     page.on('pageerror', (error: Error) => {
       console.error('[popup error]', error);
     });
-    await openPopup(page, extensionId);
 
+    await openPopup(page, extensionId);
     await page.waitForFunction(() => window.__LINKOSAURUS_POPUP_READY === true);
 
-    const newBookmarkTitle = 'Playwright Handbook';
-    await page.evaluate(async (title: string) => {
-      const harness = window.__LINKOSAURUS_POPUP_HARNESS;
-      if (!harness) {
-        throw new Error('Popup harness unavailable');
-      }
-      await harness.addBookmark({ title, url: 'https://playwright.dev/' });
-    }, newBookmarkTitle);
+    const uniqueSuffix = Date.now();
+    const newBookmarkTitle = `Playwright Handbook ${uniqueSuffix}`;
+    const newBookmarkUrl = `https://playwright.dev/${uniqueSuffix}`;
 
-    await expect(page.getByText(newBookmarkTitle).first()).toBeVisible();
+    await page.fill('#quick-add-title', newBookmarkTitle);
+    await page.fill('#quick-add-url', newBookmarkUrl);
+    await page.getByRole('button', { name: 'Bookmark speichern' }).click();
 
-    const searchField = page.getByPlaceholder('Search bookmarks (/)');
+    await expect(page.locator('.status-success')).toContainText('Bookmark gespeichert.');
+
+    const firstRecentItem = page.locator('.recent-item__title').first();
+    await expect(firstRecentItem).toHaveText(newBookmarkTitle);
+
+    const searchField = page.getByPlaceholder('Suchen (/)');
     await searchField.fill('Playwright');
-    await expect(page.locator('.bookmark-row')).toHaveCount(1);
+    await expect(page.locator('.search-result__title')).toContainText(newBookmarkTitle);
 
-    await searchField.fill('');
-    await page.waitForTimeout(50);
-
-    const rows = page.locator('.bookmark-row');
-    await rows.nth(0).click();
-    await page.keyboard.down('Shift');
-    await rows.nth(2).click();
-    await page.keyboard.up('Shift');
-
-    await expect(page.locator('.toolbar-actions span').first()).toContainText('3 ausgewählt');
-
-    const tagButton = page.getByRole('button', { name: 'Tag hinzufügen' });
-    await expect(tagButton).toBeEnabled();
-    await tagButton.click();
-    await page.waitForTimeout(250);
-
-    const selectedIds = await page.evaluate(async () => {
-      const harness = window.__LINKOSAURUS_POPUP_HARNESS;
-      if (!harness) {
-        return [];
-      }
-      return harness.getSelectedIds();
-    });
-    expect(selectedIds.length).toBeGreaterThanOrEqual(3);
-
-    const totalCount = await page.evaluate(async () => {
-      const harness = window.__LINKOSAURUS_POPUP_HARNESS;
-      if (!harness) {
-        throw new Error('Popup harness unavailable');
-      }
-      return harness.importBulk(5000);
-    });
-    expect(totalCount).toBeGreaterThanOrEqual(5000);
-
-    const sessionInput = page.getByLabel('Session-Titel');
-    await sessionInput.fill('E2E Session');
-    await page.getByRole('button', { name: 'Tabs sichern' }).click();
-
-    const feedback = page.locator('.session-feedback');
-    await expect(feedback).toContainText('Session mit');
-
-    const sessionButton = page.getByRole('button', { name: /E2E Session/ });
-    await sessionButton.click();
-
-    const firstCheckbox = page.locator('.session-tab input[type="checkbox"]').first();
-    await firstCheckbox.click();
-
-    await page.getByRole('button', { name: 'Auswahl öffnen' }).click();
-    await expect(feedback).toContainText('Tabs geöffnet.');
-
-    await page.locator('.session-detail').getByRole('button', { name: 'Löschen' }).click();
-    await expect(feedback).toHaveText('Session gelöscht.');
+    const [dashboardPage] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('button', { name: 'Zum Dashboard' }).click(),
+    ]);
+    await dashboardPage.waitForLoadState('domcontentloaded');
+    expect(new URL(dashboardPage.url()).pathname).toBe('/dashboard.html');
+    await dashboardPage.close();
 
     await page.close();
   });

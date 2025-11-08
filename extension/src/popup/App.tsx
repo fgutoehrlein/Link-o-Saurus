@@ -12,12 +12,7 @@ import { openDashboard } from '../shared/utils';
 import './App.css';
 
 type PopupHarness = {
-  addBookmark(input: {
-    title: string;
-    url: string;
-    tags?: string[];
-    boardId?: string;
-  }): Promise<string>;
+  addBookmark(input: { title: string; url: string; tags?: string[] }): Promise<string>;
   search(term: string): Promise<void>;
   clearSearch(): Promise<void>;
   selectRange(start: number, end: number): Promise<void>;
@@ -302,12 +297,17 @@ const App: FunctionalComponent = () => {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchEntries, setSearchEntries] = useState<SearchEntry[]>([]);
+  const searchEntriesRef = useRef<SearchEntry[]>([]);
   const [searchSelection, setSearchSelection] = useState(-1);
   const [saving, setSaving] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hadTabsPermissionRef = useRef(false);
   const requestedTabsPermissionRef = useRef(false);
+
+  useEffect(() => {
+    searchEntriesRef.current = searchEntries;
+  }, [searchEntries]);
 
   useEffect(() => {
     const readyTimestamp = performance.now();
@@ -374,21 +374,16 @@ const App: FunctionalComponent = () => {
     [searchEntries],
   );
 
-  const hasQuery = searchTerm.trim().length > 0;
-
-  const searchResults = useMemo(() => {
-    if (!hasQuery) {
-      return [] as SearchEntry[];
-    }
-    const tokens = searchTerm
+  const computeSearchResults = useCallback((term: string, entries: SearchEntry[]): SearchEntry[] => {
+    const tokens = term
       .toLowerCase()
       .split(/\s+/)
       .map((token) => token.trim())
       .filter(Boolean);
     if (tokens.length === 0) {
-      return [] as SearchEntry[];
+      return [];
     }
-    return searchEntries
+    return entries
       .map((entry) => {
         const matches = tokens.every(
           (token) =>
@@ -413,7 +408,14 @@ const App: FunctionalComponent = () => {
       })
       .slice(0, SEARCH_RESULTS_LIMIT)
       .map((item) => item.entry);
-  }, [hasQuery, searchEntries, searchTerm]);
+  }, []);
+
+  const hasQuery = searchTerm.trim().length > 0;
+
+  const searchResults = useMemo(
+    () => (hasQuery ? computeSearchResults(searchTerm, searchEntries) : []),
+    [computeSearchResults, hasQuery, searchEntries, searchTerm],
+  );
 
   useEffect(() => {
     setSearchSelection((current) => {
@@ -477,6 +479,34 @@ const App: FunctionalComponent = () => {
     [],
   );
 
+  const saveBookmark = useCallback(
+    async ({ title: rawTitle, url: rawUrl, tags: rawTags }: { title: string; url: string; tags?: string[] }) => {
+      const normalizedUrl = normalizeUrlForSaving(rawUrl);
+      const normalizedTitle = normalizeWhitespace(rawTitle) || extractDomain(normalizedUrl) || normalizedUrl;
+      const sourceTags = rawTags ?? [];
+      const uniqueTags = sourceTags.filter(
+        (tag, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index,
+      );
+      const now = Date.now();
+      const bookmark = await createBookmark({
+        id: crypto.randomUUID(),
+        url: normalizedUrl,
+        title: normalizedTitle,
+        tags: uniqueTags,
+        createdAt: now,
+        updatedAt: now,
+      });
+      setSearchEntries((previous) => {
+        const filtered = previous.filter((entry) => entry.bookmark.id !== bookmark.id);
+        const next = [buildSearchEntry(bookmark), ...filtered].slice(0, SEARCH_INDEX_LIMIT);
+        searchEntriesRef.current = next;
+        return next;
+      });
+      return bookmark;
+    },
+    [],
+  );
+
   const handleQuickAddSubmit = useCallback(
     async (event: Event) => {
       event.preventDefault();
@@ -484,37 +514,13 @@ const App: FunctionalComponent = () => {
         return;
       }
       setStatus(null);
-      let normalizedUrl: string;
-      try {
-        normalizedUrl = normalizeUrlForSaving(url);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ungültige URL.';
-        setStatus({ tone: 'error', text: message });
-        return;
-      }
-      const normalizedTitle = normalizeWhitespace(title) || extractDomain(normalizedUrl) || normalizedUrl;
-      const uniqueTags = tags.filter((tag, index, all) =>
-        all.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index,
-      );
-      const now = Date.now();
       setSaving(true);
       try {
-        const bookmark = await createBookmark({
-          id: crypto.randomUUID(),
-          url: normalizedUrl,
-          title: normalizedTitle,
-          tags: uniqueTags,
-          createdAt: now,
-          updatedAt: now,
-        });
+        await saveBookmark({ title, url, tags });
         setStatus({ tone: 'success', text: 'Bookmark gespeichert.' });
         setTitle('');
         setUrl('');
         setTags([]);
-        setSearchEntries((previous) => {
-          const next = [buildSearchEntry(bookmark), ...previous.filter((entry) => entry.bookmark.id !== bookmark.id)];
-          return next.slice(0, SEARCH_INDEX_LIMIT);
-        });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.';
         setStatus({ tone: 'error', text: message });
@@ -522,7 +528,7 @@ const App: FunctionalComponent = () => {
         setSaving(false);
       }
     },
-    [saving, tags, title, url],
+    [saveBookmark, saving, tags, title, url],
   );
 
   const handlePrefillFromTab = useCallback(async () => {
@@ -577,6 +583,43 @@ const App: FunctionalComponent = () => {
     },
     [handleOpenUrl, searchResults, searchSelection],
   );
+
+  useEffect(() => {
+    const harness: PopupHarness = {
+      addBookmark: async (input) => {
+        const bookmark = await saveBookmark({ title: input.title, url: input.url, tags: input.tags });
+        return bookmark.id;
+      },
+      search: async (term: string) => {
+        setSearchTerm(term);
+      },
+      clearSearch: async () => {
+        setSearchTerm('');
+      },
+      selectRange: async () => {
+        // Popup no longer exposes range selection in the simplified UI.
+      },
+      getSelectedIds: async () => [],
+      runBatch: async () => {
+        // Batch actions removed from simplified popup.
+      },
+      importBulk: async () => 0,
+      visibleTitles: async (limit = 10) => {
+        const normalizedLimit = Math.max(0, Math.trunc(limit));
+        return searchEntriesRef.current
+          .slice(0, normalizedLimit > 0 ? normalizedLimit : searchEntriesRef.current.length)
+          .map((entry) => entry.bookmark.title);
+      },
+    };
+
+    window.__LINKOSAURUS_POPUP_HARNESS = harness;
+
+    return () => {
+      if (window.__LINKOSAURUS_POPUP_HARNESS === harness) {
+        delete window.__LINKOSAURUS_POPUP_HARNESS;
+      }
+    };
+  }, [saveBookmark]);
 
   return (
     <div className="popup-app">
