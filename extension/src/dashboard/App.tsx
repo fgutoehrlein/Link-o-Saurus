@@ -41,6 +41,7 @@ import type { ExportFormat, ImportProgress } from '../shared/import-export';
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList, normalizeTagPath } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
+import { isDashboardMessage } from '../shared/messaging';
 import './App.css';
 
 declare global {
@@ -104,11 +105,64 @@ type RouteSnapshot = {
   readonly isNew: boolean;
   readonly newTitle: string;
   readonly newUrl: string;
+  readonly newTags: string;
 };
 
 const DEFAULT_ITEM_HEIGHT = 76;
 const MAX_QUERY_RESULTS = 600;
 const MIN_RESIZE_WIDTH = 320;
+
+const ROUTE_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/gu;
+const ROUTE_MAX_SEARCH_LENGTH = 512;
+const ROUTE_MAX_TITLE_LENGTH = 256;
+const ROUTE_MAX_TAG_LENGTH = 64;
+const ROUTE_MAX_TAG_COUNT = 32;
+
+const sanitizeRouteText = (value: string, limit: number): string =>
+  value.replace(ROUTE_CONTROL_CHARACTERS, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit);
+
+const sanitizeRouteTagsList = (values: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const sanitized = sanitizeRouteText(value, ROUTE_MAX_TAG_LENGTH);
+    if (!sanitized) {
+      continue;
+    }
+    const key = sanitized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(sanitized);
+    if (result.length >= ROUTE_MAX_TAG_COUNT) {
+      break;
+    }
+  }
+  return result;
+};
+
+const sanitizeRouteTagsParam = (values: readonly string[]): string[] => {
+  const flattened: string[] = [];
+  values.forEach((value) => {
+    value
+      .split(',')
+      .map((part) => part)
+      .forEach((part) => flattened.push(part));
+  });
+  return sanitizeRouteTagsList(flattened);
+};
+
+const sanitizeRouteUrl = (value: string): string => {
+  const trimmed = value.replace(ROUTE_CONTROL_CHARACTERS, '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const normalized =
+    normalizeUrl(trimmed, { removeHash: false, sortQueryParameters: false }) ??
+    normalizeUrl(`https://${trimmed}`, { removeHash: false, sortQueryParameters: false });
+  return normalized ?? '';
+};
 
 const formatTimestamp = (timestamp: number | undefined): string => {
   if (!timestamp) {
@@ -178,14 +232,16 @@ const parseInitialRoute = (): RouteSnapshot => {
     });
   }
 
-  const search = params.get('q')?.trim() ?? '';
-  const boardId = params.get('board')?.trim() ?? '';
-  const tag = params.get('tag')?.trim() ?? '';
+  const search = sanitizeRouteText(params.get('q') ?? '', ROUTE_MAX_SEARCH_LENGTH);
+  const boardId = params.get('board')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
+  const tag = params.get('tag')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
   const isNew = params.get('new') === '1';
-  const newTitle = params.get('title')?.trim() ?? '';
-  const newUrl = params.get('url')?.trim() ?? '';
+  const newTitle = sanitizeRouteText(params.get('title') ?? '', ROUTE_MAX_TITLE_LENGTH);
+  const newUrl = sanitizeRouteUrl(params.get('url') ?? '');
+  const tags = sanitizeRouteTagsParam(params.getAll('tags'));
+  const newTags = tags.join(', ');
 
-  return { search, boardId, tag, isNew, newTitle, newUrl };
+  return { search, boardId, tag, isNew, newTitle, newUrl, newTags };
 };
 
 const updateRouteHash = (snapshot: RouteSnapshot): void => {
@@ -206,6 +262,17 @@ const updateRouteHash = (snapshot: RouteSnapshot): void => {
     }
     if (snapshot.newUrl) {
       params.set('url', snapshot.newUrl);
+    }
+    if (snapshot.newTags) {
+      const serializedTags = sanitizeRouteTagsList(
+        snapshot.newTags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      );
+      if (serializedTags.length > 0) {
+        params.set('tags', serializedTags.join(','));
+      }
     }
   }
   const serialized = params.toString();
@@ -478,7 +545,7 @@ const DashboardApp: FunctionalComponent = () => {
       setDraft({
         title: snapshot.newTitle,
         url: snapshot.newUrl,
-        tags: '',
+        tags: snapshot.newTags,
         notes: '',
       });
     }
@@ -499,7 +566,7 @@ const DashboardApp: FunctionalComponent = () => {
         setDraft({
           title: nextSnapshot.newTitle,
           url: nextSnapshot.newUrl,
-          tags: '',
+          tags: nextSnapshot.newTags,
           notes: '',
         });
       } else {
@@ -521,10 +588,86 @@ const DashboardApp: FunctionalComponent = () => {
       isNew: draft !== null,
       newTitle: draft?.title ?? '',
       newUrl: draft?.url ?? '',
+      newTags: draft?.tags ?? '',
     };
     hashSyncRef.current = true;
     updateRouteHash(snapshot);
-  }, [searchQuery, activeBoardId, activeTag, draft?.title, draft?.url]);
+  }, [searchQuery, activeBoardId, activeTag, draft?.title, draft?.url, draft?.tags]);
+
+  useEffect(() => {
+    let listener:
+      | ((
+          message: unknown,
+          sender: chrome.runtime.MessageSender,
+          sendResponse: (response?: unknown) => void,
+        ) => void)
+      | null = null;
+    const timeoutId = setTimeout(() => {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) {
+        return;
+      }
+      listener = (rawMessage) => {
+        if (!isDashboardMessage(rawMessage)) {
+          return;
+        }
+        if (rawMessage.type === 'FOCUS_SEARCH') {
+          const sanitized = sanitizeRouteText(rawMessage.payload.q, ROUTE_MAX_SEARCH_LENGTH);
+          setStatusMessage(null);
+          setDraft(null);
+          setDetailState(null);
+          setActiveBoardId('');
+          setActiveCategoryId('');
+          setActiveTag('');
+          setSelectedIds([]);
+          lastSelectionRef.current = { ids: [], anchorIndex: null };
+          setSearchQuery(sanitized);
+          if (sanitized && searchInputRef.current) {
+            searchInputRef.current.focus();
+          }
+          return;
+        }
+        if (rawMessage.type === 'OPEN_NEW_WITH_PREFILL') {
+          const normalizedUrl = sanitizeRouteUrl(rawMessage.payload.url);
+          if (!normalizedUrl) {
+            return;
+          }
+          const normalizedTitle = rawMessage.payload.title
+            ? sanitizeRouteText(rawMessage.payload.title, ROUTE_MAX_TITLE_LENGTH)
+            : '';
+          const normalizedTags = Array.isArray(rawMessage.payload.tags)
+            ? sanitizeRouteTagsList(rawMessage.payload.tags)
+            : [];
+          const tagsText = normalizedTags.join(', ');
+          const newDraft: DraftBookmark = {
+            title: normalizedTitle || '',
+            url: normalizedUrl,
+            tags: tagsText,
+            notes: '',
+          };
+          setStatusMessage(null);
+          setActiveBoardId('');
+          setActiveCategoryId('');
+          setActiveTag('');
+          setSelectedIds([]);
+          lastSelectionRef.current = { ids: [], anchorIndex: null };
+          setDraft(newDraft);
+          setDetailState(newDraft);
+          setSearchQuery('');
+          if (searchInputRef.current) {
+            searchInputRef.current.blur();
+          }
+        }
+      };
+      chrome.runtime.onMessage.addListener(listener);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (listener) {
+        chrome.runtime.onMessage.removeListener(listener);
+      }
+    };
+  }, []);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();

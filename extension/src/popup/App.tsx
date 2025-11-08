@@ -464,8 +464,46 @@ const App: FunctionalComponent = () => {
   }, [focusSearchInput]);
 
   const handleOpenDashboard = useCallback(() => {
-    void openDashboard();
-  }, []);
+    void openDashboard().catch((error) => {
+      console.error('Dashboard konnte nicht geöffnet werden.', error);
+      setStatus({ tone: 'error', text: 'Dashboard konnte nicht geöffnet werden.' });
+    });
+  }, [setStatus]);
+
+  const handleEditInDashboard = useCallback(async () => {
+    setStatus(null);
+    const sanitizedUrl = url.trim();
+    if (!sanitizedUrl) {
+      setStatus({ tone: 'error', text: 'Bitte eine gültige URL eingeben.' });
+      return;
+    }
+    const sanitizedTitle = normalizeWhitespace(title);
+    const sanitizedTags = tags.map((tag) => tag.trim()).filter(Boolean);
+    try {
+      await openDashboard({
+        new: '1',
+        url: sanitizedUrl,
+        title: sanitizedTitle,
+        tags: sanitizedTags,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Dashboard konnte nicht geöffnet werden.';
+      setStatus({ tone: 'error', text: message });
+    }
+  }, [setStatus, tags, title, url]);
+
+  const handleOpenDashboardWithSearch = useCallback(async () => {
+    const trimmed = searchTerm.trim();
+    try {
+      if (trimmed) {
+        await openDashboard({ q: trimmed });
+      } else {
+        await openDashboard();
+      }
+    } catch (error) {
+      console.error('Dashboard konnte nicht geöffnet werden.', error);
+    }
+  }, [searchTerm]);
 
   const handleOpenUrl = useCallback(
     async (targetUrl: string) => {
@@ -699,6 +737,14 @@ const App: FunctionalComponent = () => {
               <button type="submit" className="primary" disabled={saving} aria-label="Bookmark speichern">
                 {saving ? 'Speichern…' : 'Speichern'}
               </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void handleEditInDashboard()}
+                aria-label="Im Dashboard bearbeiten"
+              >
+                Im Dashboard bearbeiten
+              </button>
             </div>
           </form>
         </section>
@@ -766,6 +812,16 @@ const App: FunctionalComponent = () => {
                 </li>
               ) : null}
             </ul>
+            {hasQuery ? (
+              <button
+                type="button"
+                className="link"
+                onClick={() => void handleOpenDashboardWithSearch()}
+                aria-label="Mehr Ergebnisse im Dashboard"
+              >
+                Mehr Ergebnisse im Dashboard
+              </button>
+            ) : null}
           </div>
         </section>
       </main>

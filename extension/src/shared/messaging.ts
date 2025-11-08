@@ -49,6 +49,10 @@ export type BackgroundResponse =
 
 export type BackgroundResponseSuccess = Exclude<BackgroundResponse, { type: 'session.error' }>;
 
+export type Message =
+  | { type: 'OPEN_NEW_WITH_PREFILL'; payload: { url: string; title?: string; tags?: string[] } }
+  | { type: 'FOCUS_SEARCH'; payload: { q: string } };
+
 const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'session.saveCurrentWindow',
   'session.openAll',
@@ -122,3 +126,40 @@ export const sendBackgroundMessage = async (
       resolve(rawResponse);
     });
   });
+
+export const isDashboardMessage = (value: unknown): value is Message => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { type?: unknown; payload?: unknown };
+  if (candidate.type === 'OPEN_NEW_WITH_PREFILL') {
+    if (!candidate.payload || typeof candidate.payload !== 'object') {
+      return false;
+    }
+    const payload = candidate.payload as { url?: unknown; title?: unknown; tags?: unknown };
+    if (typeof payload.url !== 'string' || !payload.url) {
+      return false;
+    }
+    if (
+      typeof payload.title !== 'undefined' &&
+      typeof payload.title !== 'string'
+    ) {
+      return false;
+    }
+    if (
+      typeof payload.tags !== 'undefined' &&
+      (!Array.isArray(payload.tags) || payload.tags.some((tag) => typeof tag !== 'string'))
+    ) {
+      return false;
+    }
+    return true;
+  }
+  if (candidate.type === 'FOCUS_SEARCH') {
+    if (!candidate.payload || typeof candidate.payload !== 'object') {
+      return false;
+    }
+    const payload = candidate.payload as { q?: unknown };
+    return typeof payload.q === 'string';
+  }
+  return false;
+};
