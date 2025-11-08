@@ -13,7 +13,9 @@ import './App.css';
 import SessionManager from './SessionManager';
 import CommentsSection from './CommentsSection';
 import ReadLaterList from './ReadLaterList';
-import type { Tag } from '../shared/types';
+import type { BackgroundRequest, BackgroundResponseSuccess } from '../shared/messaging';
+import { createSession, deleteSession, getSession } from '../shared/db';
+import type { SessionPack, Tag } from '../shared/types';
 import {
   canonicalizeTagId,
   createTagFromMetadata,
@@ -23,6 +25,25 @@ import {
 } from '../shared/tag-utils';
 import { buildTagTree, flattenTagTree } from './tag-tree';
 import type { FlattenedTagNode } from './tag-tree';
+
+type PopupE2EHarness = {
+  addBookmark(input: { title: string; url: string; tags?: string[]; boardId?: string }): Promise<string>;
+  search(term: string): Promise<void>;
+  clearSearch(): Promise<void>;
+  selectRange(start: number, end: number): Promise<void>;
+  getSelectedIds(): Promise<string[]>;
+  runBatch(action: 'tag' | 'move' | 'delete' | 'untag'): Promise<void>;
+  importBulk(count: number): Promise<number>;
+  visibleTitles(limit?: number): Promise<string[]>;
+};
+
+declare global {
+  interface Window {
+    __LINKOSAURUS_POPUP_HARNESS?: PopupE2EHarness;
+    __LINKOSAURUS_POPUP_READY?: boolean;
+    __LINKOSAURUS_POPUP_READY_TIME?: number;
+  }
+}
 
 const TAG_FILTER_PATTERN = /tag:(?:"([^"]+)"|'([^']+)'|([^\s]+))/gi;
 
@@ -288,8 +309,13 @@ const loadExpandedPaths = (): Set<string> => {
 };
 
 const App: FunctionalComponent = () => {
+  const isE2EMode =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('e2e');
+
   const bookmarksResource = useAsyncResource(async () => {
-    const fakeData: Bookmark[] = Array.from({ length: 5000 }).map((_, index) => ({
+    const seedCount = isE2EMode ? 60 : 5000;
+    const fakeData: Bookmark[] = Array.from({ length: seedCount }).map((_, index) => ({
       id: `bookmark-${index}`,
       title: `Bookmark ${index + 1}`,
       url: `https://example.com/${index + 1}`,
@@ -310,7 +336,9 @@ const App: FunctionalComponent = () => {
       createdAt: new Date(Date.now() - index * 60000).toISOString(),
     }));
 
-    await wait(30);
+    if (!isE2EMode) {
+      await wait(30);
+    }
     return fakeData;
   });
 
@@ -323,7 +351,9 @@ const App: FunctionalComponent = () => {
   }, [bookmarksResource.data]);
 
   const boardsResource = useAsyncResource(async () => {
-    await wait(10);
+    if (!isE2EMode) {
+      await wait(10);
+    }
     const boardCounts = bookmarks.reduce<Record<string, number>>(
       (acc, bookmark) => {
         acc[bookmark.boardId] = (acc[bookmark.boardId] ?? 0) + 1;
@@ -343,7 +373,9 @@ const App: FunctionalComponent = () => {
   }, [bookmarks]);
 
   const tagsResource = useAsyncResource(async () => {
-    await wait(10);
+    if (!isE2EMode) {
+      await wait(10);
+    }
     const seedPaths = ['Inbox', 'dev', 'dev/js', 'dev/js/react', 'research/ux'];
     return seedPaths.map((path) => createTagFromMetadata(deriveTagMetadata(path)));
   });
@@ -758,6 +790,166 @@ const App: FunctionalComponent = () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [runBatchAction, selectedIds.size]);
+
+  useEffect(() => {
+    if (!isE2EMode || typeof window === 'undefined') {
+      return;
+    }
+
+    const sleep = (ms = 0) =>
+      new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+      });
+
+    const harness: PopupE2EHarness = {
+      async addBookmark(input) {
+        const id = `e2e-${crypto.randomUUID()}`;
+        const record: Bookmark = {
+          id,
+          title: input.title,
+          url: input.url,
+          tags: [...(input.tags ?? [])],
+          boardId: input.boardId ?? activeBoard ?? 'inbox',
+          createdAt: new Date().toISOString(),
+        };
+        setBookmarks((prev) => [record, ...prev]);
+        setOrderedIds((prev) => [id, ...prev.filter((existing) => existing !== id)]);
+        await sleep();
+        return id;
+      },
+      async search(term) {
+        setSearchTerm(term);
+        await sleep();
+      },
+      async clearSearch() {
+        setSearchTerm('');
+        await sleep();
+      },
+      async selectRange(start, end) {
+        const lower = Math.max(0, Math.min(start, end));
+        const upper = Math.max(0, Math.max(start, end));
+        const ids: string[] = [];
+        for (let index = lower; index <= upper && index < filteredBookmarks.length; index += 1) {
+          const bookmark = filteredBookmarks[index];
+          if (bookmark) {
+            ids.push(bookmark.id);
+          }
+        }
+        setSelectedIds(new Set(ids));
+        await sleep();
+      },
+      async getSelectedIds() {
+        return Array.from(selectedIds);
+      },
+      async runBatch(action) {
+        await runBatchAction(action);
+        await sleep(220);
+      },
+      async importBulk(count) {
+        const timestamp = Date.now();
+        const additions: Bookmark[] = Array.from({ length: count }).map((_, index) => ({
+          id: `import-${timestamp}-${index}`,
+          title: `Imported ${index + 1}`,
+          url: `https://imported.example/${index + 1}`,
+          tags: [],
+          boardId: 'inbox',
+          createdAt: new Date(Date.now() - index * 1000).toISOString(),
+        }));
+        let total = 0;
+        setBookmarks((prev) => {
+          total = prev.length + additions.length;
+          return [...prev, ...additions];
+        });
+        setOrderedIds((prev) => [...prev, ...additions.map((bookmark) => bookmark.id)]);
+        await sleep();
+        return total;
+      },
+      async visibleTitles(limit = 10) {
+        return filteredBookmarks.slice(0, Math.max(0, limit)).map((bookmark) => bookmark.title);
+      },
+    };
+
+    const createSessionTabs = (count: number): SessionPack['tabs'] =>
+      Array.from({ length: count }).map((_, index) => ({
+        url: `https://example.com/session-${index + 1}`,
+        title: `Session Tab ${index + 1}`,
+        favIconUrl: undefined,
+      }));
+
+    const testChannel = async (
+      message: BackgroundRequest,
+    ): Promise<BackgroundResponseSuccess> => {
+      switch (message.type) {
+        case 'session.saveCurrentWindow': {
+          const session: SessionPack = {
+            id: crypto.randomUUID(),
+            title:
+              message.title && message.title.trim().length
+                ? message.title
+                : `E2E Session ${new Date().toLocaleString()}`,
+            tabs: createSessionTabs(5),
+            savedAt: Date.now(),
+          };
+          await createSession(session);
+          return { type: 'session.saveCurrentWindow.result', session };
+        }
+        case 'session.openAll': {
+          const session = await getSession(message.sessionId);
+          const opened = session?.tabs.length ?? 0;
+          return { type: 'session.openAll.result', opened };
+        }
+        case 'session.openSelected': {
+          const session = await getSession(message.sessionId);
+          const opened = session
+            ? message.tabIndexes.filter((index) => session.tabs[index])
+                .length
+            : 0;
+          return { type: 'session.openSelected.result', opened };
+        }
+        case 'session.delete': {
+          await deleteSession(message.sessionId);
+          return { type: 'session.delete.result', sessionId: message.sessionId };
+        }
+        case 'settings.applyNewTab': {
+          return { type: 'settings.applyNewTab.result', enabled: message.enabled };
+        }
+        case 'readLater.refreshBadge': {
+          return { type: 'readLater.refreshBadge.result', count: 0 };
+        }
+        default: {
+          throw new Error('Unsupported test channel message.');
+        }
+      }
+    };
+
+    window.__LINKOSAURUS_POPUP_HARNESS = harness;
+    window.__LINKOSAURUS_POPUP_READY = true;
+    window.__LINKOSAURUS_POPUP_READY_TIME = performance.now();
+    globalThis.__LINKOSAURUS_TEST_CHANNEL = testChannel;
+
+    return () => {
+      if (window.__LINKOSAURUS_POPUP_HARNESS === harness) {
+        delete window.__LINKOSAURUS_POPUP_HARNESS;
+      }
+      if (window.__LINKOSAURUS_POPUP_READY) {
+        delete window.__LINKOSAURUS_POPUP_READY;
+      }
+      if (window.__LINKOSAURUS_POPUP_READY_TIME) {
+        delete window.__LINKOSAURUS_POPUP_READY_TIME;
+      }
+      if (globalThis.__LINKOSAURUS_TEST_CHANNEL === testChannel) {
+        delete globalThis.__LINKOSAURUS_TEST_CHANNEL;
+      }
+    };
+  }, [
+    activeBoard,
+    filteredBookmarks,
+    isE2EMode,
+    runBatchAction,
+    selectedIds,
+    setBookmarks,
+    setOrderedIds,
+  ]);
 
   const selectedFirstId = selectedIds.values().next().value as string | undefined;
   const selectedBookmark = useMemo(

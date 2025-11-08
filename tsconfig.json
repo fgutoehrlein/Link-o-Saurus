@@ -15,6 +15,15 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["vite/client", "node", "chrome", "vitest"]
   },
-  "include": ["extension/src", "scripts", "vite.config.ts", "vitest.config.ts", "vitest.setup.ts", "types"],
+  "include": [
+    "extension/src",
+    "scripts",
+    "tests",
+    "playwright.config.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "types"
+  ],
   "exclude": ["dist", "node_modules"]
 }

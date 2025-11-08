@@ -11,6 +11,7 @@
     "zip:chrome": "tsx scripts/zip.ts chrome",
     "zip:firefox": "tsx scripts/zip.ts firefox",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "adm-zip": "^0.5.10",
     "chokidar": "^3.5.3",
     "fake-indexeddb": "^5.0.2",
+    "@playwright/test": "^1.48.2",
     "rollup": "^4.52.5",
     "tsx": "^4.7.0",
     "typescript": "^5.4.3",
