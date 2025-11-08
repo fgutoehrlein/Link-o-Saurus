@@ -1001,6 +1001,23 @@ export type BookmarkListOptions = {
   limit?: number;
 };
 
+export const listRecentBookmarks = async (
+  limit = 5,
+  database?: LinkOSaurusDB,
+): Promise<Bookmark[]> => {
+  const dbInstance = withDatabase(database);
+  const normalizedLimit = Math.max(0, Math.min(Math.trunc(limit), 500));
+  if (normalizedLimit === 0) {
+    return [];
+  }
+  const collection = dbInstance.bookmarks.orderBy('createdAt').reverse();
+  const records = await collection
+    .filter((bookmark) => !(bookmark as Bookmark).archived)
+    .limit(normalizedLimit)
+    .toArray();
+  return records;
+};
+
 export const createBookmark = async (
   bookmark: CreateBookmarkInput,
   database?: LinkOSaurusDB,

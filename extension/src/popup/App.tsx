@@ -1,33 +1,18 @@
-import { ComponentChildren, FunctionalComponent, JSX } from 'preact';
+import { FunctionalComponent } from 'preact';
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'preact/hooks';
-import { FixedSizeList, ListChildComponentProps } from 'react-window';
-import type { FixedSizeListProps } from 'react-window';
+import { createBookmark, listRecentBookmarks } from '../shared/db';
+import type { Bookmark } from '../shared/types';
+import { openDashboard } from '../shared/utils';
 import './App.css';
-import SessionManager from './SessionManager';
-import CommentsSection from './CommentsSection';
-import ReadLaterList from './ReadLaterList';
-import type { BackgroundRequest, BackgroundResponseSuccess } from '../shared/messaging';
-import { createSession, deleteSession, getSession } from '../shared/db';
-import type { SessionPack, Tag } from '../shared/types';
-import {
-  canonicalizeTagId,
-  createTagFromMetadata,
-  deriveTagMetadata,
-  normalizeTagPath,
-  isAncestorSlug,
-} from '../shared/tag-utils';
-import { buildTagTree, flattenTagTree } from './tag-tree';
-import type { FlattenedTagNode } from './tag-tree';
 
-type PopupE2EHarness = {
-  addBookmark(input: { title: string; url: string; tags?: string[]; boardId?: string }): Promise<string>;
+type PopupHarness = {
+  addBookmark(input: { title: string; url: string; tags?: string[] }): Promise<string>;
   search(term: string): Promise<void>;
   clearSearch(): Promise<void>;
   selectRange(start: number, end: number): Promise<void>;
@@ -39,1139 +24,758 @@ type PopupE2EHarness = {
 
 declare global {
   interface Window {
-    __LINKOSAURUS_POPUP_HARNESS?: PopupE2EHarness;
+    __LINKOSAURUS_POPUP_HARNESS?: PopupHarness;
     __LINKOSAURUS_POPUP_READY?: boolean;
     __LINKOSAURUS_POPUP_READY_TIME?: number;
   }
 }
 
-const TAG_FILTER_PATTERN = /tag:(?:"([^"]+)"|'([^']+)'|([^\s]+))/gi;
-
-const formatTagToken = (tag: string): string =>
-  `tag:${tag.includes(' ') ? `"${tag}"` : tag}`;
-
-const parseSearchQuery = (
-  value: string,
-): {
+type StatusMessage = {
+  readonly tone: 'success' | 'error' | 'info' | 'warning';
   readonly text: string;
-  readonly tags: string[];
-} => {
-  const tags: string[] = [];
-  const cleaned = value.replace(TAG_FILTER_PATTERN, (_, doubleQuoted, singleQuoted, unquoted) => {
-    const tag = (doubleQuoted ?? singleQuoted ?? unquoted ?? '').trim();
-    if (tag) {
-      tags.push(tag);
+};
+
+type SearchEntry = {
+  readonly bookmark: Bookmark;
+  readonly normalizedUrl: string;
+  readonly normalizedTitle: string;
+  readonly domain: string;
+  readonly tokens: readonly string[];
+};
+
+type TagInputProps = {
+  readonly id: string;
+  readonly tags: readonly string[];
+  readonly onChange: (next: string[]) => void;
+};
+
+const RECENT_LIMIT = 5;
+const SEARCH_INDEX_LIMIT = 200;
+const SEARCH_RESULTS_LIMIT = 10;
+
+const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
+const normalizeUrlForComparison = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return '';
+  }
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    try {
+      return new URL(`https://${trimmed}`).toString();
+    } catch {
+      return trimmed;
     }
-    return ' ';
-  });
+  }
+};
+
+const normalizeUrlForSaving = (raw: string): string => {
+  const normalized = normalizeUrlForComparison(raw);
+  if (!normalized) {
+    throw new Error('Bitte eine gültige URL eingeben.');
+  }
+  try {
+    // Validate URL
+    // eslint-disable-next-line no-new
+    new URL(normalized);
+  } catch {
+    throw new Error('Bitte eine gültige URL eingeben.');
+  }
+  return normalized;
+};
+
+const extractDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+};
+
+const getFaviconUrl = (url: string): string | null => {
+  try {
+    const parsed = new URL(url);
+    return new URL('/favicon.ico', parsed.origin).toString();
+  } catch {
+    return null;
+  }
+};
+
+const getBookmarkInitial = (bookmark: Bookmark): string => {
+  const source = normalizeWhitespace(bookmark.title || extractDomain(bookmark.url) || bookmark.url);
+  const firstChar = source.charAt(0);
+  if (!firstChar) {
+    return '🔖';
+  }
+  return firstChar.toUpperCase();
+};
+
+const createTokenSet = (source: string): Set<string> => {
+  const tokens = new Set<string>();
+  source
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((token) => token.toLowerCase())
+    .filter(Boolean)
+    .forEach((token) => tokens.add(token));
+  return tokens;
+};
+
+const buildSearchEntry = (bookmark: Bookmark): SearchEntry => {
+  const normalizedUrl = normalizeUrlForComparison(bookmark.url).toLowerCase();
+  const normalizedTitle = bookmark.title.trim().toLowerCase();
+  const domain = extractDomain(bookmark.url);
+
+  const tokenSet = new Set<string>();
+  const collect = (value: string) => {
+    createTokenSet(value).forEach((token) => tokenSet.add(token));
+  };
+
+  collect(bookmark.title);
+  collect(domain);
+  collect(bookmark.url);
+  bookmark.tags.forEach((tag) => collect(tag));
+
   return {
-    text: cleaned.replace(/\s+/g, ' ').trim(),
-    tags,
+    bookmark,
+    normalizedUrl,
+    normalizedTitle,
+    domain,
+    tokens: Array.from(tokenSet),
   };
 };
 
-type Board = {
-  id: string;
-  label: string;
-  count: number;
-};
-
-type Bookmark = {
-  id: string;
-  title: string;
-  url: string;
-  tags: string[];
-  boardId: string;
-  createdAt: string;
-};
-
-type ResourceState<T> = {
-  data: T | null;
-  pending: boolean;
-  showSpinner: boolean;
-};
-
-type BookmarkRowData = {
-  bookmarks: Bookmark[];
-  selection: Set<string>;
-  onItemClick: (
-    bookmark: Bookmark,
-    index: number,
-    event: MouseEvent | KeyboardEvent,
-  ) => void;
-  onDragStart: (bookmark: Bookmark, index: number, event: DragEvent) => void;
-  onDragOver: (index: number, event: DragEvent) => void;
-  onDrop: (index: number, event: DragEvent) => void;
-  onKeyToggle: (bookmark: Bookmark, index: number, event: KeyboardEvent) => void;
-  onDragEnd: () => void;
-};
-
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
+const containsTabsPermission = async (): Promise<boolean> => {
+  if (typeof chrome === 'undefined' || !chrome.permissions?.contains) {
+    return false;
+  }
+  return new Promise<boolean>((resolve) => {
+    chrome.permissions.contains({ permissions: ['tabs'] }, (granted) => {
+      resolve(Boolean(granted));
+    });
   });
+};
 
-function useAsyncResource<T>(
-  loader: () => Promise<T>,
-  deps: readonly unknown[] = [],
-): ResourceState<T> {
-  const loaderRef = useRef(loader);
-  loaderRef.current = loader;
-
-  const [state, setState] = useState<ResourceState<T>>({
-    data: null,
-    pending: true,
-    showSpinner: false,
+const requestTabsPermission = async (): Promise<boolean> => {
+  if (typeof chrome === 'undefined' || !chrome.permissions?.request) {
+    return false;
+  }
+  return new Promise<boolean>((resolve) => {
+    chrome.permissions.request({ permissions: ['tabs'] }, (granted) => {
+      resolve(Boolean(granted));
+    });
   });
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    setState((prev) => ({ ...prev, pending: true, showSpinner: false }));
-    const latencyTimer = window.setTimeout(() => {
-      if (!cancelled) {
-        setState((prev) => ({ ...prev, showSpinner: true }));
+const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
+    return undefined;
+  }
+  return new Promise<chrome.tabs.Tab | undefined>((resolve, reject) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const error = chrome.runtime?.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
       }
-    }, 120);
+      resolve(tabs[0]);
+    });
+  });
+};
 
-    loaderRef.current()
-      .then((data) => {
-        if (!cancelled) {
-          setState({ data, pending: false, showSpinner: false });
+const openUrlInNewTab = async (url: string): Promise<void> => {
+  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+    await new Promise<void>((resolve, reject) => {
+      chrome.tabs.create({ url, active: true }, () => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setState({ data: null, pending: false, showSpinner: false });
-        }
-      })
-      .finally(() => window.clearTimeout(latencyTimer));
+        resolve();
+      });
+    });
+    return;
+  }
+  window.open(url, '_blank', 'noopener');
+};
 
-    return () => {
-      cancelled = true;
-      window.clearTimeout(latencyTimer);
-    };
-  }, deps);
+const TagInput: FunctionalComponent<TagInputProps> = ({ id, tags, onChange }) => {
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  return state;
-}
-
-function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) {
+  const commitDraft = useCallback(() => {
+    const normalized = normalizeWhitespace(draft);
+    if (!normalized) {
       return;
     }
+    const duplicate = tags.some((tag) => tag.toLowerCase() === normalized.toLowerCase());
+    if (!duplicate) {
+      onChange([...tags, normalized]);
+    }
+    setDraft('');
+  }, [draft, onChange, tags]);
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const box = entry.contentRect;
-        setSize({ width: box.width, height: box.height });
-      }
-    });
-
-    resizeObserver.observe(element);
-
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  return [ref, size] as const;
-}
-
-const BookmarkRow: FunctionalComponent<
-  ListChildComponentProps<BookmarkRowData>
-> = ({ index, style, data }) => {
-  const bookmark = data.bookmarks[index];
-  const selected = data.selection.has(bookmark.id);
-
-  return (
-    <div
-      role="option"
-      aria-selected={selected}
-      tabIndex={0}
-      class={`bookmark-row${selected ? ' is-selected' : ''}`}
-      style={style as unknown as JSX.CSSProperties}
-      draggable
-      onClick={(event) => data.onItemClick(bookmark, index, event as MouseEvent)}
-      onDragStart={(event) =>
-        data.onDragStart(bookmark, index, event as DragEvent)}
-      onDragOver={(event) => data.onDragOver(index, event as DragEvent)}
-      onDrop={(event) => data.onDrop(index, event as DragEvent)}
-      onDragEnd={data.onDragEnd}
-      onKeyDown={(event) =>
-        data.onKeyToggle(bookmark, index, event as KeyboardEvent)}
-    >
-      <div class="bookmark-title" title={bookmark.title}>
-        {bookmark.title}
-      </div>
-      <div class="bookmark-meta">
-        <span class="bookmark-url" title={bookmark.url}>
-          {bookmark.url.replace(/^https?:\/\//, '')}
-        </span>
-        <span class="bookmark-tags">
-          {bookmark.tags.length ? bookmark.tags.join(', ') : 'No tags'}
-        </span>
-      </div>
-    </div>
+  const removeTag = useCallback(
+    (tag: string) => {
+      onChange(tags.filter((candidate) => candidate !== tag));
+      inputRef.current?.focus();
+    },
+    [onChange, tags],
   );
-};
 
-const VirtualizedList = FixedSizeList as unknown as FunctionalComponent<
-  FixedSizeListProps<BookmarkRowData> & {
-    children: (props: ListChildComponentProps<BookmarkRowData>) => ComponentChildren;
-  }
->;
-
-type TagTreeRowData = {
-  readonly items: FlattenedTagNode[];
-  readonly onToggle: (path: string) => void;
-  readonly onSelect: (path: string) => void;
-  readonly activeFilters: Set<string>;
-};
-
-const TagTreeRow: FunctionalComponent<ListChildComponentProps<TagTreeRowData>> = ({
-  index,
-  style,
-  data,
-}) => {
-  const item = data.items[index];
-  const { node, depth, hasChildren, isExpanded } = item;
-  const isActive = data.activeFilters.has(node.canonicalPath);
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ',') {
+        if (draft.trim()) {
+          event.preventDefault();
+          commitDraft();
+        }
+      } else if (event.key === 'Backspace' && !draft && tags.length > 0) {
+        event.preventDefault();
+        onChange(tags.slice(0, -1));
+      }
+    },
+    [commitDraft, draft, onChange, tags],
+  );
 
   return (
-    <div
-      class="tag-tree-row"
-      style={style as unknown as JSX.CSSProperties}
-      role="treeitem"
-      aria-level={depth + 1}
-      aria-expanded={hasChildren ? isExpanded : undefined}
-    >
-      <div class="tag-tree-row__content" style={{ paddingLeft: `${depth * 16 + 8}px` }}>
-        {hasChildren ? (
+    <div className="tag-input" role="list" aria-labelledby={`${id}-label`}>
+      {tags.map((tag) => (
+        <span key={tag} className="tag-pill" role="listitem">
+          <span>{tag}</span>
           <button
             type="button"
-            class="tag-tree-toggle"
-            aria-label={
-              isExpanded
-                ? `Taggruppe ${node.path} einklappen`
-                : `Taggruppe ${node.path} ausklappen`
-            }
-            onClick={() => data.onToggle(node.canonicalPath)}
+            className="tag-pill__remove"
+            onClick={() => removeTag(tag)}
+            aria-label={`Tag ${tag} entfernen`}
           >
-            {isExpanded ? '▾' : '▸'}
+            ×
           </button>
-        ) : (
-          <span class="tag-tree-toggle tag-tree-toggle--spacer" aria-hidden="true">
-            •
-          </span>
-        )}
-        <button
-          type="button"
-          class={`tag-tree-label${isActive ? ' is-active' : ''}`}
-          onClick={() => data.onSelect(node.path)}
-          title={node.path}
-        >
-          <span class="tag-tree-label__text">{node.label}</span>
-          <span class="tag-tree-label__count">{node.totalUsage}</span>
-        </button>
-      </div>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        id={id}
+        value={draft}
+        onInput={(event) => setDraft((event.currentTarget as HTMLInputElement).value)}
+        onKeyDown={(event) => handleKeyDown(event as unknown as KeyboardEvent)}
+        onBlur={() => commitDraft()}
+        placeholder={tags.length === 0 ? 'Tag eingeben…' : ''}
+        aria-label="Tag hinzufügen"
+        autoComplete="off"
+      />
     </div>
   );
 };
 
-const VirtualizedTagTree = FixedSizeList as unknown as FunctionalComponent<
-  FixedSizeListProps<TagTreeRowData> & {
-    children: (props: ListChildComponentProps<TagTreeRowData>) => ComponentChildren;
-  }
->;
-
-const TAG_TREE_EXPANDED_KEY = 'link-o-saurus:tag-tree-expanded';
-
-const loadExpandedPaths = (): Set<string> => {
-  if (typeof window === 'undefined') {
-    return new Set();
-  }
-  try {
-    const raw = window.localStorage.getItem(TAG_TREE_EXPANDED_KEY);
-    if (!raw) {
-      return new Set();
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return new Set(parsed.filter((value): value is string => typeof value === 'string'));
-    }
-  } catch {
-    // Ignore persistence errors and fall back to defaults.
-  }
-  return new Set();
+const BookmarkFavicon: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({ bookmark }) => {
+  const faviconUrl = getFaviconUrl(bookmark.url);
+  return (
+    <span className="favicon" aria-hidden="true">
+      <span className="favicon__placeholder">{getBookmarkInitial(bookmark)}</span>
+      {faviconUrl ? (
+        <img
+          src={faviconUrl}
+          alt=""
+          width={20}
+          height={20}
+          onError={(event) => {
+            (event.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      ) : null}
+    </span>
+  );
 };
 
 const App: FunctionalComponent = () => {
-  const isE2EMode =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('e2e');
-
-  const bookmarksResource = useAsyncResource(async () => {
-    const seedCount = isE2EMode ? 60 : 5000;
-    const fakeData: Bookmark[] = Array.from({ length: seedCount }).map((_, index) => ({
-      id: `bookmark-${index}`,
-      title: `Bookmark ${index + 1}`,
-      url: `https://example.com/${index + 1}`,
-      tags: (() => {
-        const values: string[] = [];
-        if (index % 3 === 0) {
-          values.push('Inbox');
-        }
-        if (index % 5 === 0) {
-          values.push('Dev/JS/React');
-        }
-        if (index % 7 === 0) {
-          values.push('Research/UX/Interviews');
-        }
-        return values;
-      })(),
-      boardId: index % 2 === 0 ? 'inbox' : 'read-later',
-      createdAt: new Date(Date.now() - index * 60000).toISOString(),
-    }));
-
-    if (!isE2EMode) {
-      await wait(30);
-    }
-    return fakeData;
-  });
-
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-
-  useEffect(() => {
-    if (bookmarksResource.data) {
-      setBookmarks(bookmarksResource.data);
-    }
-  }, [bookmarksResource.data]);
-
-  const boardsResource = useAsyncResource(async () => {
-    if (!isE2EMode) {
-      await wait(10);
-    }
-    const boardCounts = bookmarks.reduce<Record<string, number>>(
-      (acc, bookmark) => {
-        acc[bookmark.boardId] = (acc[bookmark.boardId] ?? 0) + 1;
-        return acc;
-      },
-      {},
-    );
-    return [
-      { id: 'inbox', label: 'Inbox', count: boardCounts['inbox'] ?? 0 },
-      {
-        id: 'read-later',
-        label: 'Read Later',
-        count: boardCounts['read-later'] ?? 0,
-      },
-      { id: 'archive', label: 'Archive', count: 0 },
-    ] satisfies Board[];
-  }, [bookmarks]);
-
-  const tagsResource = useAsyncResource(async () => {
-    if (!isE2EMode) {
-      await wait(10);
-    }
-    const seedPaths = ['Inbox', 'dev', 'dev/js', 'dev/js/react', 'research/ux'];
-    return seedPaths.map((path) => createTagFromMetadata(deriveTagMetadata(path)));
-  });
-
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [expandedTagPaths, setExpandedTagPaths] = useState<Set<string>>(() =>
-    loadExpandedPaths(),
-  );
-
-  useEffect(() => {
-    if (tagsResource.data) {
-      setTags(tagsResource.data);
-    }
-  }, [tagsResource.data]);
-
-  useEffect(() => {
-    setTags((current) => {
-      const usage = new Map<string, Tag>();
-      current.forEach((tag) => {
-        usage.set(tag.id, { ...tag, usageCount: 0 });
-      });
-      bookmarks.forEach((bookmark) => {
-        bookmark.tags.forEach((tagName) => {
-          const normalized = normalizeTagPath(tagName);
-          if (!normalized) {
-            return;
-          }
-          let metadata;
-          try {
-            metadata = deriveTagMetadata(normalized);
-          } catch {
-            return;
-          }
-          const existing = usage.get(metadata.canonicalId);
-          if (existing) {
-            usage.set(metadata.canonicalId, {
-              ...existing,
-              name: metadata.leafName,
-              path: metadata.path,
-              slugParts: metadata.slugParts,
-              usageCount: existing.usageCount + 1,
-            });
-          } else {
-            usage.set(
-              metadata.canonicalId,
-              createTagFromMetadata(metadata, { usageCount: 1 }),
-            );
-          }
-        });
-      });
-      return Array.from(usage.values());
-    });
-  }, [bookmarks]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    window.localStorage.setItem(
-      TAG_TREE_EXPANDED_KEY,
-      JSON.stringify(Array.from(expandedTagPaths)),
-    );
-  }, [expandedTagPaths]);
-
-  const tagTree = useMemo(() => buildTagTree(tags), [tags]);
-
-  useEffect(() => {
-    if (!tagTree.length) {
-      return;
-    }
-    setExpandedTagPaths((current) => {
-      if (current.size > 0) {
-        return current;
-      }
-      return new Set(tagTree.map((node) => node.canonicalPath));
-    });
-  }, [tagTree]);
-
-  const flattenedTagNodes = useMemo(
-    () => flattenTagTree(tagTree, expandedTagPaths),
-    [tagTree, expandedTagPaths],
-  );
-
-  const toggleTagPath = useCallback((path: string) => {
-    if (!path) {
-      return;
-    }
-    setExpandedTagPaths((current) => {
-      const next = new Set(current);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
-  }, []);
-
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [status, setStatus] = useState<StatusMessage | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [activeBoard, setActiveBoard] = useState<string>('inbox');
-  const [orderedIds, setOrderedIds] = useState<string[]>([]);
-  const draggingId = useRef<string | null>(null);
-  const lastSelectedIndex = useRef<number | null>(null);
-  const [batchPending, setBatchPending] = useState(false);
+  const [searchEntries, setSearchEntries] = useState<SearchEntry[]>([]);
+  const searchEntriesRef = useRef<SearchEntry[]>([]);
+  const [searchSelection, setSearchSelection] = useState(-1);
+  const [saving, setSaving] = useState(false);
+
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const tagInputRef = useRef<HTMLInputElement | null>(null);
-  const [tagInputValue, setTagInputValue] = useState('');
+  const hadTabsPermissionRef = useRef(false);
+  const requestedTabsPermissionRef = useRef(false);
 
-  const parsedSearch = useMemo(() => parseSearchQuery(searchTerm), [searchTerm]);
+  useEffect(() => {
+    searchEntriesRef.current = searchEntries;
+  }, [searchEntries]);
 
-  const activeTagFilterIds = useMemo(() => {
-    const ids = parsedSearch.tags
-      .map((tag) => canonicalizeTagId(tag))
-      .filter((value): value is string => Boolean(value));
-    return new Set(ids);
-  }, [parsedSearch.tags]);
-
-  const handleSearchInput = useCallback(
-    (event: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-      setSearchTerm(event.currentTarget.value);
-    },
-    [],
-  );
-
-  const handleSidebarTagClick = useCallback((tagPath: string) => {
-    const normalizedPath = normalizeTagPath(tagPath);
-    if (!normalizedPath) {
-      return;
-    }
-    const normalizedId = canonicalizeTagId(normalizedPath);
-    if (!normalizedId) {
-      return;
-    }
-    setSearchTerm((prev) => {
-      const { text, tags: existingTags } = parseSearchQuery(prev);
-      const existingIds = new Set(existingTags.map((tag) => canonicalizeTagId(tag)).filter(Boolean));
-      if (existingIds.has(normalizedId)) {
-        return prev;
-      }
-      const tokens = [...existingTags, normalizedPath].map((tag) => formatTagToken(tag));
-      const prefix = text.length ? `${text} ` : '';
-      return `${prefix}${tokens.join(' ')}`.trim();
-    });
+  useEffect(() => {
+    const readyTimestamp = performance.now();
+    window.__LINKOSAURUS_POPUP_READY = true;
+    window.__LINKOSAURUS_POPUP_READY_TIME = readyTimestamp;
+    return () => {
+      delete window.__LINKOSAURUS_POPUP_READY;
+      delete window.__LINKOSAURUS_POPUP_READY_TIME;
+      delete window.__LINKOSAURUS_POPUP_HARNESS;
+    };
   }, []);
 
-  const addTagToBookmark = useCallback(
-    (bookmarkId: string, tagName: string) => {
-      const cleaned = normalizeTagPath(tagName);
-      if (!cleaned) {
-        return;
+  useEffect(() => {
+    let cancelled = false;
+    const loadIndex = async () => {
+      const bookmarks = await listRecentBookmarks(SEARCH_INDEX_LIMIT);
+      if (!cancelled) {
+        setSearchEntries(bookmarks.map((bookmark) => buildSearchEntry(bookmark)));
       }
-      const tagId = canonicalizeTagId(cleaned);
-      if (!tagId) {
-        return;
+    };
+    void loadIndex();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkPermissions = async () => {
+      const hasPermission = await containsTabsPermission();
+      if (mounted) {
+        hadTabsPermissionRef.current = hasPermission;
       }
-      setBookmarks((prev) =>
-        prev.map((bookmark) => {
-          if (bookmark.id !== bookmarkId) {
-            return bookmark;
-          }
-          const existing = new Set(bookmark.tags.map(canonicalizeTagId));
-          if (existing.has(tagId)) {
-            return bookmark;
-          }
-          return { ...bookmark, tags: [...bookmark.tags, cleaned] };
-        }),
-      );
-      setTagInputValue('');
-    },
-    [setBookmarks],
+    };
+    void checkPermissions();
+    return () => {
+      mounted = false;
+      if (
+        !hadTabsPermissionRef.current &&
+        requestedTabsPermissionRef.current &&
+        typeof chrome !== 'undefined' &&
+        chrome.permissions?.remove
+      ) {
+        chrome.permissions.remove({ permissions: ['tabs'] }, () => {
+          // Intentionally ignore result; best-effort cleanup.
+        });
+      }
+    };
+  }, []);
+
+  const duplicateEntry = useMemo(() => {
+    if (!url.trim()) {
+      return undefined;
+    }
+    const normalizedUrl = normalizeUrlForComparison(url).toLowerCase();
+    if (!normalizedUrl) {
+      return undefined;
+    }
+    return searchEntries.find((entry) => entry.normalizedUrl === normalizedUrl);
+  }, [searchEntries, url]);
+
+  const recentBookmarks = useMemo(
+    () => searchEntries.slice(0, RECENT_LIMIT).map((entry) => entry.bookmark),
+    [searchEntries],
   );
 
-  const removeTagFromBookmark = useCallback(
-    (bookmarkId: string, tagName: string) => {
-      const targetId = canonicalizeTagId(tagName);
-      if (!targetId) {
-        return;
+  const computeSearchResults = useCallback((term: string, entries: SearchEntry[]): SearchEntry[] => {
+    const tokens = term
+      .toLowerCase()
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) {
+      return [];
+    }
+    return entries
+      .map((entry) => {
+        const matches = tokens.every(
+          (token) =>
+            entry.tokens.some((candidate) => candidate.startsWith(token)) ||
+            entry.normalizedTitle.includes(token) ||
+            entry.normalizedUrl.includes(token),
+        );
+        if (!matches) {
+          return null;
+        }
+        const strongMatch = entry.tokens.some((candidate) => candidate.startsWith(tokens[0] ?? ''))
+          ? 0
+          : 1;
+        return { entry, score: strongMatch };
+      })
+      .filter((value): value is { entry: SearchEntry; score: number } => value !== null)
+      .sort((a, b) => {
+        if (a.score !== b.score) {
+          return a.score - b.score;
+        }
+        return b.entry.bookmark.createdAt - a.entry.bookmark.createdAt;
+      })
+      .slice(0, SEARCH_RESULTS_LIMIT)
+      .map((item) => item.entry);
+  }, []);
+
+  const hasQuery = searchTerm.trim().length > 0;
+
+  const searchResults = useMemo(
+    () => (hasQuery ? computeSearchResults(searchTerm, searchEntries) : []),
+    [computeSearchResults, hasQuery, searchEntries, searchTerm],
+  );
+
+  useEffect(() => {
+    setSearchSelection((current) => {
+      if (!hasQuery) {
+        return -1;
       }
-      setBookmarks((prev) =>
-        prev.map((bookmark) => {
-          if (bookmark.id !== bookmarkId) {
-            return bookmark;
-          }
-          return {
-            ...bookmark,
-            tags: bookmark.tags.filter((tag) => canonicalizeTagId(tag) !== targetId),
-          };
-        }),
-      );
-    },
-    [setBookmarks],
-  );
+      const maxIndex = searchResults.length - 1;
+      if (maxIndex < 0) {
+        return -1;
+      }
+      if (current < 0 || current > maxIndex) {
+        return 0;
+      }
+      return current;
+    });
+  }, [hasQuery, searchResults]);
 
-  const handleTagInputChange = useCallback(
-    (event: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-      setTagInputValue(event.currentTarget.value);
-    },
-    [],
-  );
+  const focusSearchInput = useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
-  const handleTagInputKeyDown = useCallback(
-    (bookmarkId: string, event: KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ',') {
-        event.preventDefault();
-        if (tagInputValue.trim()) {
-          addTagToBookmark(bookmarkId, tagInputValue);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '/' && !event.defaultPrevented) {
+        const target = event.target as HTMLElement | null;
+        const isTextInput =
+          target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.getAttribute('contenteditable') === 'true');
+        if (!isTextInput) {
+          event.preventDefault();
+          focusSearchInput();
         }
       } else if (event.key === 'Escape') {
-        setTagInputValue('');
-        (event.target as HTMLInputElement | null)?.blur();
-      }
-    },
-    [addTagToBookmark, tagInputValue],
-  );
-
-  const handleTagSuggestion = useCallback(
-    (bookmarkId: string, tagName: string) => {
-      addTagToBookmark(bookmarkId, tagName);
-      tagInputRef.current?.focus();
-    },
-    [addTagToBookmark],
-  );
-
-  const runBatchAction = useCallback(
-    async (type: 'tag' | 'move' | 'delete' | 'untag') => {
-      if (!selectedIds.size) {
-        return;
-      }
-      setBatchPending(true);
-      await wait(200);
-      console.log(`[Link-O-Saurus] Batch ${type} executed`, Array.from(selectedIds));
-      setBatchPending(false);
-    },
-    [selectedIds],
-  );
-
-  useEffect(() => {
-    if (!bookmarks.length) {
-      return;
-    }
-    setOrderedIds((current) =>
-      current.length ? current : bookmarks.map((bookmark) => bookmark.id),
-    );
-  }, [bookmarks]);
-
-  const orderedBookmarks = useMemo(() => {
-    if (!orderedIds.length) {
-      return bookmarks;
-    }
-    const lookup = new Map(bookmarks.map((bookmark) => [bookmark.id, bookmark]));
-    return orderedIds
-      .map((id) => lookup.get(id))
-      .filter((bookmark): bookmark is Bookmark => Boolean(bookmark));
-  }, [bookmarks, orderedIds]);
-
-  const filteredBookmarks = useMemo(() => {
-    const normalizedSearch = parsedSearch.text.toLowerCase();
-    const requiredTagIds = parsedSearch.tags
-      .map((tag) => canonicalizeTagId(tag))
-      .filter((value): value is string => Boolean(value));
-    return orderedBookmarks.filter((bookmark) => {
-      if (activeBoard && bookmark.boardId !== activeBoard) {
-        return false;
-      }
-      if (requiredTagIds.length) {
-        const bookmarkTagIds = bookmark.tags
-          .map((tag) => canonicalizeTagId(tag))
-          .filter((value): value is string => Boolean(value));
-        const matchesAll = requiredTagIds.every((tagId) =>
-          bookmarkTagIds.some((candidate) => isAncestorSlug(tagId, candidate)),
-        );
-        if (!matchesAll) {
-          return false;
+        const active = document.activeElement as HTMLElement | null;
+        if (active && typeof active.blur === 'function') {
+          active.blur();
+        } else if (typeof window.close === 'function') {
+          window.close();
         }
       }
-      if (!normalizedSearch) {
-        return true;
-      }
-      return (
-        bookmark.title.toLowerCase().includes(normalizedSearch) ||
-        bookmark.url.toLowerCase().includes(normalizedSearch) ||
-        bookmark.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
-      );
-    });
-  }, [orderedBookmarks, activeBoard, parsedSearch]);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focusSearchInput]);
 
-  const sortedTags = useMemo(
-    () => [...tags].sort((a, b) => b.usageCount - a.usageCount || a.path.localeCompare(b.path)),
-    [tags],
-  );
+  const handleOpenDashboard = useCallback(() => {
+    void openDashboard();
+  }, []);
 
-  const [tagTreeRef, tagTreeSize] = useElementSize<HTMLDivElement>();
-  const [listRef, listSize] = useElementSize<HTMLDivElement>();
-
-  const handleItemClick = useCallback(
-    (bookmark: Bookmark, index: number, event: MouseEvent | KeyboardEvent) => {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        if (
-          event instanceof MouseEvent &&
-          event.shiftKey &&
-          lastSelectedIndex.current !== null
-        ) {
-          const rangeStart = Math.min(lastSelectedIndex.current, index);
-          const rangeEnd = Math.max(lastSelectedIndex.current, index);
-          for (let i = rangeStart; i <= rangeEnd; i += 1) {
-            const id = filteredBookmarks[i]?.id;
-            if (id) {
-              next.add(id);
-            }
-          }
-        } else if (
-          (event instanceof MouseEvent && (event.ctrlKey || event.metaKey)) ||
-          (event instanceof KeyboardEvent && (event.ctrlKey || event.metaKey))
-        ) {
-          if (next.has(bookmark.id)) {
-            next.delete(bookmark.id);
-          } else {
-            next.add(bookmark.id);
-          }
-          lastSelectedIndex.current = index;
-          return next;
-        } else {
-          next.clear();
-          next.add(bookmark.id);
-        }
-        lastSelectedIndex.current = index;
-        return next;
-      });
-    },
-    [filteredBookmarks],
-  );
-
-  const handleKeyToggle = useCallback(
-    (bookmark: Bookmark, index: number, event: KeyboardEvent) => {
-      if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        handleItemClick(bookmark, index, event);
-      }
-    },
-    [handleItemClick],
-  );
-
-  const handleDragStart = useCallback(
-    (bookmark: Bookmark, _index: number, event: DragEvent) => {
-      draggingId.current = bookmark.id;
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', bookmark.id);
+  const handleOpenUrl = useCallback(
+    async (targetUrl: string) => {
+      try {
+        await openUrlInNewTab(targetUrl);
+      } catch (error) {
+        console.error(error);
+        setStatus({ tone: 'error', text: 'Tab konnte nicht geöffnet werden.' });
       }
     },
     [],
   );
 
-  const handleDragOver = useCallback((index: number, event: DragEvent) => {
-    event.preventDefault();
-    const transfer = event.dataTransfer;
-    if (transfer) {
-      transfer.dropEffect = 'move';
-    }
-  }, []);
+  const saveBookmark = useCallback(
+    async ({ title: rawTitle, url: rawUrl, tags: rawTags }: { title: string; url: string; tags?: string[] }) => {
+      const normalizedUrl = normalizeUrlForSaving(rawUrl);
+      const normalizedTitle = normalizeWhitespace(rawTitle) || extractDomain(normalizedUrl) || normalizedUrl;
+      const sourceTags = rawTags ?? [];
+      const uniqueTags = sourceTags.filter(
+        (tag, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index,
+      );
+      const now = Date.now();
+      const bookmark = await createBookmark({
+        id: crypto.randomUUID(),
+        url: normalizedUrl,
+        title: normalizedTitle,
+        tags: uniqueTags,
+        createdAt: now,
+        updatedAt: now,
+      });
+      setSearchEntries((previous) => {
+        const filtered = previous.filter((entry) => entry.bookmark.id !== bookmark.id);
+        const next = [buildSearchEntry(bookmark), ...filtered].slice(0, SEARCH_INDEX_LIMIT);
+        searchEntriesRef.current = next;
+        return next;
+      });
+      return bookmark;
+    },
+    [],
+  );
 
-  const handleDrop = useCallback((index: number, event: DragEvent) => {
-    event.preventDefault();
-    const sourceId = draggingId.current;
-    if (!sourceId) {
-      return;
-    }
-    setOrderedIds((prev) => {
-      const withoutSource = prev.filter((id) => id !== sourceId);
-      const before = withoutSource.slice(0, index);
-      const after = withoutSource.slice(index);
-      return [...before, sourceId, ...after];
-    });
-    draggingId.current = null;
-  }, []);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+  const handleQuickAddSubmit = useCallback(
+    async (event: Event) => {
+      event.preventDefault();
+      if (saving) {
         return;
       }
-
-      if (event.key === 'Delete') {
-        event.preventDefault();
-        runBatchAction('delete');
-      } else if (
-        (event.key === 'n' || event.key === 'N') &&
-        !event.altKey &&
-        !event.metaKey
-      ) {
-        event.preventDefault();
-        console.log('[Link-O-Saurus] New bookmark action triggered');
-      } else if (event.key === 't' || event.key === 'T') {
-        event.preventDefault();
-        if (selectedIds.size === 1) {
-          tagInputRef.current?.focus();
-        } else {
-          runBatchAction('tag');
-        }
-      } else if (event.key === 'm' || event.key === 'M') {
-        event.preventDefault();
-        runBatchAction('move');
-      } else if (event.key === '/') {
-        event.preventDefault();
-        searchInputRef.current?.focus();
+      setStatus(null);
+      setSaving(true);
+      try {
+        await saveBookmark({ title, url, tags });
+        setStatus({ tone: 'success', text: 'Bookmark gespeichert.' });
+        setTitle('');
+        setUrl('');
+        setTags([]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.';
+        setStatus({ tone: 'error', text: message });
+      } finally {
+        setSaving(false);
       }
-    };
+    },
+    [saveBookmark, saving, tags, title, url],
+  );
 
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [runBatchAction, selectedIds.size]);
+  const handlePrefillFromTab = useCallback(async () => {
+    setStatus(null);
+    try {
+      let hasPermission = await containsTabsPermission();
+      if (!hasPermission) {
+        requestedTabsPermissionRef.current = true;
+        hasPermission = await requestTabsPermission();
+      }
+      if (!hasPermission) {
+        setStatus({ tone: 'info', text: 'Tab-Zugriff wurde nicht erlaubt.' });
+        return;
+      }
+      const activeTab = await queryActiveTab();
+      if (!activeTab) {
+        setStatus({ tone: 'error', text: 'Aktiver Tab nicht gefunden.' });
+        return;
+      }
+      if (typeof activeTab.title === 'string' && activeTab.title.trim()) {
+        setTitle(activeTab.title.trim());
+      }
+      if (typeof activeTab.url === 'string') {
+        setUrl(activeTab.url);
+      }
+    } catch (error) {
+      console.error(error);
+      setStatus({ tone: 'error', text: 'Aktiver Tab konnte nicht gelesen werden.' });
+    }
+  }, []);
+
+  const handleSearchKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSearchSelection((current) => {
+          const next = current + 1;
+          return Math.min(next, searchResults.length - 1);
+        });
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSearchSelection((current) => {
+          const next = current - 1;
+          return Math.max(next, 0);
+        });
+      } else if (event.key === 'Enter') {
+        if (searchSelection >= 0 && searchSelection < searchResults.length) {
+          event.preventDefault();
+          void handleOpenUrl(searchResults[searchSelection]?.bookmark.url ?? '');
+        }
+      }
+    },
+    [handleOpenUrl, searchResults, searchSelection],
+  );
 
   useEffect(() => {
-    if (!isE2EMode || typeof window === 'undefined') {
-      return;
-    }
-
-    const sleep = (ms = 0) =>
-      new Promise<void>((resolve) => {
-        window.setTimeout(resolve, ms);
-      });
-
-    const harness: PopupE2EHarness = {
-      async addBookmark(input) {
-        const id = `e2e-${crypto.randomUUID()}`;
-        const record: Bookmark = {
-          id,
-          title: input.title,
-          url: input.url,
-          tags: [...(input.tags ?? [])],
-          boardId: input.boardId ?? activeBoard ?? 'inbox',
-          createdAt: new Date().toISOString(),
-        };
-        setBookmarks((prev) => [record, ...prev]);
-        setOrderedIds((prev) => [id, ...prev.filter((existing) => existing !== id)]);
-        await sleep();
-        return id;
+    const harness: PopupHarness = {
+      addBookmark: async (input) => {
+        const bookmark = await saveBookmark({ title: input.title, url: input.url, tags: input.tags });
+        return bookmark.id;
       },
-      async search(term) {
+      search: async (term: string) => {
         setSearchTerm(term);
-        await sleep();
       },
-      async clearSearch() {
+      clearSearch: async () => {
         setSearchTerm('');
-        await sleep();
       },
-      async selectRange(start, end) {
-        const lower = Math.max(0, Math.min(start, end));
-        const upper = Math.max(0, Math.max(start, end));
-        const ids: string[] = [];
-        for (let index = lower; index <= upper && index < filteredBookmarks.length; index += 1) {
-          const bookmark = filteredBookmarks[index];
-          if (bookmark) {
-            ids.push(bookmark.id);
-          }
-        }
-        setSelectedIds(new Set(ids));
-        await sleep();
+      selectRange: async () => {
+        // Popup no longer exposes range selection in the simplified UI.
       },
-      async getSelectedIds() {
-        return Array.from(selectedIds);
+      getSelectedIds: async () => [],
+      runBatch: async () => {
+        // Batch actions removed from simplified popup.
       },
-      async runBatch(action) {
-        await runBatchAction(action);
-        await sleep(220);
+      importBulk: async () => 0,
+      visibleTitles: async (limit = 10) => {
+        const normalizedLimit = Math.max(0, Math.trunc(limit));
+        return searchEntriesRef.current
+          .slice(0, normalizedLimit > 0 ? normalizedLimit : searchEntriesRef.current.length)
+          .map((entry) => entry.bookmark.title);
       },
-      async importBulk(count) {
-        const timestamp = Date.now();
-        const additions: Bookmark[] = Array.from({ length: count }).map((_, index) => ({
-          id: `import-${timestamp}-${index}`,
-          title: `Imported ${index + 1}`,
-          url: `https://imported.example/${index + 1}`,
-          tags: [],
-          boardId: 'inbox',
-          createdAt: new Date(Date.now() - index * 1000).toISOString(),
-        }));
-        let total = 0;
-        setBookmarks((prev) => {
-          total = prev.length + additions.length;
-          return [...prev, ...additions];
-        });
-        setOrderedIds((prev) => [...prev, ...additions.map((bookmark) => bookmark.id)]);
-        await sleep();
-        return total;
-      },
-      async visibleTitles(limit = 10) {
-        return filteredBookmarks.slice(0, Math.max(0, limit)).map((bookmark) => bookmark.title);
-      },
-    };
-
-    const createSessionTabs = (count: number): SessionPack['tabs'] =>
-      Array.from({ length: count }).map((_, index) => ({
-        url: `https://example.com/session-${index + 1}`,
-        title: `Session Tab ${index + 1}`,
-        favIconUrl: undefined,
-      }));
-
-    const testChannel = async (
-      message: BackgroundRequest,
-    ): Promise<BackgroundResponseSuccess> => {
-      switch (message.type) {
-        case 'session.saveCurrentWindow': {
-          const session: SessionPack = {
-            id: crypto.randomUUID(),
-            title:
-              message.title && message.title.trim().length
-                ? message.title
-                : `E2E Session ${new Date().toLocaleString()}`,
-            tabs: createSessionTabs(5),
-            savedAt: Date.now(),
-          };
-          await createSession(session);
-          return { type: 'session.saveCurrentWindow.result', session };
-        }
-        case 'session.openAll': {
-          const session = await getSession(message.sessionId);
-          const opened = session?.tabs.length ?? 0;
-          return { type: 'session.openAll.result', opened };
-        }
-        case 'session.openSelected': {
-          const session = await getSession(message.sessionId);
-          const opened = session
-            ? message.tabIndexes.filter((index) => session.tabs[index])
-                .length
-            : 0;
-          return { type: 'session.openSelected.result', opened };
-        }
-        case 'session.delete': {
-          await deleteSession(message.sessionId);
-          return { type: 'session.delete.result', sessionId: message.sessionId };
-        }
-        case 'settings.applyNewTab': {
-          return { type: 'settings.applyNewTab.result', enabled: message.enabled };
-        }
-        case 'readLater.refreshBadge': {
-          return { type: 'readLater.refreshBadge.result', count: 0 };
-        }
-        default: {
-          throw new Error('Unsupported test channel message.');
-        }
-      }
     };
 
     window.__LINKOSAURUS_POPUP_HARNESS = harness;
-    window.__LINKOSAURUS_POPUP_READY = true;
-    window.__LINKOSAURUS_POPUP_READY_TIME = performance.now();
-    globalThis.__LINKOSAURUS_TEST_CHANNEL = testChannel;
 
     return () => {
       if (window.__LINKOSAURUS_POPUP_HARNESS === harness) {
         delete window.__LINKOSAURUS_POPUP_HARNESS;
       }
-      if (window.__LINKOSAURUS_POPUP_READY) {
-        delete window.__LINKOSAURUS_POPUP_READY;
-      }
-      if (window.__LINKOSAURUS_POPUP_READY_TIME) {
-        delete window.__LINKOSAURUS_POPUP_READY_TIME;
-      }
-      if (globalThis.__LINKOSAURUS_TEST_CHANNEL === testChannel) {
-        delete globalThis.__LINKOSAURUS_TEST_CHANNEL;
-      }
     };
-  }, [
-    activeBoard,
-    filteredBookmarks,
-    isE2EMode,
-    runBatchAction,
-    selectedIds,
-    setBookmarks,
-    setOrderedIds,
-  ]);
-
-  const selectedFirstId = selectedIds.values().next().value as string | undefined;
-  const selectedBookmark = useMemo(
-    () => filteredBookmarks.find((bookmark) => bookmark.id === selectedFirstId),
-    [filteredBookmarks, selectedFirstId],
-  );
-
-  const tagSuggestions = useMemo(() => {
-    const normalizedQuery = tagInputValue.trim().toLowerCase();
-    const selectedTagIds = new Set(
-      (selectedBookmark?.tags ?? [])
-        .map((tag) => canonicalizeTagId(tag))
-        .filter((value): value is string => Boolean(value)),
-    );
-    return sortedTags
-      .filter((tag) => !selectedTagIds.has(tag.id))
-      .filter((tag) => !normalizedQuery || tag.path.toLowerCase().includes(normalizedQuery))
-      .slice(0, 6);
-  }, [sortedTags, selectedBookmark, tagInputValue]);
-
-  const tagTreeItemData = useMemo(
-    () => ({
-      items: flattenedTagNodes,
-      onToggle: toggleTagPath,
-      onSelect: handleSidebarTagClick,
-      activeFilters: activeTagFilterIds,
-    }),
-    [flattenedTagNodes, toggleTagPath, handleSidebarTagClick, activeTagFilterIds],
-  );
-
-  useEffect(() => {
-    setTagInputValue('');
-  }, [selectedFirstId]);
-
-  const batchSummary = `${selectedIds.size} ausgewählt`;
+  }, [saveBookmark]);
 
   return (
-    <main class="popup-root">
-      <section class="pane sidebar" aria-label="Boards and tags">
-        <header class="pane-header">Boards</header>
-        <nav class="board-list" aria-label="Boards">
-          {(boardsResource.data ?? []).map((board) => (
-            <button
-              type="button"
-              class={`board-item${board.id === activeBoard ? ' is-active' : ''}`}
-              onClick={() => setActiveBoard(board.id)}
-            >
-              <span>{board.label}</span>
-              <span class="board-count">{board.count}</span>
-            </button>
-          ))}
-        </nav>
-        <header class="pane-header">Tags</header>
-        <div
-          class="tag-tree-container"
-          aria-label="Tags"
-          role="tree"
-          ref={tagTreeRef}
-        >
-          {flattenedTagNodes.length ? (
-            <VirtualizedTagTree
-              height={Math.max(1, tagTreeSize.height)}
-              width={Math.max(1, tagTreeSize.width)}
-              itemSize={28}
-              itemCount={flattenedTagNodes.length}
-              itemData={tagTreeItemData}
-              itemKey={(index, data) => data.items[index]?.node.canonicalPath ?? index}
-            >
-              {(props) => <TagTreeRow {...props} />}
-            </VirtualizedTagTree>
-          ) : (
-            <div class="tag-tree-empty">Keine Tags verfügbar</div>
-          )}
+    <div className="popup-app">
+      <header className="popup-header">
+        <div className="popup-header__title" aria-label="Link-O-Saurus">
+          <span className="popup-header__icon" aria-hidden="true">
+            🦖
+          </span>
+          <h1>Link-O-Saurus</h1>
         </div>
-      </section>
-      <section class="pane bookmark-pane" aria-label="Bookmarks">
-        <div class="bookmark-toolbar">
-          <input
-            ref={searchInputRef}
-            type="search"
-            value={searchTerm}
-            onInput={handleSearchInput}
-            placeholder="Search bookmarks (/)"
-          />
-          <div class="toolbar-actions">
-            <span>{batchSummary}</span>
-            <button
-              type="button"
-              onClick={() => runBatchAction('tag')}
-              disabled={!selectedIds.size}
-            >
-              Tag hinzufügen
-            </button>
-            <button
-              type="button"
-              onClick={() => runBatchAction('untag')}
-              disabled={!selectedIds.size}
-            >
-              Tag entfernen
-            </button>
-            <button
-              type="button"
-              onClick={() => runBatchAction('move')}
-              disabled={!selectedIds.size}
-            >
-              Verschieben
-            </button>
-            <button
-              type="button"
-              onClick={() => runBatchAction('delete')}
-              disabled={!selectedIds.size}
-            >
-              Löschen
-            </button>
+        <button type="button" className="primary" onClick={handleOpenDashboard} aria-label="Zum Dashboard">
+          Zum Dashboard
+        </button>
+      </header>
+
+      <main className="popup-content">
+        <section className="section" aria-labelledby="quick-add-heading">
+          <div className="section-header">
+            <h2 id="quick-add-heading">Schnell hinzufügen</h2>
           </div>
-        </div>
-        <div class="bookmark-list" ref={listRef} role="listbox" aria-multiselectable="true">
-          {bookmarksResource.showSpinner ? (
-            <div class="spinner" aria-live="polite">
-              Lädt …
+          <form className="quick-add-form" onSubmit={(event) => void handleQuickAddSubmit(event as unknown as Event)}>
+            <label className="field">
+              <span id="quick-add-title-label" className="field-label">
+                Titel
+              </span>
+              <input
+                id="quick-add-title"
+                name="title"
+                value={title}
+                onInput={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
+                placeholder="Titel eingeben"
+                autoComplete="off"
+              />
+            </label>
+            <label className="field">
+              <span id="quick-add-url-label" className="field-label">
+                URL
+              </span>
+              <div className="field-inline">
+                <input
+                  id="quick-add-url"
+                  name="url"
+                  type="url"
+                  value={url}
+                  onInput={(event) => setUrl((event.currentTarget as HTMLInputElement).value)}
+                  placeholder="https://…"
+                  required
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void handlePrefillFromTab()}
+                  aria-label="Aus aktuellem Tab übernehmen"
+                >
+                  Tab übernehmen
+                </button>
+              </div>
+            </label>
+            <label className="field">
+              <span id="quick-add-tags-label" className="field-label">
+                Tags
+              </span>
+              <TagInput id="quick-add-tags" tags={tags} onChange={setTags} />
+            </label>
+            {duplicateEntry ? (
+              <p className="status-message status-warning" role="status">
+                Bereits vorhanden: {duplicateEntry.bookmark.title}
+              </p>
+            ) : null}
+            {status ? (
+              <p className={`status-message status-${status.tone}`} role="status" aria-live="polite">
+                {status.text}
+              </p>
+            ) : null}
+            <div className="actions">
+              <button type="submit" className="primary" disabled={saving} aria-label="Bookmark speichern">
+                {saving ? 'Speichern…' : 'Speichern'}
+              </button>
             </div>
+          </form>
+        </section>
+
+        <section className="section" aria-labelledby="recent-heading">
+          <div className="section-header">
+            <h2 id="recent-heading">Kürzlich hinzugefügt</h2>
+          </div>
+          {recentBookmarks.length === 0 ? (
+            <p className="empty-state">Noch keine Bookmarks gespeichert.</p>
           ) : (
-            <VirtualizedList
-              height={Math.max(1, listSize.height)}
-              width={Math.max(1, listSize.width)}
-              itemSize={64}
-              itemCount={filteredBookmarks.length}
-              itemData={{
-                bookmarks: filteredBookmarks,
-                selection: selectedIds,
-                onItemClick: handleItemClick,
-                onDragStart: handleDragStart,
-                onDragOver: handleDragOver,
-                onDrop: handleDrop,
-                onKeyToggle: handleKeyToggle,
-                onDragEnd: () => {
-                  draggingId.current = null;
-                },
-              }}
-              itemKey={(index, data) => data.bookmarks[index]?.id ?? index}
-            >
-              {(props) => BookmarkRow(props)}
-            </VirtualizedList>
+            <ul className="recent-list" role="list">
+              {recentBookmarks.map((bookmark) => (
+                <li key={bookmark.id}>
+                  <button
+                    type="button"
+                    className="recent-item"
+                    onClick={() => void handleOpenUrl(bookmark.url)}
+                    aria-label={`${bookmark.title} öffnen`}
+                  >
+                    <BookmarkFavicon bookmark={bookmark} />
+                    <span className="recent-item__title">{bookmark.title || bookmark.url}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-      </section>
-      <aside class="pane detail-pane" aria-label="Details und Sessions">
-        <header class="pane-header">Details & Sessions</header>
-        <ReadLaterList />
-        {batchPending ? (
-          <div class="spinner" aria-live="polite">
-            Aktion läuft …
+        </section>
+
+        <section className="section" aria-labelledby="search-heading">
+          <div className="section-header">
+            <h2 id="search-heading">Mini-Suche</h2>
           </div>
-        ) : selectedBookmark ? (
-          <div class="detail-card">
-            <h2>{selectedBookmark.title}</h2>
-            <p class="detail-url">{selectedBookmark.url}</p>
-            <p>Erstellt: {new Date(selectedBookmark.createdAt).toLocaleString()}</p>
-            <div class="detail-tags">
-              <div class="tag-editor" role="group" aria-label="Tags bearbeiten">
-                <div class="tag-chip-list">
-                  {selectedBookmark.tags.length ? (
-                    selectedBookmark.tags.map((tag) => (
-                      <span key={tag} class="tag-chip">
-                        <span class="tag-chip__label">#{tag}</span>
-                        <button
-                          type="button"
-                          class="tag-chip__remove"
-                          aria-label={`Tag ${tag} entfernen`}
-                          onClick={() => removeTagFromBookmark(selectedBookmark.id, tag)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))
-                  ) : (
-                    <span class="tag-chip tag-chip--empty">Keine Tags</span>
-                  )}
-                </div>
-                <div class="tag-input-row">
-                  <input
-                    ref={tagInputRef}
-                    class="tag-input"
-                    type="text"
-                    value={tagInputValue}
-                    onInput={handleTagInputChange}
-                    onKeyDown={(event: KeyboardEvent) =>
-                      handleTagInputKeyDown(selectedBookmark.id, event)}
-                    placeholder="Tag hinzufügen (Enter)"
-                    aria-label="Tag hinzufügen"
-                  />
-                  {tagSuggestions.length ? (
-                    <ul class="tag-suggestion-list" role="listbox">
-                      {tagSuggestions.map((tag) => (
-                        <li key={tag.id} class="tag-suggestion-item">
-                          <button
-                            type="button"
-                            class="tag-suggestion-button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => handleTagSuggestion(selectedBookmark.id, tag.path)}
-                          >
-                            <span>#{tag.path}</span>
-                            <span class="tag-suggestion-count">{tag.usageCount}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-            </div>
+          <div className="search-box">
+            <input
+              ref={searchInputRef}
+              type="search"
+              value={searchTerm}
+              onInput={(event) => setSearchTerm((event.currentTarget as HTMLInputElement).value)}
+              onKeyDown={(event) => handleSearchKeyDown(event as unknown as KeyboardEvent)}
+              placeholder="Suchen (/)"
+              aria-controls="search-results"
+              aria-label="Bookmarks durchsuchen"
+              autoComplete="off"
+            />
+            <ul id="search-results" className="search-results" role="listbox" aria-live="polite">
+              {searchResults.map((entry, index) => (
+                <li key={entry.bookmark.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === searchSelection}
+                    className={`search-result${index === searchSelection ? ' is-active' : ''}`}
+                    onClick={() => void handleOpenUrl(entry.bookmark.url)}
+                    onMouseEnter={() => setSearchSelection(index)}
+                  >
+                    <span className="search-result__title">{entry.bookmark.title}</span>
+                    <span className="search-result__meta">{entry.domain}</span>
+                  </button>
+                </li>
+              ))}
+              {hasQuery && searchResults.length === 0 ? (
+                <li className="search-empty" role="status">
+                  Keine Treffer
+                </li>
+              ) : null}
+            </ul>
           </div>
-          <CommentsSection
-            bookmarkId={selectedBookmark.id}
-            bookmarkTitle={selectedBookmark.title}
-          />
-        </div>
-      ) : (
-        <p class="detail-placeholder">Mehrfachauswahl für Batch-Aktionen verwenden.</p>
-      )}
-        <SessionManager />
-      </aside>
-    </main>
+        </section>
+      </main>
+
+      <footer className="popup-footer">
+        <button type="button" className="link" onClick={handleOpenDashboard} aria-label="Mehr Funktionen im Dashboard">
+          Mehr Funktionen im Dashboard
+        </button>
+      </footer>
+    </div>
   );
 };
 
