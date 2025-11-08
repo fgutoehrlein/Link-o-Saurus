@@ -32,6 +32,7 @@ interface EntryDefinition {
   html?: {
     title: string;
   };
+  cssFileName?: string;
 }
 
 const entries: EntryDefinition[] = [
@@ -52,7 +53,8 @@ const entries: EntryDefinition[] = [
     outSubDir: 'popup',
     fileName: 'main.js',
     name: 'feathermarks-popup',
-    html: { title: 'Feathermarks' }
+    html: { title: 'Feathermarks' },
+    cssFileName: 'style.css'
   },
   {
     entry: path.join(srcDir, 'options/main.tsx'),
@@ -106,6 +108,7 @@ async function writeHtmlShell(entry: EntryDefinition) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${entry.html.title}</title>
+    ${entry.cssFileName ? `<link rel="stylesheet" href="./${entry.cssFileName}" />` : ''}
   </head>
   <body>
     <div id="root"></div>
