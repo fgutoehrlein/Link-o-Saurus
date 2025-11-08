@@ -60,7 +60,7 @@ test.describe('Link-O-Saurus extension loadup', () => {
       pageErrors.push(error.message);
     });
 
-    await page.goto(`chrome-extension://${extensionId}/popup/index.html?e2e=1&loadup=1`);
+    await page.goto(`chrome-extension://${extensionId}/popup.html?e2e=1&loadup=1`);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(
       () => window.__LINKOSAURUS_POPUP_READY === true,
