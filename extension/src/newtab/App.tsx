@@ -200,6 +200,13 @@ const formatUrl = (rawUrl: string): string => {
 
 const fallbackBoardIcon = (title: string): string => title.slice(0, 2).toUpperCase();
 
+declare global {
+  interface Window {
+    __LINKOSAURUS_NEWTAB_READY?: boolean;
+    __LINKOSAURUS_NEWTAB_READY_TIME?: number;
+  }
+}
+
 const App: FunctionalComponent = () => {
   const [boards, setBoards] = useState<Board[]>([]);
   const [favorites, setFavorites] = useState<Bookmark[]>([]);
@@ -296,6 +303,21 @@ const App: FunctionalComponent = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (loading) {
+      return;
+    }
+    window.__LINKOSAURUS_NEWTAB_READY = true;
+    window.__LINKOSAURUS_NEWTAB_READY_TIME = performance.now();
+    return () => {
+      delete window.__LINKOSAURUS_NEWTAB_READY;
+      delete window.__LINKOSAURUS_NEWTAB_READY_TIME;
+    };
+  }, [loading]);
 
   const handleDisable = useCallback(async () => {
     setIsDisabling(true);

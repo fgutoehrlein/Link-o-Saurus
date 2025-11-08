@@ -1,5 +1,18 @@
 import type { SessionPack } from './types';
 
+declare global {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Window {
+    __LINKOSAURUS_TEST_CHANNEL?: (
+      message: BackgroundRequest,
+    ) => Promise<BackgroundResponseSuccess>;
+  }
+  // eslint-disable-next-line no-var
+  var __LINKOSAURUS_TEST_CHANNEL: ((
+    message: BackgroundRequest,
+  ) => Promise<BackgroundResponseSuccess>) | undefined;
+}
+
 type SessionMessageType =
   | 'session.saveCurrentWindow'
   | 'session.openAll'
@@ -81,6 +94,14 @@ export const sendBackgroundMessage = async (
   message: BackgroundRequest,
 ): Promise<BackgroundResponseSuccess> =>
   new Promise<BackgroundResponseSuccess>((resolve, reject) => {
+    const testChannel = globalThis.__LINKOSAURUS_TEST_CHANNEL;
+    if (typeof testChannel === 'function') {
+      testChannel(message)
+        .then(resolve)
+        .catch(reject);
+      return;
+    }
+
     chrome.runtime.sendMessage(message, (rawResponse) => {
       const lastError = chrome.runtime.lastError;
       if (lastError) {

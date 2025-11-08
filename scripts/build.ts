@@ -123,6 +123,9 @@ function createViteConfig(entry: EntryDefinition): InlineConfig {
     configFile: false,
     publicDir: false,
     plugins: [preact()],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(modeArg === 'build' ? 'production' : 'development'),
+    },
     resolve: {
       alias: {
         '~shared': path.join(srcDir, 'shared')
