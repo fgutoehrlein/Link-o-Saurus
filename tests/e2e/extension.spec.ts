@@ -10,6 +10,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+declare global {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface Window {
+    __LINKOSAURUS_DASHBOARD_READY?: boolean;
+    __LINKOSAURUS_DASHBOARD_READY_TIME?: number;
+  }
+}
+
 const extensionPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -128,7 +136,7 @@ test.describe('Link-O-Saurus extension', () => {
     await page.close();
   });
 
-  test('meets popup and new tab performance budgets', async () => {
+  test('meets popup and dashboard performance budgets', async () => {
     const popupPage = await context.newPage();
     await openPopup(popupPage, extensionId);
     await popupPage.waitForLoadState('load');
@@ -147,14 +155,14 @@ test.describe('Link-O-Saurus extension', () => {
     expect(popupMetrics.domInteractive).toBeLessThanOrEqual(100);
 
     const newTabPage = await context.newPage();
-    await newTabPage.goto(`chrome-extension://${extensionId}/newtab/index.html?e2e=1`);
-    await newTabPage.waitForFunction(() => window.__LINKOSAURUS_NEWTAB_READY === true);
+    await newTabPage.goto(`chrome-extension://${extensionId}/dashboard.html?e2e=1`);
+    await newTabPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
     const newTabMetrics = await newTabPage.evaluate(() => {
       const nav = performance.getEntriesByType('navigation')[0] as
         | PerformanceNavigationTiming
         | undefined;
-      const readyTime = window.__LINKOSAURUS_NEWTAB_READY_TIME ?? nav?.domInteractive ?? Number.POSITIVE_INFINITY;
+      const readyTime = window.__LINKOSAURUS_DASHBOARD_READY_TIME ?? nav?.domInteractive ?? Number.POSITIVE_INFINITY;
       return {
         domInteractive: nav?.domInteractive ?? Number.POSITIVE_INFINITY,
         readyTime,
@@ -169,6 +177,6 @@ test.describe('Link-O-Saurus extension', () => {
 });
 
 async function openPopup(page: Page, extensionId: string): Promise<void> {
-  await page.goto(`chrome-extension://${extensionId}/popup/index.html?e2e=1`);
+  await page.goto(`chrome-extension://${extensionId}/popup.html?e2e=1`);
   await page.waitForLoadState('domcontentloaded');
 }

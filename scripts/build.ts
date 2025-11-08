@@ -23,11 +23,12 @@ const distDir = path.resolve(rootDir, 'dist', target);
 
 interface EntryDefinition {
   entry: string;
-  outSubDir: string;
+  outSubDir?: string;
   fileName: string;
   name: string;
   html?: {
     title: string;
+    fileName: string;
   };
   cssFileName?: string;
 }
@@ -35,7 +36,7 @@ interface EntryDefinition {
 const entries: EntryDefinition[] = [
   {
     entry: path.join(srcDir, 'background/sw.ts'),
-    outSubDir: 'background',
+    outSubDir: '',
     fileName: 'sw.js',
     name: 'feathermarks-background'
   },
@@ -47,24 +48,24 @@ const entries: EntryDefinition[] = [
   },
   {
     entry: path.join(srcDir, 'popup/main.tsx'),
-    outSubDir: 'popup',
-    fileName: 'main.js',
+    outSubDir: '',
+    fileName: 'popup.js',
     name: 'feathermarks-popup',
-    html: { title: 'Feathermarks' },
+    html: { title: 'Feathermarks', fileName: 'popup.html' },
   },
   {
     entry: path.join(srcDir, 'options/main.tsx'),
-    outSubDir: 'options',
-    fileName: 'main.js',
+    outSubDir: '',
+    fileName: 'options.js',
     name: 'feathermarks-options',
-    html: { title: 'Feathermarks Options' }
+    html: { title: 'Feathermarks Options', fileName: 'options.html' }
   },
   {
-    entry: path.join(srcDir, 'newtab/main.tsx'),
-    outSubDir: 'newtab',
-    fileName: 'main.js',
-    name: 'feathermarks-newtab',
-    html: { title: 'Feathermarks New Tab (Preview)' }
+    entry: path.join(srcDir, 'dashboard/main.tsx'),
+    outSubDir: '',
+    fileName: 'dashboard.js',
+    name: 'feathermarks-dashboard',
+    html: { title: 'Feathermarks Dashboard', fileName: 'dashboard.html' }
   }
 ];
 
@@ -95,7 +96,7 @@ async function copyManifest() {
 async function writeHtmlShell(entry: EntryDefinition, cssFiles: readonly string[] = []) {
   if (!entry.html) return;
 
-  const outDir = path.join(distDir, entry.outSubDir);
+  const outDir = path.join(distDir, entry.outSubDir ?? '');
   await fs.mkdir(outDir, { recursive: true });
   const cssLinks = cssFiles.map((file) => `<link rel="stylesheet" href="./${file}" />`);
   const headLines = [
@@ -116,13 +117,13 @@ ${headLines.map((line) => `    ${line}`).join('\n')}
   </body>
 </html>
 `;
-  await fs.writeFile(path.join(outDir, 'index.html'), html, 'utf-8');
+  await fs.writeFile(path.join(outDir, entry.html.fileName), html, 'utf-8');
 }
 
 async function collectCssFilesFromDisk(entry: EntryDefinition): Promise<string[]> {
   if (!entry.html) return [];
 
-  const outDir = path.join(distDir, entry.outSubDir);
+  const outDir = path.join(distDir, entry.outSubDir ?? '');
 
   const gather = async (dir: string, baseDir: string): Promise<string[]> => {
     let dirents: Dirent[];
@@ -173,7 +174,7 @@ function isRollupEndEvent(event: RollupWatcherEvent): boolean {
 }
 
 function createViteConfig(entry: EntryDefinition): InlineConfig {
-  const outDir = path.join(distDir, entry.outSubDir);
+  const outDir = path.join(distDir, entry.outSubDir ?? '');
 
   return {
     configFile: false,

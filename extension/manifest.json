@@ -4,14 +4,36 @@
   "version": "0.0.1",
   "description": "Minimal scaffold for the Feathermarks browser extension.",
   "action": {
-    "default_popup": "popup/index.html"
+    "default_popup": "popup.html"
   },
-  "options_page": "options/index.html",
   "background": {
-    "service_worker": "background/sw.js",
+    "service_worker": "sw.js",
     "type": "module"
   },
-  "permissions": ["storage", "contextMenus", "scripting", "activeTab"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage"],
   "optional_permissions": ["tabs"],
-  "host_permissions": []
+  "host_permissions": [],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dashboard.html",
+        "dashboard.js",
+        "options.html",
+        "options.js",
+        "assets/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L"
+      }
+    }
+  }
 }

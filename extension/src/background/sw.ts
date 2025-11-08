@@ -14,7 +14,7 @@ import { isBackgroundRequest } from '../shared/messaging';
 import type { SessionPack } from '../shared/types';
 
 const CONTEXT_MENU_ID = 'feathermarks-context-save';
-const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('newtab/index.html');
+const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('dashboard.html');
 const CHROME_DEFAULT_NEW_TAB_URLS = new Set([
   'chrome://newtab/',
   'chrome-search://local-ntp/local-ntp.html',
