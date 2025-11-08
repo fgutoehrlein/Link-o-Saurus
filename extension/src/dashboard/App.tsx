@@ -43,6 +43,13 @@ import { canonicalizeTagId, normalizeTagList, normalizeTagPath } from '../shared
 import { normalizeUrl } from '../shared/url';
 import './App.css';
 
+declare global {
+  interface Window {
+    __LINKOSAURUS_DASHBOARD_READY?: boolean;
+    __LINKOSAURUS_DASHBOARD_READY_TIME?: number;
+  }
+}
+
 type BookmarkListEntry = {
   readonly id: string;
   readonly bookmark: Bookmark;
@@ -391,6 +398,13 @@ const DashboardApp: FunctionalComponent = () => {
   const importWorkerInstanceRef = useRef<Worker | null>(null);
 
   useEffect(() => {
+    return () => {
+      delete window.__LINKOSAURUS_DASHBOARD_READY;
+      delete window.__LINKOSAURUS_DASHBOARD_READY_TIME;
+    };
+  }, []);
+
+  useEffect(() => {
     const handleResize = () => {
       setViewportWidth(Math.max(window.innerWidth, MIN_RESIZE_WIDTH));
     };
@@ -553,9 +567,17 @@ const DashboardApp: FunctionalComponent = () => {
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
         }
+        if (!cancelled) {
+          window.__LINKOSAURUS_DASHBOARD_READY = true;
+          window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
+        }
       } catch (error) {
         console.error('Failed to initialize dashboard data', error);
         setStatusMessage('Initialdaten konnten nicht geladen werden.');
+        if (!cancelled) {
+          window.__LINKOSAURUS_DASHBOARD_READY = true;
+          window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
+        }
       }
     })();
     return () => {
