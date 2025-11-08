@@ -29,6 +29,7 @@ interface EntryDefinition {
   html?: {
     title: string;
   };
+  cssFileName?: string;
 }
 
 const entries: EntryDefinition[] = [
