@@ -1,5 +1,5 @@
 import { expose } from 'comlink';
-import { Document } from 'flexsearch';
+import FlexSearch from 'flexsearch';
 import type { EnrichedDocumentSearchResultSetUnit, Id } from 'flexsearch';
 import type { Bookmark } from './types';
 import { canonicalizeTagId, isAncestorSlug, normalizeTagList } from './tag-utils';
@@ -39,7 +39,7 @@ let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
 
 function createDocumentIndex() {
-  return new Document<BookmarkDocument, true>({
+  return new FlexSearch.Document<BookmarkDocument, true>({
     tokenize: 'forward',
     cache: 100,
     document: {

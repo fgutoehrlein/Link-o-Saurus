@@ -11,6 +11,9 @@ vi.mock('flexsearch', () => {
 
   return {
     Document: MockDocument,
+    default: {
+      Document: MockDocument,
+    },
   };
 });
 
