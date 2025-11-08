@@ -3,11 +3,8 @@ import preact from '@preact/preset-vite';
 import chokidar from 'chokidar';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-
-type RollupWatcher = {
-  close(): Promise<void>;
-  on(event: string, callback: (...args: unknown[]) => void): void;
-};
+import type { Dirent } from 'node:fs';
+import type { RollupOutput, RollupWatcher, RollupWatcherEvent } from 'rollup';
 
 const modeArg = process.argv[2] ?? 'build';
 const target = process.argv[3] ?? 'chrome';
@@ -54,7 +51,6 @@ const entries: EntryDefinition[] = [
     fileName: 'main.js',
     name: 'feathermarks-popup',
     html: { title: 'Feathermarks' },
-    cssFileName: 'style.css'
   },
   {
     entry: path.join(srcDir, 'options/main.tsx'),
@@ -96,19 +92,23 @@ async function copyManifest() {
   await fs.writeFile(outPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
 }
 
-async function writeHtmlShell(entry: EntryDefinition) {
+async function writeHtmlShell(entry: EntryDefinition, cssFiles: readonly string[] = []) {
   if (!entry.html) return;
 
   const outDir = path.join(distDir, entry.outSubDir);
   await fs.mkdir(outDir, { recursive: true });
+  const cssLinks = cssFiles.map((file) => `<link rel="stylesheet" href="./${file}" />`);
+  const headLines = [
+    '<meta charset="utf-8" />',
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `<title>${entry.html.title}</title>`,
+    ...cssLinks,
+  ];
   const html = `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${entry.html.title}</title>
-    ${entry.cssFileName ? `<link rel="stylesheet" href="./${entry.cssFileName}" />` : ''}
+${headLines.map((line) => `    ${line}`).join('\n')}
   </head>
   <body>
     <div id="root"></div>
@@ -117,6 +117,59 @@ async function writeHtmlShell(entry: EntryDefinition) {
 </html>
 `;
   await fs.writeFile(path.join(outDir, 'index.html'), html, 'utf-8');
+}
+
+async function collectCssFilesFromDisk(entry: EntryDefinition): Promise<string[]> {
+  if (!entry.html) return [];
+
+  const outDir = path.join(distDir, entry.outSubDir);
+
+  const gather = async (dir: string, baseDir: string): Promise<string[]> => {
+    let dirents: Dirent[];
+    try {
+      dirents = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+
+    const collected: string[] = [];
+
+    for (const dirent of dirents) {
+      const absolute = path.join(dir, dirent.name);
+      const relative = path.relative(baseDir, absolute).split(path.sep).join('/');
+
+      if (dirent.isDirectory()) {
+        collected.push(...(await gather(absolute, baseDir)));
+      } else if (dirent.isFile() && dirent.name.endsWith('.css')) {
+        collected.push(relative);
+      }
+    }
+
+    return collected;
+  };
+
+  const cssFiles = await gather(outDir, outDir);
+  cssFiles.sort();
+  return cssFiles;
+}
+
+function extractCssFiles(result: RollupOutput | RollupOutput[]): string[] {
+  const outputs = Array.isArray(result) ? result : [result];
+  const files = new Set<string>();
+
+  for (const output of outputs) {
+    for (const item of output.output) {
+      if (item.type === 'asset' && typeof item.fileName === 'string' && item.fileName.endsWith('.css')) {
+        files.add(item.fileName);
+      }
+    }
+  }
+
+  return [...files].sort();
+}
+
+function isRollupEndEvent(event: RollupWatcherEvent): boolean {
+  return event.code === 'END';
 }
 
 function createViteConfig(entry: EntryDefinition): InlineConfig {
@@ -162,7 +215,7 @@ async function run() {
   await copyManifest();
   await Promise.all(entries.map((entry) => writeHtmlShell(entry)));
 
-  const watchers: RollupWatcher[] = [];
+  const activeWatchers: { watcher: RollupWatcher; entry: EntryDefinition }[] = [];
 
   for (const entry of entries) {
     const config = createViteConfig(entry);
@@ -173,11 +226,26 @@ async function run() {
     const result = await build(config);
 
     if (isWatcher(result)) {
-      watchers.push(result);
+      activeWatchers.push({ watcher: result, entry });
+    } else {
+      const cssFiles = extractCssFiles(result as RollupOutput | RollupOutput[]);
+      await writeHtmlShell(entry, cssFiles);
     }
   }
 
   if (watchRequested) {
+    for (const { watcher, entry } of activeWatchers) {
+      watcher.on('event', (event) => {
+        if (isRollupEndEvent(event as RollupWatcherEvent)) {
+          collectCssFilesFromDisk(entry)
+            .then((cssFiles) => writeHtmlShell(entry, cssFiles))
+            .catch((error) => {
+              console.error(`Failed to update HTML shell for ${entry.name}:`, error);
+            });
+        }
+      });
+    }
+
     const manifestWatcher = chokidar.watch(path.join(extensionDir, 'manifest.json'), {
       ignoreInitial: true
     });
@@ -192,7 +260,16 @@ async function run() {
     await new Promise(() => undefined);
   }
 
-  return watchers;
+  for (const entry of entries) {
+    if (!entry.html) continue;
+
+    const cssFiles = await collectCssFilesFromDisk(entry);
+    if (cssFiles.length > 0) {
+      await writeHtmlShell(entry, cssFiles);
+    }
+  }
+
+  return activeWatchers.map(({ watcher }) => watcher);
 }
 
 function isWatcher(result: unknown): result is RollupWatcher {
