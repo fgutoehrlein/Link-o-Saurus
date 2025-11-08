@@ -1,4 +1,11 @@
-import { BrowserContext, Page, chromium, expect, test } from '@playwright/test';
+import {
+  BrowserContext,
+  ConsoleMessage,
+  Page,
+  chromium,
+  expect,
+  test,
+} from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,10 +47,10 @@ test.describe('Link-O-Saurus extension', () => {
 
   test('supports bookmark, search, batch, import, and session workflows', async () => {
     const page = await context.newPage();
-    page.on('console', (message) => {
+    page.on('console', (message: ConsoleMessage) => {
       console.log(`[popup console] ${message.type()}: ${message.text()}`);
     });
-    page.on('pageerror', (error) => {
+    page.on('pageerror', (error: Error) => {
       console.error('[popup error]', error);
     });
     await openPopup(page, extensionId);
@@ -51,7 +58,7 @@ test.describe('Link-O-Saurus extension', () => {
     await page.waitForFunction(() => window.__LINKOSAURUS_POPUP_READY === true);
 
     const newBookmarkTitle = 'Playwright Handbook';
-    await page.evaluate(async (title) => {
+    await page.evaluate(async (title: string) => {
       const harness = window.__LINKOSAURUS_POPUP_HARNESS;
       if (!harness) {
         throw new Error('Popup harness unavailable');
