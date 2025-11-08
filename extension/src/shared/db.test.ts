@@ -33,6 +33,7 @@ import {
   getTag,
   listBoards,
   listBookmarks,
+  listRecentBookmarks,
   listComments,
   listDueReadLater,
   listPinnedBookmarks,
@@ -180,6 +181,46 @@ describe('IndexedDB data layer', () => {
       database,
     );
     expect(updated.archived).toBe(true);
+  });
+
+  it('lists the newest non-archived bookmarks with a limit', async () => {
+    for (let index = 0; index < 6; index += 1) {
+      const timestamp = 1_000 + index * 10;
+      await createBookmark(
+        {
+          id: `bookmark-${index}`,
+          url: `https://example.com/${index}`,
+          title: `Bookmark ${index}`,
+          tags: [],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        database,
+      );
+    }
+
+    await createBookmark(
+      {
+        id: 'bookmark-archived',
+        url: 'https://example.com/archived',
+        title: 'Archived',
+        tags: [],
+        archived: true,
+        createdAt: 10_000,
+        updatedAt: 10_000,
+      },
+      database,
+    );
+
+    const recents = await listRecentBookmarks(5, database);
+    expect(recents).toHaveLength(5);
+    expect(recents.map((bookmark) => bookmark.id)).toEqual([
+      'bookmark-5',
+      'bookmark-4',
+      'bookmark-3',
+      'bookmark-2',
+      'bookmark-1',
+    ]);
   });
 
   it('adjusts tag usage counts when bookmark tags change', async () => {
