@@ -6,12 +6,21 @@
 body,
 html {
   height: 100%;
+  width: 100%;
+  min-width: 760px;
+  min-height: 580px;
+  margin: 0;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
 }
 
 .popup-root {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 280px;
-  height: 100vh;
+  height: 100%;
   margin: 0;
   background: var(--popup-bg, #111827);
   color: var(--popup-fg, #f9fafb);
