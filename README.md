@@ -14,6 +14,12 @@ Link-O-Saurus ist eine Offline-first Browser-Erweiterung für das Sammeln, Struk
 - **Markdown & sichere Darstellung** – Inhalte werden mit `marked` gerendert und anschließend via `sanitize-html` gesichert, damit Notizen im Popup sicher angezeigt werden.【F:extension/src/shared/markdown.ts†L1-L140】
 - **Hintergrundaktionen & Badges** – Popup-Komponenten kommunizieren asynchron mit dem Service Worker, z. B. um Sitzungen zu speichern oder Read-Later-Badges zu aktualisieren.【F:extension/src/popup/ReadLaterList.tsx†L35-L76】【F:extension/src/popup/SessionManager.tsx†L40-L120】
 
+## UI-Übersicht
+
+- **Popup:** Schnelles Hinzufügen neuer Lesezeichen mit Mini-Suche, eine Liste der zuletzt gespeicherten Einträge sowie eine klar sichtbare „Zum Dashboard“-Schaltfläche für den Wechsel in die Vollansicht.【F:extension/src/popup/App.tsx†L560-L720】
+- **Dashboard:** Vollfunktionsseite mit Boards, Tags, Import/Export, Sessions und Detail-Editor inklusive virtueller Liste für große Datenmengen.【F:extension/src/dashboard/App.tsx†L1560-L1820】
+- **New-Tab-Option:** Keine erzwungene Übernahme des New-Tab-Tabs – die Aktivierung bleibt eine separate Option in den Einstellungen.【F:extension/src/options/App.tsx†L720-L770】
+
 ## Technischer Überblick
 
 | Bereich | Technologie |

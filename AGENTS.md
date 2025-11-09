@@ -112,6 +112,13 @@ Akzeptanzkriterium vor Merge: **Alle Tests grün.**
 
 ---
 
+## UI-Referenz
+- **Popup:** Quick Add-Formular, Mini-Suche, Recent-Liste und die Schaltfläche „Zum Dashboard“ gehören zum Pflichtumfang.
+- **Dashboard:** Vollausgestattete Verwaltungsoberfläche (Boards, Tags, Import/Export, Sessions, Detailansicht).
+- **New-Tab-Modus:** Bleibt optional und wird nur auf ausdrücklichen Wunsch aktiviert.
+
+---
+
 ## PR & Code-Review-Regeln (für den Agenten)
 - PR-Titel: `[Link-O-Saurus] <Änderung>`
 - Vor Commit:

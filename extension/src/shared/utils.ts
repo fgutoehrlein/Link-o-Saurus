@@ -300,7 +300,11 @@ export async function openDashboard(params?: DashboardOpenParams): Promise<chrom
   const tabs = await queryDashboardTabs(`${baseUrl}*`);
   const existing = tabs
     .slice()
-    .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
+    .sort((a, b) => {
+      const bAccessed = (b as { lastAccessed?: number }).lastAccessed ?? 0;
+      const aAccessed = (a as { lastAccessed?: number }).lastAccessed ?? 0;
+      return bAccessed - aAccessed;
+    })[0];
 
   try {
     if (existing) {

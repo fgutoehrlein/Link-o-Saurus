@@ -439,6 +439,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [searchGeneration, setSearchGeneration] = useState<number>(0);
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
@@ -458,6 +459,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const lastSelectionRef = useRef<SelectionChange>({ ids: [], anchorIndex: null });
   const hashSyncRef = useRef<boolean>(false);
+  const initialRouteRef = useRef<RouteSnapshot | null>(null);
 
   const searchWorkerRef = useRef<Remote<SearchWorker> | null>(null);
   const searchWorkerInstanceRef = useRef<Worker | null>(null);
@@ -538,6 +540,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   useEffect(() => {
     const snapshot = parseInitialRoute();
+    initialRouteRef.current = snapshot;
     setSearchQuery(snapshot.search);
     setActiveBoardId(snapshot.boardId);
     setActiveTag(snapshot.tag);
@@ -612,7 +615,7 @@ const DashboardApp: FunctionalComponent = () => {
         }
         if (rawMessage.type === 'FOCUS_SEARCH') {
           const sanitized = sanitizeRouteText(rawMessage.payload.q, ROUTE_MAX_SEARCH_LENGTH);
-          setStatusMessage(null);
+          setStatusMessage('');
           setDraft(null);
           setDetailState(null);
           setActiveBoardId('');
@@ -644,7 +647,7 @@ const DashboardApp: FunctionalComponent = () => {
             tags: tagsText,
             notes: '',
           };
-          setStatusMessage(null);
+          setStatusMessage('');
           setActiveBoardId('');
           setActiveCategoryId('');
           setActiveTag('');
@@ -709,6 +712,23 @@ const DashboardApp: FunctionalComponent = () => {
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
+          const initialRoute = initialRouteRef.current ?? parseInitialRoute();
+          const initialSearch = initialRoute.search.trim();
+          if (initialSearch) {
+            try {
+              const initialHits = await searchWorkerRef.current.query(
+                initialSearch,
+                initialRoute.tag ? { tags: [initialRoute.tag] } : undefined,
+                MAX_QUERY_RESULTS,
+              );
+              if (!cancelled) {
+                setSearchHits(initialHits);
+              }
+            } catch (error) {
+              console.error('Initial search failed', error);
+            }
+          }
+          setSearchGeneration((value) => value + 1);
         }
         if (!cancelled) {
           window.__LINKOSAURUS_DASHBOARD_READY = true;
@@ -760,7 +780,7 @@ const DashboardApp: FunctionalComponent = () => {
     return () => {
       cancelled = true;
     };
-  }, [searchQuery, activeTag]);
+  }, [searchQuery, activeTag, searchGeneration]);
 
   const bookmarkEntries = useMemo(() => {
     const map = new Map<string, BookmarkListEntry>();
@@ -800,7 +820,8 @@ const DashboardApp: FunctionalComponent = () => {
       return true;
     };
 
-    if (searchQuery.trim()) {
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
       const ordered: BookmarkListEntry[] = [];
       for (const hit of searchHits) {
         const entry = bookmarkEntries.get(hit.id);
@@ -809,7 +830,27 @@ const DashboardApp: FunctionalComponent = () => {
         }
         ordered.push(entry);
       }
-      return ordered.map((entry) => entry.id);
+      if (ordered.length > 0) {
+        return ordered.map((entry) => entry.id);
+      }
+
+      const normalizedQuery = trimmedQuery.toLowerCase();
+      const fallback: BookmarkListEntry[] = [];
+      for (const entry of bookmarkEntries.values()) {
+        if (!matchesFilters(entry)) {
+          continue;
+        }
+        const { bookmark } = entry;
+        const titleMatch = bookmark.title?.toLowerCase().includes(normalizedQuery) ?? false;
+        const urlMatch = bookmark.url?.toLowerCase().includes(normalizedQuery) ?? false;
+        const notesMatch = bookmark.notes?.toLowerCase().includes(normalizedQuery) ?? false;
+        const tagMatch = bookmark.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
+        if (titleMatch || urlMatch || notesMatch || tagMatch) {
+          fallback.push(entry);
+        }
+      }
+      fallback.sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt);
+      return fallback.map((entry) => entry.id);
     }
 
     return Array.from(bookmarkEntries.values())
@@ -971,21 +1012,23 @@ const DashboardApp: FunctionalComponent = () => {
     if (searchWorkerRef.current) {
       try {
         await searchWorkerRef.current.updateDoc(bookmark);
+        setSearchGeneration((value) => value + 1);
       } catch (error) {
         console.warn('Failed to update search index', error);
       }
     }
-  }, []);
+  }, [setSearchGeneration]);
 
   const applySearchWorkerRemoval = useCallback(async (id: string) => {
     if (searchWorkerRef.current) {
       try {
         await searchWorkerRef.current.removeDoc(id);
+        setSearchGeneration((value) => value + 1);
       } catch (error) {
         console.warn('Failed to remove from search index', error);
       }
     }
-  }, []);
+  }, [setSearchGeneration]);
 
   const handleDetailChange = useCallback(
     (field: keyof DraftBookmark) => (event: Event) => {
@@ -1246,13 +1289,14 @@ const DashboardApp: FunctionalComponent = () => {
         setTags(updatedTags);
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
+          setSearchGeneration((value) => value + 1);
         }
       } catch (error) {
         console.error('Import failed', error);
         setImportState({ busy: false, progress: null, error: 'Import fehlgeschlagen.' });
       }
     },
-    [],
+    [setSearchGeneration],
   );
 
   const handleExport = useCallback(
