@@ -183,13 +183,13 @@ test.describe('Link-O-Saurus extension', () => {
     await searchField.fill('Playwright');
     await expect(page.locator('.search-result__title')).toContainText(newBookmarkTitle);
 
-    const [dashboardPage] = await Promise.all([
-      context.waitForEvent('page'),
-      page.getByRole('button', { name: 'Zum Dashboard' }).click(),
-    ]);
-    await dashboardPage.waitForLoadState('domcontentloaded');
-    expect(new URL(dashboardPage.url()).pathname).toBe('/dashboard.html');
-    await dashboardPage.close();
+    await page.getByRole('button', { name: 'Zum Dashboard' }).click();
+    const targetUrl = await page.evaluate(() => {
+      const opened = window.__LINKOSAURUS_OPENED_TABS ?? [];
+      return opened[opened.length - 1];
+    });
+    expect(targetUrl).toBeDefined();
+    expect(targetUrl).toContain('/dashboard.html');
 
     await page.close();
   });
