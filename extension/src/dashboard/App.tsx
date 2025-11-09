@@ -439,6 +439,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [searchGeneration, setSearchGeneration] = useState<number>(0);
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
@@ -709,6 +710,7 @@ const DashboardApp: FunctionalComponent = () => {
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
+          setSearchGeneration((value) => value + 1);
         }
         if (!cancelled) {
           window.__LINKOSAURUS_DASHBOARD_READY = true;
@@ -760,7 +762,7 @@ const DashboardApp: FunctionalComponent = () => {
     return () => {
       cancelled = true;
     };
-  }, [searchQuery, activeTag]);
+  }, [searchQuery, activeTag, searchGeneration]);
 
   const bookmarkEntries = useMemo(() => {
     const map = new Map<string, BookmarkListEntry>();
@@ -971,21 +973,23 @@ const DashboardApp: FunctionalComponent = () => {
     if (searchWorkerRef.current) {
       try {
         await searchWorkerRef.current.updateDoc(bookmark);
+        setSearchGeneration((value) => value + 1);
       } catch (error) {
         console.warn('Failed to update search index', error);
       }
     }
-  }, []);
+  }, [setSearchGeneration]);
 
   const applySearchWorkerRemoval = useCallback(async (id: string) => {
     if (searchWorkerRef.current) {
       try {
         await searchWorkerRef.current.removeDoc(id);
+        setSearchGeneration((value) => value + 1);
       } catch (error) {
         console.warn('Failed to remove from search index', error);
       }
     }
-  }, []);
+  }, [setSearchGeneration]);
 
   const handleDetailChange = useCallback(
     (field: keyof DraftBookmark) => (event: Event) => {
@@ -1246,13 +1250,14 @@ const DashboardApp: FunctionalComponent = () => {
         setTags(updatedTags);
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
+          setSearchGeneration((value) => value + 1);
         }
       } catch (error) {
         console.error('Import failed', error);
         setImportState({ busy: false, progress: null, error: 'Import fehlgeschlagen.' });
       }
     },
-    [],
+    [setSearchGeneration],
   );
 
   const handleExport = useCallback(

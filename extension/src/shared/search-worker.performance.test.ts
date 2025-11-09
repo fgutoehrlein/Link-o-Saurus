@@ -4,23 +4,35 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('flexsearch', () => {
   class MockDocument<T extends { id: string; title?: string; url?: string; notes?: string; tags?: string[] }> {
     private store = new Map<string, T>();
+    private searchIndex = new Map<string, string>();
 
     add(doc: T): void {
       this.store.set(doc.id, doc);
+      const serialized = `${doc.title ?? ''} ${doc.url ?? ''} ${doc.notes ?? ''} ${(doc.tags ?? []).join(' ')}`
+        .toLowerCase()
+        .replace(/\s+/gu, ' ')
+        .trim();
+      this.searchIndex.set(doc.id, serialized);
     }
 
     remove(id: string): void {
       this.store.delete(id);
+      this.searchIndex.delete(id);
     }
 
     search(query: string) {
       const lower = query.toLowerCase();
-      const matches = Array.from(this.store.values())
-        .filter((doc) => {
-          const text = `${doc.title ?? ''} ${doc.url ?? ''} ${doc.notes ?? ''} ${(doc.tags ?? []).join(' ')}`.toLowerCase();
-          return text.includes(lower);
-        })
-        .map((doc) => ({ id: [doc.id], doc }));
+      const matches: Array<{ id: [string]; doc: T }> = [];
+      for (const [id, text] of this.searchIndex.entries()) {
+        if (!text.includes(lower)) {
+          continue;
+        }
+        const doc = this.store.get(id);
+        if (!doc) {
+          continue;
+        }
+        matches.push({ id: [id], doc });
+      }
       return [
         {
           field: 'title',
