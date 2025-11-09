@@ -467,6 +467,12 @@ const DashboardApp: FunctionalComponent = () => {
   const importWorkerInstanceRef = useRef<Worker | null>(null);
 
   useEffect(() => {
+    if (!isImportDialogOpen) {
+      setImportState({ busy: false, progress: null, error: null });
+    }
+  }, [isImportDialogOpen]);
+
+  useEffect(() => {
     return () => {
       delete window.__LINKOSAURUS_DASHBOARD_READY;
       delete window.__LINKOSAURUS_DASHBOARD_READY_TIME;
@@ -1279,7 +1285,7 @@ const DashboardApp: FunctionalComponent = () => {
           format === 'html'
             ? await importWorkerRef.current.importHtml(file, { dedupe: true }, { onProgress })
             : await importWorkerRef.current.importJson(file, { dedupe: true }, { onProgress });
-        setImportState({ busy: false, progress: null, error: null });
+        setImportState((previous) => ({ busy: false, progress: previous.progress, error: null }));
         setStatusMessage(`Import abgeschlossen (${result.stats.createdBookmarks} neue Einträge).`);
         const [updatedBookmarks, updatedTags] = await Promise.all([
           listBookmarks({ includeArchived: true }),
