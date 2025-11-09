@@ -612,7 +612,7 @@ const DashboardApp: FunctionalComponent = () => {
         }
         if (rawMessage.type === 'FOCUS_SEARCH') {
           const sanitized = sanitizeRouteText(rawMessage.payload.q, ROUTE_MAX_SEARCH_LENGTH);
-          setStatusMessage(null);
+          setStatusMessage('');
           setDraft(null);
           setDetailState(null);
           setActiveBoardId('');
@@ -644,7 +644,7 @@ const DashboardApp: FunctionalComponent = () => {
             tags: tagsText,
             notes: '',
           };
-          setStatusMessage(null);
+          setStatusMessage('');
           setActiveBoardId('');
           setActiveCategoryId('');
           setActiveTag('');
