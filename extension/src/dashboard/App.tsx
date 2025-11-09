@@ -820,7 +820,8 @@ const DashboardApp: FunctionalComponent = () => {
       return true;
     };
 
-    if (searchQuery.trim()) {
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
       const ordered: BookmarkListEntry[] = [];
       for (const hit of searchHits) {
         const entry = bookmarkEntries.get(hit.id);
@@ -829,7 +830,27 @@ const DashboardApp: FunctionalComponent = () => {
         }
         ordered.push(entry);
       }
-      return ordered.map((entry) => entry.id);
+      if (ordered.length > 0) {
+        return ordered.map((entry) => entry.id);
+      }
+
+      const normalizedQuery = trimmedQuery.toLowerCase();
+      const fallback: BookmarkListEntry[] = [];
+      for (const entry of bookmarkEntries.values()) {
+        if (!matchesFilters(entry)) {
+          continue;
+        }
+        const { bookmark } = entry;
+        const titleMatch = bookmark.title?.toLowerCase().includes(normalizedQuery) ?? false;
+        const urlMatch = bookmark.url?.toLowerCase().includes(normalizedQuery) ?? false;
+        const notesMatch = bookmark.notes?.toLowerCase().includes(normalizedQuery) ?? false;
+        const tagMatch = bookmark.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
+        if (titleMatch || urlMatch || notesMatch || tagMatch) {
+          fallback.push(entry);
+        }
+      }
+      fallback.sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt);
+      return fallback.map((entry) => entry.id);
     }
 
     return Array.from(bookmarkEntries.values())
