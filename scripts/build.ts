@@ -51,6 +51,7 @@ const entries: EntryDefinition[] = [
     outSubDir: '',
     fileName: 'popup.js',
     name: 'feathermarks-popup',
+    cssFileName: 'popup.css',
     html: { title: 'Feathermarks', fileName: 'popup.html' },
   },
   {
@@ -58,6 +59,7 @@ const entries: EntryDefinition[] = [
     outSubDir: '',
     fileName: 'options.js',
     name: 'feathermarks-options',
+    cssFileName: 'options.css',
     html: { title: 'Feathermarks Options', fileName: 'options.html' }
   },
   {
@@ -65,6 +67,7 @@ const entries: EntryDefinition[] = [
     outSubDir: '',
     fileName: 'dashboard.js',
     name: 'feathermarks-dashboard',
+    cssFileName: 'dashboard.css',
     html: { title: 'Feathermarks Dashboard', fileName: 'dashboard.html' }
   }
 ];
@@ -124,6 +127,7 @@ async function collectCssFilesFromDisk(entry: EntryDefinition): Promise<string[]
   if (!entry.html) return [];
 
   const outDir = path.join(distDir, entry.outSubDir ?? '');
+  const expectedCss = entry.cssFileName ? new Set([entry.cssFileName]) : undefined;
 
   const gather = async (dir: string, baseDir: string): Promise<string[]> => {
     let dirents: Dirent[];
@@ -142,7 +146,9 @@ async function collectCssFilesFromDisk(entry: EntryDefinition): Promise<string[]
       if (dirent.isDirectory()) {
         collected.push(...(await gather(absolute, baseDir)));
       } else if (dirent.isFile() && dirent.name.endsWith('.css')) {
-        collected.push(relative);
+        if (!expectedCss || expectedCss.has(dirent.name)) {
+          collected.push(relative);
+        }
       }
     }
 
@@ -175,6 +181,7 @@ function isRollupEndEvent(event: RollupWatcherEvent): boolean {
 
 function createViteConfig(entry: EntryDefinition): InlineConfig {
   const outDir = path.join(distDir, entry.outSubDir ?? '');
+  const cssFileName = entry.cssFileName ?? 'style.css';
 
   return {
     configFile: false,
@@ -198,7 +205,17 @@ function createViteConfig(entry: EntryDefinition): InlineConfig {
         formats: ['es'],
         name: entry.name,
         fileName: () => entry.fileName
-      }
+      },
+      rollupOptions: {
+        output: {
+          assetFileNames: (assetInfo) => {
+            if (assetInfo.type === 'asset' && assetInfo.name?.endsWith('.css')) {
+              return cssFileName;
+            }
+            return assetInfo.name ?? 'assets/[name]-[hash][extname]';
+          },
+        },
+      },
     },
     worker: {
       format: 'es',
