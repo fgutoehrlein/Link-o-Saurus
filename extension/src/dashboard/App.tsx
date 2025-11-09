@@ -459,6 +459,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const lastSelectionRef = useRef<SelectionChange>({ ids: [], anchorIndex: null });
   const hashSyncRef = useRef<boolean>(false);
+  const initialRouteRef = useRef<RouteSnapshot | null>(null);
 
   const searchWorkerRef = useRef<Remote<SearchWorker> | null>(null);
   const searchWorkerInstanceRef = useRef<Worker | null>(null);
@@ -539,6 +540,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   useEffect(() => {
     const snapshot = parseInitialRoute();
+    initialRouteRef.current = snapshot;
     setSearchQuery(snapshot.search);
     setActiveBoardId(snapshot.boardId);
     setActiveTag(snapshot.tag);
@@ -710,6 +712,22 @@ const DashboardApp: FunctionalComponent = () => {
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
           await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
+          const initialRoute = initialRouteRef.current ?? parseInitialRoute();
+          const initialSearch = initialRoute.search.trim();
+          if (initialSearch) {
+            try {
+              const initialHits = await searchWorkerRef.current.query(
+                initialSearch,
+                initialRoute.tag ? { tags: [initialRoute.tag] } : undefined,
+                MAX_QUERY_RESULTS,
+              );
+              if (!cancelled) {
+                setSearchHits(initialHits);
+              }
+            } catch (error) {
+              console.error('Initial search failed', error);
+            }
+          }
           setSearchGeneration((value) => value + 1);
         }
         if (!cancelled) {
