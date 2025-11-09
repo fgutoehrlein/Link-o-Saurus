@@ -1563,12 +1563,14 @@ const DashboardApp: FunctionalComponent = () => {
       <div className="detail-panel" aria-live="polite">
         <h2>Aktionen</h2>
         <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
-        <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
-          Neues Lesezeichen
-        </button>
-        <button type="button" onClick={clearSelection}>
-          Auswahl löschen
-        </button>
+        <div className="detail-actions">
+          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
+            Neues Lesezeichen
+          </button>
+          <button type="button" onClick={clearSelection}>
+            Auswahl löschen
+          </button>
+        </div>
       </div>
     );
   };
