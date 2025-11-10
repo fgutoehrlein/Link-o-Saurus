@@ -852,7 +852,7 @@ const App: FunctionalComponent = () => {
       <section class="panel">
         <h2>Neuer Tab (Opt-in)</h2>
         <p>
-          Feathermarks kann als besonders schneller Startpunkt genutzt werden. Die Einstellung bleibt komplett
+          Link-o-Saurus kann als besonders schneller Startpunkt genutzt werden. Die Einstellung bleibt komplett
           optional und lässt sich jederzeit zurücksetzen.
         </p>
 
@@ -863,7 +863,7 @@ const App: FunctionalComponent = () => {
             disabled={isLoadingSettings || isUpdatingNewTab}
             onChange={(event) => updateNewTabPreference(event.currentTarget.checked)}
           />
-          <span>Feathermarks als neuen Tab verwenden</span>
+          <span>Link-o-Saurus als neuen Tab verwenden</span>
         </label>
 
         <p class="hint">

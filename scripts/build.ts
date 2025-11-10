@@ -38,37 +38,37 @@ const entries: EntryDefinition[] = [
     entry: path.join(srcDir, 'background/sw.ts'),
     outSubDir: '',
     fileName: 'sw.js',
-    name: 'feathermarks-background'
+    name: 'link-o-saurus-background'
   },
   {
     entry: path.join(srcDir, 'content/inject.ts'),
     outSubDir: 'content',
     fileName: 'inject.js',
-    name: 'feathermarks-content'
+    name: 'link-o-saurus-content'
   },
   {
     entry: path.join(srcDir, 'popup/main.tsx'),
     outSubDir: '',
     fileName: 'popup.js',
-    name: 'feathermarks-popup',
+    name: 'link-o-saurus-popup',
     cssFileName: 'popup.css',
-    html: { title: 'Feathermarks', fileName: 'popup.html' },
+    html: { title: 'Link-o-Saurus', fileName: 'popup.html' },
   },
   {
     entry: path.join(srcDir, 'options/main.tsx'),
     outSubDir: '',
     fileName: 'options.js',
-    name: 'feathermarks-options',
+    name: 'link-o-saurus-options',
     cssFileName: 'options.css',
-    html: { title: 'Feathermarks Options', fileName: 'options.html' }
+    html: { title: 'Link-o-Saurus Options', fileName: 'options.html' }
   },
   {
     entry: path.join(srcDir, 'dashboard/main.tsx'),
     outSubDir: '',
     fileName: 'dashboard.js',
-    name: 'feathermarks-dashboard',
+    name: 'link-o-saurus-dashboard',
     cssFileName: 'dashboard.css',
-    html: { title: 'Feathermarks Dashboard', fileName: 'dashboard.html' }
+    html: { title: 'Link-o-Saurus Dashboard', fileName: 'dashboard.html' }
   }
 ];
 
@@ -85,7 +85,7 @@ async function copyManifest() {
   if (target === 'firefox') {
     manifest.browser_specific_settings = {
       gecko: {
-        id: 'feathermarks@example.com',
+        id: 'link-o-saurus@example.com',
         strict_min_version: '109.0'
       }
     };
@@ -94,6 +94,36 @@ async function copyManifest() {
   const outPath = path.join(distDir, 'manifest.json');
   await fs.mkdir(path.dirname(outPath), { recursive: true });
   await fs.writeFile(outPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+}
+
+async function copyStaticAssets(): Promise<void> {
+  const assetsSource = path.join(extensionDir, 'assets');
+  const assetsDestination = path.join(distDir, 'assets');
+
+  try {
+    await fs.access(assetsSource);
+  } catch {
+    return;
+  }
+
+  const copyDirectory = async (source: string, destination: string): Promise<void> => {
+    await fs.mkdir(destination, { recursive: true });
+    const dirents = await fs.readdir(source, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+      const sourcePath = path.join(source, dirent.name);
+      const destinationPath = path.join(destination, dirent.name);
+
+      if (dirent.isDirectory()) {
+        await copyDirectory(sourcePath, destinationPath);
+      } else if (dirent.isFile()) {
+        await fs.copyFile(sourcePath, destinationPath);
+      }
+    }
+  };
+
+  await fs.rm(assetsDestination, { recursive: true, force: true });
+  await copyDirectory(assetsSource, assetsDestination);
 }
 
 async function writeHtmlShell(entry: EntryDefinition, cssFiles: readonly string[] = []) {
@@ -231,6 +261,7 @@ function createViteConfig(entry: EntryDefinition): InlineConfig {
 async function run() {
   await ensureCleanOutput();
   await copyManifest();
+  await copyStaticAssets();
   await Promise.all(entries.map((entry) => writeHtmlShell(entry)));
 
   const activeWatchers: { watcher: RollupWatcher; entry: EntryDefinition }[] = [];
@@ -273,6 +304,19 @@ async function run() {
         console.error('Failed to copy manifest:', error);
       });
     });
+
+    try {
+      const assetsDir = path.join(extensionDir, 'assets');
+      await fs.access(assetsDir);
+      const assetsWatcher = chokidar.watch(assetsDir, { ignoreInitial: true });
+      assetsWatcher.on('all', () => {
+        copyStaticAssets().catch((error) => {
+          console.error('Failed to copy static assets:', error);
+        });
+      });
+    } catch {
+      // No assets directory to watch.
+    }
 
     console.log(`Watching sources for ${target}…`);
     await new Promise(() => undefined);

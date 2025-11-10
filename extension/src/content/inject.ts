@@ -1,3 +1,3 @@
 (() => {
-  console.debug('[Feathermarks] content script placeholder loaded');
+  console.debug('[Link-o-Saurus] content script placeholder loaded');
 })();
