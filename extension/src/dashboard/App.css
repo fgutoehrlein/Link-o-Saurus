@@ -26,6 +26,7 @@ body {
   background: var(--bg-light);
   color: var(--text-light);
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 [data-theme='dark'] body {
