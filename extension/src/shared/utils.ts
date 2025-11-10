@@ -32,7 +32,7 @@ const sanitizePlainText = (value: string, limit: number): string =>
   value.replace(CONTROL_CHARACTERS, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit);
 
 const sanitizeHash = (value: string): string =>
-  value.replace(CONTROL_CHARACTERS, '').replace(/^#/u, '').slice(0, 256);
+  value.replace(CONTROL_CHARACTERS, '').replace(/^#+/u, '').slice(0, 256);
 
 const sanitizeSearchQuery = (value: string): string => sanitizePlainText(value, MAX_SEARCH_LENGTH);
 
