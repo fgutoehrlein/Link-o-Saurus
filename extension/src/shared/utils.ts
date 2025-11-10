@@ -7,7 +7,7 @@ export const noop = () => {
 
 export function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
-    throw new Error(`[Feathermarks] ${message}`);
+    throw new Error(`[Link-o-Saurus] ${message}`);
   }
 }
 

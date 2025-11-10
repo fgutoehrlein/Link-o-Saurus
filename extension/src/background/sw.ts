@@ -13,7 +13,7 @@ import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging'
 import { isBackgroundRequest } from '../shared/messaging';
 import type { SessionPack } from '../shared/types';
 
-const CONTEXT_MENU_ID = 'feathermarks-context-save';
+const CONTEXT_MENU_ID = 'link-o-saurus-context-save';
 const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('dashboard.html');
 const CHROME_DEFAULT_NEW_TAB_URLS = new Set([
   'chrome://newtab/',
@@ -24,7 +24,7 @@ const FIREFOX_DEFAULT_NEW_TAB_URLS = new Set(['about:newtab', 'about:home']);
 let newTabOverrideActive = false;
 let newTabListenerRegistered = false;
 
-console.log('[Feathermarks] background service worker initialized');
+console.log('[Link-o-Saurus] background service worker initialized');
 
 const READ_LATER_ALARM_NAME = 'link-o-saurus:read-later-refresh';
 const READ_LATER_REFRESH_INTERVAL_MINUTES = 1;
@@ -53,11 +53,11 @@ const updateReadLaterBadge = async (): Promise<number> => {
     await chrome.action.setBadgeText({ text });
     return count;
   } catch (error) {
-    console.error('[Feathermarks] Failed to update read later badge', error);
+    console.error('[Link-o-Saurus] Failed to update read later badge', error);
     try {
       await chrome.action.setBadgeText({ text: '' });
     } catch (innerError) {
-      console.warn('[Feathermarks] Unable to reset badge text', innerError);
+      console.warn('[Link-o-Saurus] Unable to reset badge text', innerError);
     }
     return 0;
   }
@@ -74,7 +74,7 @@ const ensureReadLaterAlarm = async (): Promise<void> => {
       periodInMinutes: READ_LATER_REFRESH_INTERVAL_MINUTES,
     });
   } catch (error) {
-    console.error('[Feathermarks] Failed to register read later alarm', error);
+    console.error('[Link-o-Saurus] Failed to register read later alarm', error);
   }
 };
 
@@ -99,7 +99,7 @@ const handleTabCreatedForOverride = (tab: chrome.tabs.Tab): void => {
 
   void chrome.tabs
     .update(tab.id, { url: EXTENSION_NEW_TAB_URL })
-    .catch((error) => console.warn('[Feathermarks] Failed to override new tab', error));
+    .catch((error) => console.warn('[Link-o-Saurus] Failed to override new tab', error));
 };
 
 const registerNewTabOverride = (): void => {
@@ -145,7 +145,7 @@ void (async () => {
       await saveUserSettings({ newTabEnabled: false });
     }
   } catch (error) {
-    console.error('[Feathermarks] Failed to initialize new tab override', error);
+    console.error('[Link-o-Saurus] Failed to initialize new tab override', error);
   }
 })();
 
@@ -153,13 +153,13 @@ const registerContextMenu = (): void => {
   chrome.contextMenus.create(
     {
       id: CONTEXT_MENU_ID,
-      title: 'Zu Feathermarks speichern',
+      title: 'Zu Link-o-Saurus speichern',
       contexts: ['page', 'selection', 'frame'],
     },
     () => {
       const lastError = chrome.runtime.lastError;
       if (lastError && !lastError.message?.includes('duplicate id')) {
-        console.error('[Feathermarks] Kontextmenü konnte nicht erstellt werden:', lastError);
+        console.error('[Link-o-Saurus] Kontextmenü konnte nicht erstellt werden:', lastError);
       }
     },
   );
@@ -169,7 +169,7 @@ chrome.runtime.onInstalled.addListener(() => {
   registerContextMenu();
   void ensureReadLaterAlarm();
   void updateReadLaterBadge();
-  console.log('[Feathermarks] extension installed');
+  console.log('[Link-o-Saurus] extension installed');
 });
 
 chrome.runtime.onStartup?.addListener(() => {
@@ -199,7 +199,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const title = tab.title ?? info.selectionText ?? url ?? 'Unbenannte Seite';
 
   if (!url) {
-    console.warn('[Feathermarks] Kein URL-Kontext für Bookmark vorhanden.');
+    console.warn('[Link-o-Saurus] Kein URL-Kontext für Bookmark vorhanden.');
     return;
   }
 
@@ -211,7 +211,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const [dialogResult] = await chrome.scripting.executeScript({
       target: { tabId },
-      func: presentFeathermarksQuickDialog,
+      func: presentLinkOSaurusQuickDialog,
       args: [{ title, url, categories }],
     });
 
@@ -234,15 +234,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: showFeathermarksToast,
+      func: showLinkOSaurusToast,
       args: ['Bookmark gespeichert'],
     });
-  } catch (error) {
-    console.error('[Feathermarks] Speichern über Kontextmenü fehlgeschlagen', error);
-  }
-});
+    } catch (error) {
+      console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);
+    }
+  });
 
-function presentFeathermarksQuickDialog({
+  function presentLinkOSaurusQuickDialog({
   title,
   url,
   categories,
@@ -269,7 +269,7 @@ function presentFeathermarksQuickDialog({
       }
     });
 
-  const existing = document.getElementById('feathermarks-quick-dialog-root');
+    const existing = document.getElementById('link-o-saurus-quick-dialog-root');
   if (existing) {
     existing.remove();
   }
@@ -281,7 +281,7 @@ function presentFeathermarksQuickDialog({
     }
 
     const overlay = document.createElement('div');
-    overlay.id = 'feathermarks-quick-dialog-root';
+    overlay.id = 'link-o-saurus-quick-dialog-root';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.style.position = 'fixed';
@@ -306,7 +306,7 @@ function presentFeathermarksQuickDialog({
     container.style.gap = '12px';
 
     const titleLabel = document.createElement('div');
-    titleLabel.textContent = 'Feathermarks';
+    titleLabel.textContent = 'Link-o-Saurus';
     titleLabel.style.fontSize = '16px';
     titleLabel.style.fontWeight = '600';
     container.appendChild(titleLabel);
@@ -478,18 +478,18 @@ function presentFeathermarksQuickDialog({
   });
 }
 
-function showFeathermarksToast(message: string): void {
+  function showLinkOSaurusToast(message: string): void {
   if (!document.body) {
     return;
   }
 
-  const existing = document.getElementById('feathermarks-toast');
+    const existing = document.getElementById('link-o-saurus-toast');
   if (existing) {
     existing.remove();
   }
 
-  const toast = document.createElement('div');
-  toast.id = 'feathermarks-toast';
+    const toast = document.createElement('div');
+    toast.id = 'link-o-saurus-toast';
   toast.textContent = message;
   toast.style.position = 'fixed';
   toast.style.bottom = '20px';
@@ -531,7 +531,7 @@ const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
     }
     return parsed.toString();
   } catch (error) {
-    console.warn('[Feathermarks] Ungültige Tab-URL übersprungen', error);
+    console.warn('[Link-o-Saurus] Ungültige Tab-URL übersprungen', error);
     return undefined;
   }
 };

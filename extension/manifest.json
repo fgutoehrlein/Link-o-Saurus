@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Feathermarks",
+  "name": "Link-o-Saurus",
   "version": "0.0.1",
-  "description": "Minimal scaffold for the Feathermarks browser extension.",
+  "description": "Minimal scaffold for the Link-o-Saurus browser extension.",
+  "icons": {
+    "16": "assets/link-o-saurus-icon.png",
+    "48": "assets/link-o-saurus-icon.png",
+    "128": "assets/link-o-saurus-icon.png"
+  },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "assets/link-o-saurus-icon.png"
   },
   "background": {
     "service_worker": "sw.js",

@@ -46,7 +46,7 @@ const SessionManager: FunctionalComponent = () => {
       );
       setFeedback((prev) => (prev?.tone === 'error' ? null : prev));
     } catch (error) {
-      console.error('[Feathermarks] Sessions konnten nicht geladen werden', error);
+      console.error('[Link-o-Saurus] Sessions konnten nicht geladen werden', error);
       setFeedback({ tone: 'error', message: 'Sessions konnten nicht geladen werden.' });
     } finally {
       setLoading(false);
@@ -93,7 +93,7 @@ const SessionManager: FunctionalComponent = () => {
           message: `Session mit ${response.session.tabs.length} Tabs gespeichert.`,
         });
       } catch (error) {
-        console.error('[Feathermarks] Session konnte nicht gespeichert werden', error);
+        console.error('[Link-o-Saurus] Session konnte nicht gespeichert werden', error);
         setFeedback({
           tone: 'error',
           message:
@@ -146,7 +146,7 @@ const SessionManager: FunctionalComponent = () => {
       }
       setFeedback({ tone: 'info', message: `${response.opened} Tabs geöffnet.` });
     } catch (error) {
-      console.error('[Feathermarks] Session konnte nicht geöffnet werden', error);
+      console.error('[Link-o-Saurus] Session konnte nicht geöffnet werden', error);
       setFeedback({
         tone: 'error',
         message:
@@ -181,7 +181,7 @@ const SessionManager: FunctionalComponent = () => {
       }
       setFeedback({ tone: 'info', message: `${response.opened} Tabs geöffnet.` });
     } catch (error) {
-      console.error('[Feathermarks] Auswahl konnte nicht geöffnet werden', error);
+      console.error('[Link-o-Saurus] Auswahl konnte nicht geöffnet werden', error);
       setFeedback({
         tone: 'error',
         message:
@@ -211,7 +211,7 @@ const SessionManager: FunctionalComponent = () => {
       await refreshSessions();
       setFeedback({ tone: 'info', message: 'Session gelöscht.' });
     } catch (error) {
-      console.error('[Feathermarks] Session konnte nicht gelöscht werden', error);
+      console.error('[Link-o-Saurus] Session konnte nicht gelöscht werden', error);
       setFeedback({
         tone: 'error',
         message:
