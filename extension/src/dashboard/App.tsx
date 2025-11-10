@@ -751,7 +751,14 @@ const DashboardApp: FunctionalComponent = () => {
         setThemeChoice(settings.theme);
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
-          await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
+          try {
+            await searchWorkerRef.current.rebuildIndex(loadedBookmarks);
+          } catch (error) {
+            console.error('Search index rebuild failed during initialization', error);
+            if (!cancelled) {
+              setStatusMessage('Suche eventuell eingeschränkt.');
+            }
+          }
           const initialRoute = initialRouteRef.current ?? parseInitialRoute();
           const initialSearch = initialRoute.search.trim();
           if (initialSearch) {
@@ -1375,8 +1382,15 @@ const DashboardApp: FunctionalComponent = () => {
         setBookmarks(updatedBookmarks);
         setTags(updatedTags);
         if (searchWorkerRef.current) {
-          await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
-          setSearchGeneration((value) => value + 1);
+          try {
+            await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
+            setSearchGeneration((value) => value + 1);
+          } catch (error) {
+            console.error('Search index rebuild failed after import', error);
+            setStatusMessage((previous) =>
+              previous ? `${previous} Suche eventuell eingeschränkt.` : 'Suche eventuell eingeschränkt.',
+            );
+          }
         }
       } catch (error) {
         console.error('Import failed', error);
