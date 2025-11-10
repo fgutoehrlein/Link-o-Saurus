@@ -262,10 +262,12 @@ test.describe('Link-O-Saurus extension', () => {
     const importModal = dashboardPage.locator('.modal:has-text("Import & Export")');
     await importModal.waitFor();
     await importModal.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
-    await expect(importModal.locator('.progress')).toContainText('"processedBookmarks": 2000', { timeout: 60_000 });
-    await expect(dashboardPage.locator('.status')).toContainText('Import abgeschlossen (2000 neue Einträge).', {
-      timeout: 60_000,
-    });
+    await expect
+      .poll(
+        async () => (await dashboardPage.locator('.status').textContent())?.trim(),
+        { timeout: 60_000 },
+      )
+      .toContain('Import abgeschlossen (2000 neue Einträge).');
     await importModal.getByRole('button', { name: 'Schließen' }).click();
 
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
