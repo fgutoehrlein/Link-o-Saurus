@@ -381,10 +381,18 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
     if (!element) {
       return undefined;
     }
-    const updateSize = (height: number) => {
-      data.setRowHeight(id, height);
+    const measureHeight = (entry?: ResizeObserverEntry): number => {
+      if (entry?.borderBoxSize) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (borderBox) {
+          return borderBox.blockSize;
+        }
+      }
+      return element.getBoundingClientRect().height;
     };
-    updateSize(element.getBoundingClientRect().height);
+    data.setRowHeight(id, measureHeight());
     if (typeof ResizeObserver === 'undefined') {
       return undefined;
     }
@@ -392,7 +400,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       if (!entries.length) {
         return;
       }
-      updateSize(entries[0].contentRect.height);
+      data.setRowHeight(id, measureHeight(entries[0]));
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -534,17 +542,32 @@ const DashboardApp: FunctionalComponent = () => {
   }, [layoutMode]);
 
   useEffect(() => {
-    if (!listContainerRef.current) {
+    const element = listContainerRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const measureHeight = (entry?: ResizeObserverEntry): number => {
+      if (entry?.borderBoxSize) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (borderBox) {
+          return borderBox.blockSize;
+        }
+      }
+      return element.getBoundingClientRect().height;
+    };
+    setListHeight(measureHeight());
+    if (typeof ResizeObserver === 'undefined') {
       return undefined;
     }
     const observer = new ResizeObserver((entries) => {
       if (!entries.length) {
         return;
       }
-      const entry = entries[0];
-      setListHeight(entry.contentRect.height);
+      setListHeight(measureHeight(entries[0]));
     });
-    observer.observe(listContainerRef.current);
+    observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
