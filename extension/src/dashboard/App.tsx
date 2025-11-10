@@ -7,8 +7,15 @@ import {
   useMemo,
   useRef,
   useState,
+  useLayoutEffect,
 } from 'preact/hooks';
-import { FixedSizeList, type FixedSizeListProps, type ListChildComponentProps } from 'react-window';
+import {
+  VariableSizeList,
+  type VariableSizeListProps,
+  type ListChildComponentProps,
+} from 'react-window';
+import type { VariableSizeList as VariableSizeListHandle } from 'react-window';
+import type { ComponentType as ReactComponentType } from 'react';
 import ImportExportWorkerFactory from '../shared/import-export-worker?worker&module';
 import SearchWorkerFactory from '../shared/search-worker?worker&module';
 import {
@@ -65,6 +72,7 @@ type BookmarkListData = {
   readonly onRowClick: (event: MouseEvent | KeyboardEvent, id: string) => void;
   readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
   readonly onDragStart: (event: DragEvent, id: string) => void;
+  readonly setRowHeight: (id: string, height: number) => void;
 };
 
 type DraftBookmark = {
@@ -353,9 +361,11 @@ const getBookmarkInitial = (bookmark: Bookmark): string => {
 
 type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
 
-const VirtualList = FixedSizeList as unknown as FunctionalComponent<FixedSizeListProps<BookmarkListData>>;
+const VirtualList = VariableSizeList as unknown as FunctionalComponent<
+  VariableSizeListProps<BookmarkListData>
+>;
 
-const BookmarkRow: FunctionalComponent<BookmarkRowProps> = ({ index, style, data }) => {
+const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   const id = data.ids[index];
   const entry = data.bookmarkById.get(id);
   if (!entry) {
@@ -364,6 +374,29 @@ const BookmarkRow: FunctionalComponent<BookmarkRowProps> = ({ index, style, data
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
   const favicon = getFaviconUrl(bookmark.url);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const element = rowRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const updateSize = (height: number) => {
+      data.setRowHeight(id, height);
+    };
+    updateSize(element.getBoundingClientRect().height);
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      if (!entries.length) {
+        return;
+      }
+      updateSize(entries[0].contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [data, id, bookmark, board, category, isSelected]);
 
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
@@ -391,6 +424,7 @@ const BookmarkRow: FunctionalComponent<BookmarkRowProps> = ({ index, style, data
       tabIndex={0}
       className={combineClassNames('bookmark-row', isSelected && 'selected')}
       style={style as JSX.CSSProperties}
+      ref={rowRef}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
@@ -426,6 +460,10 @@ const BookmarkRow: FunctionalComponent<BookmarkRowProps> = ({ index, style, data
   );
 };
 
+const BookmarkRowRenderer = BookmarkRow as unknown as ReactComponentType<
+  ListChildComponentProps<BookmarkListData>
+>;
+
 const DashboardApp: FunctionalComponent = () => {
   const [boards, setBoards] = useState<readonly Board[]>([]);
   const [categories, setCategories] = useState<readonly Category[]>([]);
@@ -455,6 +493,8 @@ const DashboardApp: FunctionalComponent = () => {
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
+  const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
+  const rowHeightsRef = useRef<Map<string, number>>(new Map());
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const lastSelectionRef = useRef<SelectionChange>({ ids: [], anchorIndex: null });
@@ -956,6 +996,44 @@ const DashboardApp: FunctionalComponent = () => {
     [selectedIds, selectedSet],
   );
 
+  const getRowHeight = useCallback(
+    (index: number) => {
+      const id = filteredIds[index];
+      if (!id) {
+        return DEFAULT_ITEM_HEIGHT;
+      }
+      return rowHeightsRef.current.get(id) ?? DEFAULT_ITEM_HEIGHT;
+    },
+    [filteredIds],
+  );
+
+  const setRowHeight = useCallback(
+    (id: string, size: number) => {
+      const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
+      const current = rowHeightsRef.current.get(id);
+      if (current === height) {
+        return;
+      }
+      rowHeightsRef.current.set(id, height);
+      const index = filteredIds.indexOf(id);
+      if (index >= 0) {
+        listRef.current?.resetAfterIndex(index, true);
+      }
+    },
+    [filteredIds],
+  );
+
+  useEffect(() => {
+    const knownIds = new Set(filteredIds);
+    const map = rowHeightsRef.current;
+    for (const key of Array.from(map.keys())) {
+      if (!knownIds.has(key)) {
+        map.delete(key);
+      }
+    }
+    listRef.current?.resetAfterIndex(0, true);
+  }, [filteredIds]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
@@ -963,7 +1041,16 @@ const DashboardApp: FunctionalComponent = () => {
     onRowClick: handleRowSelection,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
-  }), [filteredIds, bookmarkEntries, selectedSet, handleRowSelection, handleRowContextMenu, handleRowDragStart]);
+    setRowHeight,
+  }), [
+    filteredIds,
+    bookmarkEntries,
+    selectedSet,
+    handleRowSelection,
+    handleRowContextMenu,
+    handleRowDragStart,
+    setRowHeight,
+  ]);
 
   const clearSelection = useCallback(() => {
     setSelectedIds([]);
@@ -1747,10 +1834,14 @@ const DashboardApp: FunctionalComponent = () => {
                 height={listHeight}
                 width="100%"
                 itemCount={filteredIds.length}
-                itemSize={DEFAULT_ITEM_HEIGHT}
+                itemSize={getRowHeight}
+                estimatedItemSize={DEFAULT_ITEM_HEIGHT}
                 itemData={listData}
+                ref={(instance) => {
+                  listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
+                }}
               >
-                {BookmarkRow}
+                {BookmarkRowRenderer}
               </VirtualList>
             ) : null}
           </div>
