@@ -90,7 +90,6 @@ type BatchMoveState = {
 
 type ImportDialogState = {
   busy: boolean;
-  progress: ImportProgress | null;
   error: string | null;
 };
 
@@ -490,7 +489,8 @@ const DashboardApp: FunctionalComponent = () => {
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
   const [isImportDialogOpen, setImportDialogOpen] = useState<boolean>(false);
-  const [importState, setImportState] = useState<ImportDialogState>({ busy: false, progress: null, error: null });
+  const [importState, setImportState] = useState<ImportDialogState>({ busy: false, error: null });
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [isSessionDialogOpen, setSessionDialogOpen] = useState<boolean>(false);
   const [sessionState, setSessionState] = useState<SessionDialogState>({ busy: false, error: null });
   const [draft, setDraft] = useState<DraftBookmark | null>(null);
@@ -513,6 +513,13 @@ const DashboardApp: FunctionalComponent = () => {
   const searchWorkerInstanceRef = useRef<Worker | null>(null);
   const importWorkerRef = useRef<Remote<ImportExportWorkerApi> | null>(null);
   const importWorkerInstanceRef = useRef<Worker | null>(null);
+
+  useEffect(() => {
+    if (!isImportDialogOpen) {
+      setImportState({ busy: false, error: null });
+      setImportProgress(null);
+    }
+  }, [isImportDialogOpen]);
 
   useEffect(() => {
     return () => {
@@ -1387,16 +1394,17 @@ const DashboardApp: FunctionalComponent = () => {
       if (!importWorkerRef.current) {
         return;
       }
-      setImportState({ busy: true, progress: null, error: null });
+      setImportState({ busy: true, error: null });
+      setImportProgress(null);
       const onProgress: ImportProgressHandler = (progress) => {
-        setImportState((previous) => ({ ...previous, progress }));
+        setImportProgress(progress);
       };
       try {
         const result =
           format === 'html'
             ? await importWorkerRef.current.importHtml(file, { dedupe: true }, { onProgress })
             : await importWorkerRef.current.importJson(file, { dedupe: true }, { onProgress });
-        setImportState({ busy: false, progress: null, error: null });
+        setImportState({ busy: false, error: null });
         setStatusMessage(`Import abgeschlossen (${result.stats.createdBookmarks} neue Einträge).`);
         const [updatedBookmarks, updatedTags] = await Promise.all([
           listBookmarks({ includeArchived: true }),
@@ -1417,7 +1425,7 @@ const DashboardApp: FunctionalComponent = () => {
         }
       } catch (error) {
         console.error('Import failed', error);
-        setImportState({ busy: false, progress: null, error: 'Import fehlgeschlagen.' });
+        setImportState({ busy: false, error: 'Import fehlgeschlagen.' });
       }
     },
     [setSearchGeneration],
@@ -1428,7 +1436,8 @@ const DashboardApp: FunctionalComponent = () => {
       if (!importWorkerRef.current) {
         return;
       }
-      setImportState({ busy: true, progress: null, error: null });
+      setImportState({ busy: true, error: null });
+      setImportProgress(null);
       try {
         const result = await importWorkerRef.current.export(format);
         const url = URL.createObjectURL(result.blob);
@@ -1440,11 +1449,11 @@ const DashboardApp: FunctionalComponent = () => {
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
-        setImportState({ busy: false, progress: null, error: null });
+        setImportState({ busy: false, error: null });
         setStatusMessage('Export vorbereitet.');
       } catch (error) {
         console.error('Export failed', error);
-        setImportState({ busy: false, progress: null, error: 'Export fehlgeschlagen.' });
+        setImportState({ busy: false, error: 'Export fehlgeschlagen.' });
       }
     },
     [],
@@ -1936,8 +1945,8 @@ const DashboardApp: FunctionalComponent = () => {
                 </button>
               </div>
               {importState.busy ? <p>Import/Export läuft…</p> : null}
-              {importState.progress ? (
-                <pre className="progress">{JSON.stringify(importState.progress, null, 2)}</pre>
+              {importProgress ? (
+                <pre className="progress">{JSON.stringify(importProgress, null, 2)}</pre>
               ) : null}
               {importState.error ? <p className="error">{importState.error}</p> : null}
             </div>
