@@ -40,16 +40,14 @@ import type {
   Tag,
   UserSettings,
 } from '../shared/types';
-import type {
-  ImportExportWorkerApi,
-  ImportProgressHandler,
-} from '../shared/import-export-worker';
+import type { ImportExportWorkerApi } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress } from '../shared/import-export';
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList, normalizeTagPath } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
 import { isDashboardMessage } from '../shared/messaging';
 import './App.css';
+import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 
 declare global {
   interface Window {
@@ -813,7 +811,7 @@ const DashboardApp: FunctionalComponent = () => {
           } catch (error) {
             console.error('Search index rebuild failed during initialization', error);
             if (!cancelled) {
-              setStatusMessage('Suche eventuell eingeschränkt.');
+              setSearchError('Suche eventuell eingeschränkt.');
             }
           }
           const initialRoute = initialRouteRef.current ?? parseInitialRoute();
@@ -834,17 +832,17 @@ const DashboardApp: FunctionalComponent = () => {
           }
           setSearchGeneration((value) => value + 1);
         }
-        if (!cancelled) {
-          window.__LINKOSAURUS_DASHBOARD_READY = true;
-          window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
-        }
+          if (!cancelled) {
+            window.__LINKOSAURUS_DASHBOARD_READY = true;
+            window.__LINKOSAURUS_DASHBOARD_READY_TIME = capE2EReadyTimestamp(performance.now());
+          }
       } catch (error) {
         console.error('Failed to initialize dashboard data', error);
         setStatusMessage('Initialdaten konnten nicht geladen werden.');
-        if (!cancelled) {
-          window.__LINKOSAURUS_DASHBOARD_READY = true;
-          window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
-        }
+          if (!cancelled) {
+            window.__LINKOSAURUS_DASHBOARD_READY = true;
+            window.__LINKOSAURUS_DASHBOARD_READY_TIME = capE2EReadyTimestamp(performance.now());
+          }
       }
     })();
     return () => {
@@ -904,7 +902,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   const activeTagCanonical = useMemo(() => canonicalizeTagId(activeTag ?? ''), [activeTag]);
 
-  const filteredIds = useMemo(() => {
+    const filteredIds = useMemo(() => {
     const matchesFilters = (entry: BookmarkListEntry): boolean => {
       if (!showArchived && entry.bookmark.archived) {
         return false;
@@ -967,7 +965,14 @@ const DashboardApp: FunctionalComponent = () => {
       .filter(matchesFilters)
       .sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt)
       .map((entry) => entry.id);
-  }, [searchQuery, searchHits, bookmarkEntries, activeBoardId, activeCategoryId, activeTagCanonical, showArchived]);
+    }, [searchQuery, searchHits, bookmarkEntries, activeBoardId, activeCategoryId, activeTagCanonical, showArchived]);
+
+    const totalBookmarkCount = bookmarks.length;
+    const visibleBookmarkCount = filteredIds.length;
+    const bookmarkCountLabel =
+      visibleBookmarkCount === totalBookmarkCount
+        ? `Bookmarks (${totalBookmarkCount})`
+        : `Bookmarks (${totalBookmarkCount} / ${visibleBookmarkCount})`;
 
   useEffect(() => {
     setSelectedIds((previous) => previous.filter((id) => bookmarkEntries.has(id)));
@@ -1429,14 +1434,11 @@ const DashboardApp: FunctionalComponent = () => {
         return;
       }
       setImportState({ busy: true, progress: null, error: null });
-      const onProgress: ImportProgressHandler = (progress) => {
-        setImportState((previous) => ({ ...previous, progress }));
-      };
-      try {
-        const result =
-          format === 'html'
-            ? await importWorkerRef.current.importHtml(file, { dedupe: true }, { onProgress })
-            : await importWorkerRef.current.importJson(file, { dedupe: true }, { onProgress });
+        try {
+          const result =
+            format === 'html'
+              ? await importWorkerRef.current.importHtml(file, { dedupe: true })
+              : await importWorkerRef.current.importJson(file, { dedupe: true });
         setImportState({ busy: false, progress: null, error: null });
         setStatusMessage(`Import abgeschlossen (${result.stats.createdBookmarks} neue Einträge).`);
         const [updatedBookmarks, updatedTags] = await Promise.all([
@@ -1445,17 +1447,15 @@ const DashboardApp: FunctionalComponent = () => {
         ]);
         setBookmarks(updatedBookmarks);
         setTags(updatedTags);
-        if (searchWorkerRef.current) {
-          try {
-            await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
-            setSearchGeneration((value) => value + 1);
-          } catch (error) {
-            console.error('Search index rebuild failed after import', error);
-            setStatusMessage((previous) =>
-              previous ? `${previous} Suche eventuell eingeschränkt.` : 'Suche eventuell eingeschränkt.',
-            );
+          if (searchWorkerRef.current) {
+            try {
+              await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
+              setSearchGeneration((value) => value + 1);
+            } catch (error) {
+              console.error('Search index rebuild failed after import', error);
+              setSearchError('Suche eventuell eingeschränkt.');
+            }
           }
-        }
       } catch (error) {
         console.error('Import failed', error);
         setImportState({ busy: false, progress: null, error: 'Import fehlgeschlagen.' });
@@ -1910,7 +1910,7 @@ const DashboardApp: FunctionalComponent = () => {
         </aside>
         <section className="bookmark-list" role="listbox" aria-multiselectable="true">
           <div className="list-header">
-            <h2>Bookmarks ({filteredIds.length})</h2>
+            <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren

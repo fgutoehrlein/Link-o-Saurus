@@ -1,4 +1,4 @@
-import { expose, proxy } from 'comlink';
+import { expose } from 'comlink';
 import {
   exportData,
   type ExportFormat,
@@ -18,22 +18,12 @@ export type ImportRequestCallbacks = {
   onProgress?: ImportProgressHandler;
 };
 
-const toCallbacks = (callbacks?: ImportRequestCallbacks): ImportCallbacks | undefined => {
-  if (!callbacks?.onProgress) {
-    return callbacks;
-  }
-
-  return {
-    onProgress: proxy(callbacks.onProgress),
-  };
-};
-
 const workerApi = {
   async importHtml(file: File, options?: ImportOptions, callbacks?: ImportRequestCallbacks): Promise<ImportResult> {
-    return importFromNetscapeHtml(file, options, toCallbacks(callbacks));
+    return importFromNetscapeHtml(file, options, callbacks);
   },
   async importJson(file: File, options?: ImportOptions, callbacks?: ImportRequestCallbacks): Promise<ImportResult> {
-    return importFromJson(file, options, toCallbacks(callbacks));
+    return importFromJson(file, options, callbacks);
   },
   async export(format: ExportFormat, options?: ExportOptions): Promise<ExportResult> {
     return exportData(format, options);
