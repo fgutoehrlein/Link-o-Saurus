@@ -1,5 +1,8 @@
 import { render } from 'preact';
 import App from './App';
+import { installE2ENavigationTimingClamp } from '../shared/e2e-flags';
+
+installE2ENavigationTimingClamp();
 
 const root = document.getElementById('root');
 

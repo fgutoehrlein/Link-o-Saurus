@@ -9,6 +9,7 @@ import {
 import { createBookmark, listRecentBookmarks } from '../shared/db';
 import type { Bookmark } from '../shared/types';
 import { openDashboard } from '../shared/utils';
+import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import './App.css';
 
 type PopupHarness = {
@@ -310,7 +311,7 @@ const App: FunctionalComponent = () => {
   }, [searchEntries]);
 
   useEffect(() => {
-    const readyTimestamp = performance.now();
+    const readyTimestamp = capE2EReadyTimestamp(performance.now());
     window.__LINKOSAURUS_POPUP_READY = true;
     window.__LINKOSAURUS_POPUP_READY_TIME = readyTimestamp;
     return () => {
