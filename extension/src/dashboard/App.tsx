@@ -382,15 +382,20 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       return undefined;
     }
     const measureHeight = (entry?: ResizeObserverEntry): number => {
+      const natural = Math.max(
+        element.scrollHeight,
+        element.offsetHeight,
+        element.getBoundingClientRect().height,
+      );
       if (entry?.borderBoxSize) {
         const borderBox = Array.isArray(entry.borderBoxSize)
           ? entry.borderBoxSize[0]
           : entry.borderBoxSize;
         if (borderBox) {
-          return borderBox.blockSize;
+          return Math.max(borderBox.blockSize, natural);
         }
       }
-      return element.getBoundingClientRect().height;
+      return natural;
     };
     data.setRowHeight(id, measureHeight());
     if (typeof ResizeObserver === 'undefined') {
