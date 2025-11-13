@@ -531,6 +531,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [batchMove, setBatchMove] = useState<BatchMoveState>({ boardId: '', categoryId: '' });
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>('system');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -860,18 +861,24 @@ const DashboardApp: FunctionalComponent = () => {
       const trimmed = searchQuery.trim();
       if (!trimmed) {
         setSearchHits([]);
+        setSearchError(null);
         return;
       }
       setIsSearching(true);
       try {
-        const hits = await searchWorkerRef.current!.query(trimmed, activeTag ? { tags: [activeTag] } : undefined, MAX_QUERY_RESULTS);
+        const hits = await searchWorkerRef.current!.query(
+          trimmed,
+          activeTag ? { tags: [activeTag] } : undefined,
+          MAX_QUERY_RESULTS,
+        );
         if (!cancelled) {
           setSearchHits(hits);
+          setSearchError(null);
         }
       } catch (error) {
         if (!cancelled) {
           console.error('Search failed', error);
-          setStatusMessage('Suche fehlgeschlagen.');
+          setSearchError('Suche fehlgeschlagen.');
         }
       } finally {
         if (!cancelled) {
@@ -1127,6 +1134,7 @@ const DashboardApp: FunctionalComponent = () => {
   const handleSearchChange = useCallback((event: Event) => {
     const input = event.currentTarget as HTMLInputElement;
     setSearchQuery(input.value);
+    setSearchError(null);
   }, []);
 
   const handleToggleArchived = useCallback((event: Event) => {
@@ -1769,7 +1777,7 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
         <div className="status" aria-live="polite">
-          {isSearching ? 'Suche…' : statusMessage}
+          {isSearching ? 'Suche…' : statusMessage || searchError}
         </div>
       </div>
       <div className="dashboard-main">
