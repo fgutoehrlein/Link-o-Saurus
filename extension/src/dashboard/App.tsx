@@ -118,6 +118,34 @@ type RouteSnapshot = {
 
 const DEFAULT_ITEM_HEIGHT = 90;
 const MAX_QUERY_RESULTS = 600;
+
+type ThemeOption = {
+  readonly value: ThemeChoice;
+  readonly title: string;
+  readonly description: string;
+  readonly icon: string;
+};
+
+const THEME_OPTIONS: readonly ThemeOption[] = [
+  {
+    value: 'system',
+    title: 'System',
+    description: 'Passt sich automatisch deinem Gerät an.',
+    icon: '🖥️',
+  },
+  {
+    value: 'light',
+    title: 'Light mode',
+    description: 'Helles Interface für maximale Klarheit.',
+    icon: '🌤️',
+  },
+  {
+    value: 'dark',
+    title: 'Default mode',
+    description: 'Unser fokussierter Standard-Look.',
+    icon: '🌙',
+  },
+];
 const MIN_RESIZE_WIDTH = 320;
 
 const ROUTE_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/gu;
@@ -1509,9 +1537,7 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, []);
 
-  const handleThemeChange = useCallback(async (event: Event) => {
-    const select = event.currentTarget as HTMLSelectElement;
-    const theme = (select.value as ThemeChoice) ?? 'system';
+  const handleThemeChange = useCallback(async (theme: ThemeChoice) => {
     setThemeChoice(theme);
     document.documentElement.dataset.theme = theme;
     try {
@@ -1844,14 +1870,34 @@ const DashboardApp: FunctionalComponent = () => {
             <button type="button" onClick={() => setSessionDialogOpen(true)}>
               Sessions
             </button>
-            <label>
-              <span>Theme</span>
-              <select value={themeChoice} onChange={handleThemeChange}>
-                <option value="system">System</option>
-                <option value="light">Hell</option>
-                <option value="dark">Dunkel</option>
-              </select>
-            </label>
+            <div className="theme-card" role="group" aria-label="Theme selection">
+              <div className="theme-card-header">
+                <p className="theme-card-label">Theme</p>
+                <p className="theme-card-hint">Wähle den Look, der zu dir passt.</p>
+              </div>
+              <div className="theme-options">
+                {THEME_OPTIONS.map((option) => {
+                  const isActive = themeChoice === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={combineClassNames('theme-option', isActive && 'selected')}
+                      aria-pressed={isActive}
+                      onClick={() => handleThemeChange(option.value)}
+                    >
+                      <span className="theme-option-icon" aria-hidden="true">
+                        {option.icon}
+                      </span>
+                      <span className="theme-option-copy">
+                        <strong>{option.title}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </section>
         </aside>
         <section className="bookmark-list" role="listbox" aria-multiselectable="true">
