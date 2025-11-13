@@ -116,7 +116,7 @@ type RouteSnapshot = {
   readonly newTags: string;
 };
 
-const DEFAULT_ITEM_HEIGHT = 76;
+const DEFAULT_ITEM_HEIGHT = 90;
 const MAX_QUERY_RESULTS = 600;
 const MIN_RESIZE_WIDTH = 320;
 
