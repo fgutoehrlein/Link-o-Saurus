@@ -687,6 +687,7 @@ const App: FunctionalComponent = () => {
               <input
                 id="quick-add-title"
                 name="title"
+                type="text"
                 value={title}
                 onInput={(event) => setTitle((event.currentTarget as HTMLInputElement).value)}
                 placeholder="Titel eingeben"
