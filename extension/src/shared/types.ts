@@ -1,3 +1,5 @@
+import type { SyncSettings } from './bookmark-sync/types';
+
 export type EntityId = string;
 
 export type Board = {
@@ -69,6 +71,7 @@ export type UserSettings = {
   theme: 'light' | 'dark' | 'system';
   newTabEnabled: boolean;
   hotkeys?: Record<string, string>;
+  bookmarkSync: SyncSettings;
 };
 
 export type EntityMap<T extends { id: EntityId }> = Record<EntityId, T>;

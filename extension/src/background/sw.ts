@@ -8,6 +8,7 @@ import {
   listDueReadLater,
   saveUserSettings,
 } from '../shared/db';
+import { initializeBookmarkSync } from '../shared/bookmark-sync';
 import type { CreateSessionInput } from '../shared/db';
 import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging';
 import { isBackgroundRequest } from '../shared/messaging';
@@ -144,8 +145,15 @@ void (async () => {
     if (settings.newTabEnabled && !applied) {
       await saveUserSettings({ newTabEnabled: false });
     }
+    if (settings.bookmarkSync?.enableBidirectional) {
+      try {
+        await initializeBookmarkSync(settings.bookmarkSync);
+      } catch (syncError) {
+        console.error('[Link-o-Saurus] Failed to initialize bookmark sync', syncError);
+      }
+    }
   } catch (error) {
-    console.error('[Link-o-Saurus] Failed to initialize new tab override', error);
+    console.error('[Link-o-Saurus] Failed to initialize background features', error);
   }
 })();
 
