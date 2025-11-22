@@ -21,12 +21,30 @@ const ensureTimestamp = (value: number): number => {
   return Math.floor(value);
 };
 
+const ensureNodeType = (value: unknown): NodeType => {
+  if (value === 'bookmark' || value === 'folder') {
+    return value;
+  }
+  throw new Error('nodeType must be "bookmark" or "folder"');
+};
+
+const ensureOptionalId = (value: unknown, label: string): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error(`${label} must not be empty`);
+  }
+  return trimmed;
+};
+
 const normalizeMapping = (mapping: Mapping): Mapping => ({
   nativeId: ensureTrimmed(mapping.nativeId, 'nativeId'),
-  localId: typeof mapping.localId === 'string' ? mapping.localId.trim() || undefined : undefined,
-  nodeType: mapping.nodeType,
-  boardId: typeof mapping.boardId === 'string' ? mapping.boardId : undefined,
-  categoryId: typeof mapping.categoryId === 'string' ? mapping.categoryId : undefined,
+  localId: ensureOptionalId(mapping.localId, 'localId'),
+  nodeType: ensureNodeType(mapping.nodeType),
+  boardId: ensureOptionalId(mapping.boardId, 'boardId'),
+  categoryId: ensureOptionalId(mapping.categoryId, 'categoryId'),
   lastSyncAt: ensureTimestamp(mapping.lastSyncAt),
 });
 

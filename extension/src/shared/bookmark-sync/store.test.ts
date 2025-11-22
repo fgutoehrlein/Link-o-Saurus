@@ -50,6 +50,30 @@ describe('bookmark sync store', () => {
     expect(byLocal[0]).toEqual(mapping);
   });
 
+  it('normalizes id fields and rejects invalid node types', async () => {
+    const mapping = sampleMapping({
+      nativeId: ' native-trim ',
+      localId: ' local-trim ',
+      boardId: ' board-trim ',
+      categoryId: ' category-trim ',
+    });
+
+    await putMapping(mapping, database);
+    const saved = await getMappingByNativeId('native-trim', database);
+
+    expect(saved).toEqual({
+      ...mapping,
+      nativeId: 'native-trim',
+      localId: 'local-trim',
+      boardId: 'board-trim',
+      categoryId: 'category-trim',
+    });
+
+    await expect(
+      putMapping({ ...mapping, nodeType: 'invalid' as unknown as Mapping['nodeType'] }, database),
+    ).rejects.toThrow('nodeType must be "bookmark" or "folder"');
+  });
+
   it('lists mappings and filters by node type', async () => {
     await clearMappings(database);
     const folderMapping = sampleMapping({ nativeId: 'folder-1', nodeType: 'folder', localId: undefined });
