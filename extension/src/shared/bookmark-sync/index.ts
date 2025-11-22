@@ -1,4 +1,5 @@
 import { ensureMirrorRoot } from './native';
+export { initialImport, mirrorRootId } from './initial-import';
 import type { SyncSettings } from './types';
 
 let initializationPromise: Promise<void> | null = null;
