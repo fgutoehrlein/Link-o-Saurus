@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie';
+import type { Mapping, SyncSettings } from './bookmark-sync/types';
 import type {
   Board,
   Bookmark,
@@ -20,10 +21,18 @@ import {
 
 export const DB_NAME = 'link-o-saurus';
 export const USER_SETTINGS_KEY = 'user-settings';
+export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  enableBidirectional: false,
+  mirrorRootName: 'Link-O-Saurus',
+  importFolderHierarchy: true,
+  conflictPolicy: 'last-writer-wins',
+};
+
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'system',
   newTabEnabled: false,
   hotkeys: {},
+  bookmarkSync: { ...DEFAULT_SYNC_SETTINGS },
 };
 
 const createId = (): string => {
@@ -255,6 +264,7 @@ export class LinkOSaurusDB extends Dexie {
   userSettings!: Table<UserSettingsRecord, string>;
   tags!: Table<Tag, string>;
   rules!: Table<Rule, string>;
+  bookmarkMappings!: Table<Mapping, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -389,6 +399,7 @@ export class LinkOSaurusDB extends Dexie {
       tags: 'id, &path, &name, usageCount, *slugParts',
       rules: 'id, enabled, name',
       readLater: 'bookmarkId, dueAt, snoozedUntil',
+      bookmarkMappings: '&nativeId, localId, nodeType',
     });
   }
 }
@@ -1564,7 +1575,12 @@ export const getUserSettings = async (
 ): Promise<UserSettings> => {
   const dbInstance = withDatabase(database);
   const stored = await dbInstance.userSettings.get(USER_SETTINGS_KEY);
-  return stored ? { ...DEFAULT_USER_SETTINGS, ...stored } : { ...DEFAULT_USER_SETTINGS };
+  const base = stored ? { ...DEFAULT_USER_SETTINGS, ...stored } : { ...DEFAULT_USER_SETTINGS };
+  const bookmarkSync = {
+    ...DEFAULT_SYNC_SETTINGS,
+    ...(stored?.bookmarkSync ?? base.bookmarkSync ?? DEFAULT_SYNC_SETTINGS),
+  };
+  return { ...base, bookmarkSync };
 };
 
 export const saveUserSettings = async (
@@ -1572,12 +1588,21 @@ export const saveUserSettings = async (
   database?: LinkOSaurusDB,
 ): Promise<UserSettings> => {
   const dbInstance = withDatabase(database);
-  const merged = { ...DEFAULT_USER_SETTINGS, ...(await getUserSettings(dbInstance)), ...settings };
+  const current = await getUserSettings(dbInstance);
+  const bookmarkSync = settings.bookmarkSync
+    ? { ...settings.bookmarkSync }
+    : { ...current.bookmarkSync };
+  const merged: UserSettings = {
+    ...DEFAULT_USER_SETTINGS,
+    ...current,
+    ...settings,
+    bookmarkSync,
+  };
   const record = normalizeSettings(merged);
   await runWriteTransaction(dbInstance, dbInstance.userSettings, () =>
     dbInstance.userSettings.put(record),
   );
-  return { ...merged };
+  return { ...merged, bookmarkSync: { ...bookmarkSync } };
 };
 
 export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => {
@@ -1593,6 +1618,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
       dbInstance.userSettings,
       dbInstance.tags,
       dbInstance.rules,
+      dbInstance.bookmarkMappings,
     ],
     async () => {
       await Promise.all([
@@ -1604,6 +1630,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
         dbInstance.userSettings.clear(),
         dbInstance.tags.clear(),
         dbInstance.rules.clear(),
+        dbInstance.bookmarkMappings.clear(),
       ]);
     },
   );
