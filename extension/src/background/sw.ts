@@ -545,11 +545,12 @@ const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
 };
 
 const ensureTabsPermission = async (): Promise<void> => {
-  const hasPermission = await chrome.permissions.contains({ permissions: ['tabs'] });
+  const permissions: chrome.permissions.Permissions = { permissions: ['tabs', 'windows'] };
+  const hasPermission = await chrome.permissions.contains(permissions);
   if (hasPermission) {
     return;
   }
-  const granted = await chrome.permissions.request({ permissions: ['tabs'] });
+  const granted = await chrome.permissions.request(permissions);
   if (!granted) {
     throw new Error('Berechtigung für Tabs wurde nicht erteilt.');
   }
