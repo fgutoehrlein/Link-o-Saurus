@@ -35,6 +35,8 @@ const FIELD_WEIGHTS: Record<string, number> = {
   notes: 1,
 };
 
+const simpleEncode = (value: string): string => value.trim().toLowerCase();
+
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
 
@@ -46,10 +48,10 @@ function createDocumentIndex() {
       id: 'id',
       store: true,
       index: [
-        { field: 'title', tokenize: 'forward', encode: 'simple' },
-        { field: 'url', tokenize: 'forward', encode: 'simple' },
-        { field: 'notes', tokenize: 'forward', encode: 'simple' },
-        { field: 'tags', tokenize: 'forward', encode: 'simple' },
+        { field: 'title', tokenize: 'forward', encode: simpleEncode },
+        { field: 'url', tokenize: 'forward', encode: simpleEncode },
+        { field: 'notes', tokenize: 'forward', encode: simpleEncode },
+        { field: 'tags', tokenize: 'forward', encode: simpleEncode },
       ],
     },
   });
