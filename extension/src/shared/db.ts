@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie';
+import { enqueueBookmarkCreate, enqueueBookmarkDelete, enqueueBookmarkUpdate } from './bookmark-sync/outbound';
 import type { Mapping, SyncSettings } from './bookmark-sync/types';
 import type {
   Board,
@@ -163,6 +164,11 @@ const normalizeReadLaterPriority = (
     return normalized as ReadLater['priority'];
   }
   throw new Error('Read later priority must be one of: low, med, high');
+};
+
+const getSyncSettingsSnapshot = async (database: LinkOSaurusDB): Promise<SyncSettings> => {
+  const settings = await getUserSettings(database);
+  return { ...DEFAULT_SYNC_SETTINGS, ...settings.bookmarkSync };
 };
 
 type TagDelta = {
@@ -1044,6 +1050,18 @@ export const createBookmark = async (
       await updateTagUsageForDiff(dbInstance, [], record.tags);
     },
   );
+  const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+  if (syncSettings.enableBidirectional) {
+    const category = record.categoryId ? await dbInstance.categories.get(record.categoryId) : undefined;
+    const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
+    enqueueBookmarkCreate({
+      bookmark: record,
+      category,
+      board,
+      database: dbInstance,
+      settings: syncSettings,
+    });
+  }
   return record;
 };
 
@@ -1112,6 +1130,7 @@ export const updateBookmark = async (
   }
 
   let next: Bookmark | undefined;
+  let previous: Bookmark | undefined;
   await runWriteTransaction(
     dbInstance,
     [dbInstance.bookmarks, dbInstance.tags],
@@ -1120,6 +1139,7 @@ export const updateBookmark = async (
       if (!current) {
         throw new Error(`Bookmark ${id} not found`);
       }
+      previous = { ...current };
       const previousTags = normalizeTagList(current.tags);
       const nextTags = sanitizedTags ?? previousTags;
       const updatedRecord: Bookmark = {
@@ -1135,6 +1155,25 @@ export const updateBookmark = async (
 
   if (!next) {
     throw new Error(`Bookmark ${id} not found after update`);
+  }
+  const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+  if (syncSettings.enableBidirectional) {
+    const [nextCategory, prevCategory] = await Promise.all([
+      next.categoryId ? dbInstance.categories.get(next.categoryId) : undefined,
+      previous?.categoryId ? dbInstance.categories.get(previous.categoryId) : undefined,
+    ]);
+    const nextBoard = nextCategory ? await dbInstance.boards.get(nextCategory.boardId) : undefined;
+    const prevBoard = prevCategory ? await dbInstance.boards.get(prevCategory.boardId) : undefined;
+
+    enqueueBookmarkUpdate({
+      bookmark: next,
+      category: nextCategory,
+      board: nextBoard,
+      previousCategory: prevCategory,
+      previousBoard: prevBoard,
+      database: dbInstance,
+      settings: syncSettings,
+    });
   }
   return next;
 };
@@ -1199,11 +1238,12 @@ export const deleteBookmark = async (
   if (!trimmedId) {
     return;
   }
+  let existing: Bookmark | undefined;
   await runWriteTransaction(
     dbInstance,
     [dbInstance.bookmarks, dbInstance.tags, dbInstance.comments],
     async () => {
-      const existing = await dbInstance.bookmarks.get(trimmedId);
+      existing = await dbInstance.bookmarks.get(trimmedId);
       await dbInstance.bookmarks.delete(trimmedId);
       await dbInstance.comments.where('bookmarkId').equals(trimmedId).delete();
       if (existing) {
@@ -1214,6 +1254,20 @@ export const deleteBookmark = async (
       }
     },
   );
+  if (existing) {
+    const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+    if (syncSettings.enableBidirectional) {
+      const category = existing.categoryId ? await dbInstance.categories.get(existing.categoryId) : undefined;
+      const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
+      enqueueBookmarkDelete({
+        bookmark: existing,
+        category,
+        board,
+        database: dbInstance,
+        settings: syncSettings,
+      });
+    }
+  }
 };
 
 export const createComment = async (
