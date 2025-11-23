@@ -1,3 +1,4 @@
+import { initializeInboundSync } from './inbound';
 import { ensureMirrorRoot } from './native';
 export { initialImport, mirrorRootId } from './initial-import';
 import type { SyncSettings } from './types';
@@ -11,6 +12,7 @@ export const initializeBookmarkSync = (settings: SyncSettings): Promise<void> =>
   if (!initializationPromise) {
     initializationPromise = (async () => {
       await ensureMirrorRoot(settings.mirrorRootName);
+      await initializeInboundSync(settings);
     })().finally(() => {
       initializationPromise = null;
     });
