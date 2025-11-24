@@ -192,7 +192,9 @@ const handleDelete = async (context: BookmarkContext): Promise<void> => {
     return;
   }
 
-  await withPendingNative(mapping.nativeId, () => removeNativeNode(mapping.nativeId));
+  if (context.settings.deleteBehavior === 'delete') {
+    await withPendingNative(mapping.nativeId, () => removeNativeNode(mapping.nativeId));
+  }
   await context.database.bookmarkMappings.delete(mapping.nativeId);
 };
 

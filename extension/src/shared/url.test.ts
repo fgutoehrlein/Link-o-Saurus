@@ -12,6 +12,11 @@ describe('normalizeUrl', () => {
     expect(normalized).toBe('https://example.com/search?lang=de&q=link');
   });
 
+  it('strips utm parameters and trailing slashes', () => {
+    const normalized = normalizeUrl('https://Example.com/path/?utm_source=newsletter&utm_medium=email');
+    expect(normalized).toBe('https://example.com/path');
+  });
+
   it('returns null for invalid URLs', () => {
     expect(normalizeUrl('not-a-url')).toBeNull();
   });

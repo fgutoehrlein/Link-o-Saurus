@@ -15,6 +15,7 @@ import { normalizeUrl } from '../url';
 import { guardRun, pendingNativeOps } from './guards';
 import { deleteMappingByNativeId, getMappingByNativeId, putMapping } from './store';
 import type { Mapping, SyncSettings } from './types';
+import { resolveBookmarkConflict } from './conflicts';
 
 type BookmarkTreeNode = chrome.bookmarks.BookmarkTreeNode;
 
@@ -223,6 +224,15 @@ const upsertMapping = async (mapping: Mapping): Promise<void> => {
   await putMapping({ ...mapping, lastSyncAt: Date.now() });
 };
 
+const findByNormalizedUrl = async (target: string): Promise<import('../types').Bookmark | undefined> => {
+  const direct = await db.bookmarks.where('url').equals(target).first();
+  if (direct) {
+    return direct;
+  }
+  const all = await db.bookmarks.toArray();
+  return all.find((bookmark) => normalizeUrlSafe(bookmark.url) === target);
+};
+
 const handleCreated = async (node: BookmarkTreeNode, settings: SyncSettings): Promise<void> => {
   if (pendingNativeOps.has(node.id)) {
     return;
@@ -247,7 +257,7 @@ const handleCreated = async (node: BookmarkTreeNode, settings: SyncSettings): Pr
   if (!targetUrl) {
     return;
   }
-  const existing = await db.bookmarks.where('url').equals(targetUrl).first();
+  const existing = normalizedUrl ? await findByNormalizedUrl(normalizedUrl) : undefined;
   const bookmark =
     existing ??
     (await createBookmark({
@@ -274,6 +284,7 @@ const handleCreated = async (node: BookmarkTreeNode, settings: SyncSettings): Pr
 const handleChanged = async (
   nativeId: string,
   changeInfo: chrome.bookmarks.BookmarkChangeInfo,
+  settings: SyncSettings,
 ): Promise<void> => {
   if (pendingNativeOps.has(nativeId)) {
     return;
@@ -286,12 +297,20 @@ const handleChanged = async (
   if (!bookmark) {
     return;
   }
+  const api = getBookmarksApi();
+  const [node] = await api.get(nativeId);
   const normalizedUrl = normalizeUrlSafe(changeInfo.url ?? bookmark.url) ?? bookmark.url;
+  const resolved = resolveBookmarkConflict(
+    bookmark,
+    { title: changeInfo.title ?? node?.title, url: normalizedUrl, updatedAt: node?.dateGroupModified },
+    settings,
+  );
+
   await guardRun(pendingNativeOps, nativeId, () =>
     updateBookmark(mapping.localId!, {
-      url: normalizedUrl,
-      title: changeInfo.title ?? bookmark.title,
-      updatedAt: Date.now(),
+      url: resolved.url,
+      title: resolved.title,
+      updatedAt: resolved.updatedAt,
     }),
   );
 };
@@ -410,7 +429,7 @@ export const initializeInboundSync = async (settings: SyncSettings): Promise<voi
     queue.enqueue(() => handleCreated(node, settings));
   });
   api.onChanged.addListener((id, changeInfo) => {
-    queue.enqueue(() => handleChanged(id, changeInfo));
+    queue.enqueue(() => handleChanged(id, changeInfo, settings));
   });
   api.onRemoved.addListener((id) => {
     queue.enqueue(() => handleRemoved(id));
