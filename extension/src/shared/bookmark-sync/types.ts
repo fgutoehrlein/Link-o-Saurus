@@ -16,4 +16,5 @@ export interface SyncSettings {
   mirrorRootName: 'Link-O-Saurus';
   importFolderHierarchy: boolean; // true = ordnet native Ordner → Boards/Kategorien
   conflictPolicy: 'last-writer-wins';
+  deleteBehavior: 'delete' | 'archive';
 }

@@ -14,6 +14,9 @@ const DEFAULT_HTTPS_PORT = '443';
 const normalizeSearchParams = (searchParams: URLSearchParams): string => {
   const entries: [string, string][] = [];
   searchParams.forEach((value, key) => {
+    if (/^utm_/iu.test(key)) {
+      return;
+    }
     entries.push([key, value]);
   });
   entries.sort((a, b) => {
@@ -59,6 +62,10 @@ export const normalizeUrl = (
       if (!url.pathname.startsWith('/')) {
         url.pathname = `/${url.pathname}`;
       }
+    }
+
+    if (url.pathname === '/') {
+      url.pathname = '';
     }
 
     if (options.sortQueryParameters !== false && url.search) {

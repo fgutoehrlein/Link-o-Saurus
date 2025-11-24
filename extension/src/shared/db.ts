@@ -27,6 +27,7 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   mirrorRootName: 'Link-O-Saurus',
   importFolderHierarchy: true,
   conflictPolicy: 'last-writer-wins',
+  deleteBehavior: 'delete',
 };
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {

@@ -102,11 +102,12 @@ describe('bookmark sync store', () => {
     expect(defaults).toEqual(DEFAULT_SYNC_SETTINGS);
 
     const updated = await saveSyncSettings(
-      { enableBidirectional: true, importFolderHierarchy: false },
+      { enableBidirectional: true, importFolderHierarchy: false, deleteBehavior: 'archive' },
       database,
     );
     expect(updated.enableBidirectional).toBe(true);
     expect(updated.importFolderHierarchy).toBe(false);
+    expect(updated.deleteBehavior).toBe('archive');
 
     const reloaded = await getSyncSettings(database);
     expect(reloaded).toEqual(updated);

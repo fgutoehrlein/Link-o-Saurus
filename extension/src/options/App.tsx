@@ -6,12 +6,14 @@ import ImportExportWorker from '../shared/import-export-worker?worker&module';
 import {
   createRule,
   deleteRule,
+  DEFAULT_SYNC_SETTINGS,
   getUserSettings,
   listRules,
   saveUserSettings,
   updateRule,
 } from '../shared/db';
 import { sendBackgroundMessage } from '../shared/messaging';
+import { initialImport } from '../shared/bookmark-sync';
 import type {
   ImportExportWorkerApi,
   ImportProgressHandler,
@@ -507,6 +509,11 @@ const App: FunctionalComponent = () => {
   const [isUpdatingNewTab, setIsUpdatingNewTab] = useState(false);
   const [newTabMessage, setNewTabMessage] = useState<string | null>(null);
   const [newTabError, setNewTabError] = useState<string | null>(null);
+  const [syncSettings, setSyncSettings] = useState(DEFAULT_SYNC_SETTINGS);
+  const [isSavingSync, setIsSavingSync] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isRunningInitialImport, setIsRunningInitialImport] = useState(false);
   const [dedupeEnabled, setDedupeEnabled] = useState(true);
   const [includeFavicons, setIncludeFavicons] = useState(true);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
@@ -537,6 +544,7 @@ const App: FunctionalComponent = () => {
         const settings = await getUserSettings();
         if (!cancelled) {
           setNewTabEnabled(settings.newTabEnabled);
+          setSyncSettings(settings.bookmarkSync);
         }
       } catch (err) {
         console.error('Failed to load user settings', err);
@@ -768,6 +776,41 @@ const App: FunctionalComponent = () => {
     [ensureNewTabPermission, newTabEnabled],
   );
 
+  const updateSyncPreference = useCallback(
+    async (changes: Partial<typeof syncSettings>) => {
+      setIsSavingSync(true);
+      setSyncMessage(null);
+      setSyncError(null);
+      try {
+        const nextSettings = { ...syncSettings, ...changes };
+        const stored = await saveUserSettings({ bookmarkSync: nextSettings });
+        setSyncSettings(stored.bookmarkSync);
+        setSyncMessage('Sync-Einstellungen gespeichert. Service Worker ggf. neu laden.');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setSyncError(message);
+      } finally {
+        setIsSavingSync(false);
+      }
+    },
+    [syncSettings],
+  );
+
+  const triggerInitialImport = useCallback(async () => {
+    setIsRunningInitialImport(true);
+    setSyncMessage(null);
+    setSyncError(null);
+    try {
+      await initialImport({ importFolderHierarchy: syncSettings.importFolderHierarchy });
+      setSyncMessage('Initial-Import abgeschlossen.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSyncError(message);
+    } finally {
+      setIsRunningInitialImport(false);
+    }
+  }, [syncSettings.importFolderHierarchy]);
+
   const handleProgress = useCallback<ImportProgressHandler>((progress) => {
     setImportProgress(progress);
   }, []);
@@ -875,6 +918,60 @@ const App: FunctionalComponent = () => {
         {isUpdatingNewTab && <p class="status pending">Aktualisiere Einstellung…</p>}
         {newTabMessage && <p class="status success">{newTabMessage}</p>}
         {newTabError && <p class="status error">{newTabError}</p>}
+      </section>
+
+      <section class="panel">
+        <h2>Bookmark-Sync</h2>
+        <p>
+          Steuere die bidirektionale Synchronisation mit dem nativen Lesezeichenbaum. Änderungen an den Einstellungen
+          greifen sofort; bei Bedarf den Service Worker neu laden.
+        </p>
+
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={syncSettings.enableBidirectional}
+            disabled={isSavingSync || isLoadingSettings}
+            onChange={(event) => updateSyncPreference({ enableBidirectional: event.currentTarget.checked })}
+          />
+          <span>Bidirektionale Synchronisation aktivieren</span>
+        </label>
+
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={syncSettings.importFolderHierarchy}
+            disabled={isSavingSync}
+            onChange={(event) => updateSyncPreference({ importFolderHierarchy: event.currentTarget.checked })}
+          />
+          <span>Ordnerhierarchie importieren</span>
+        </label>
+
+        <label class="toggle">
+          <span>Beim Löschen</span>
+          <select
+            value={syncSettings.deleteBehavior}
+            disabled={isSavingSync}
+            onChange={(event) =>
+              updateSyncPreference({ deleteBehavior: event.currentTarget.value as typeof syncSettings.deleteBehavior })
+            }
+          >
+            <option value="delete">Nativer Bookmark wird gelöscht</option>
+            <option value="archive">Nur archivieren (native Kopie bleibt)</option>
+          </select>
+        </label>
+
+        <button type="button" disabled={isRunningInitialImport || isSavingSync} onClick={triggerInitialImport}>
+          {isRunningInitialImport ? 'Import läuft…' : 'Initial-Import jetzt ausführen'}
+        </button>
+
+        <p class="hint">
+          Warnung: Bei destruktiven Aktionen (Löschen/Archivieren) werden Änderungen sofort übernommen. Starte den
+          Import nur, wenn der Mirror-Ordner aktuell ist.
+        </p>
+
+        {syncMessage && <p class="status success">{syncMessage}</p>}
+        {syncError && <p class="status error">{syncError}</p>}
       </section>
 
       <section class="panel">
