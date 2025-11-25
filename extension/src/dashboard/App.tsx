@@ -381,6 +381,33 @@ const openTabs = async (tabs: SessionPack['tabs']): Promise<void> => {
   }
 };
 
+const openBookmarkLink = async (bookmark: Bookmark): Promise<void> => {
+  const url = bookmark.url?.trim();
+  if (!url) {
+    return;
+  }
+
+  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        chrome.tabs.create({ url, active: true }, () => {
+          const error = chrome.runtime?.lastError;
+          if (error) {
+            reject(new Error(error.message));
+            return;
+          }
+          resolve();
+        });
+      });
+      return;
+    } catch (error) {
+      console.warn('Falling back to window.open after chrome.tabs.create failure', error);
+    }
+  }
+
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
 const getBookmarkInitial = (bookmark: Bookmark): string => {
   const source = bookmark.title?.trim() || bookmark.url;
   return source ? source.charAt(0).toUpperCase() : '🔖';
@@ -442,6 +469,11 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
     data.onRowClick(event, id);
   };
 
+  const handleDoubleClick = (event: MouseEvent) => {
+    event.preventDefault();
+    void openBookmarkLink(bookmark);
+  };
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -466,6 +498,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       style={style as JSX.CSSProperties}
       ref={rowRef}
       onClick={handleClick}
+      onDblClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
       draggable
@@ -1625,6 +1658,15 @@ const DashboardApp: FunctionalComponent = () => {
           <p className="detail-meta">
             Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt)}
           </p>
+          <div className="detail-actions">
+            <button
+              type="button"
+              onClick={() => entry?.bookmark && void openBookmarkLink(entry.bookmark)}
+              disabled={!entry?.bookmark?.url}
+            >
+              Link im neuen Tab öffnen
+            </button>
+          </div>
           <label>
             <span>Titel</span>
             <input type="text" value={detailState.title} onInput={handleDetailChange('title')} />
