@@ -343,6 +343,23 @@ body {
   gap: 0.75rem;
 }
 
+.section-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.sidebar-hint {
+  margin: 0.1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted-light);
+}
+
+[data-theme='dark'] .sidebar-hint {
+  color: var(--text-muted-dark);
+}
+
 .dashboard-sidebar section > header h2 {
   margin: 0;
   font-size: 1.05rem;
