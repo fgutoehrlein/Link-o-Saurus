@@ -151,6 +151,7 @@ const ROUTE_MAX_SEARCH_LENGTH = 512;
 const ROUTE_MAX_TITLE_LENGTH = 256;
 const ROUTE_MAX_TAG_LENGTH = 64;
 const ROUTE_MAX_TAG_COUNT = 32;
+const TAGS_COLLAPSED_LIMIT = 20;
 
 const sanitizeRouteText = (value: string, limit: number): string =>
   value.replace(ROUTE_CONTROL_CHARACTERS, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit);
@@ -530,6 +531,8 @@ const DashboardApp: FunctionalComponent = () => {
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>('system');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
+  const [areTagsExpanded, setTagsExpanded] = useState<boolean>(false);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -564,6 +567,12 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   const layoutMode = viewportWidth >= 1200 ? 'triple' : viewportWidth >= 900 ? 'double' : 'single';
+
+  const visibleTags = useMemo(
+    () => (areTagsExpanded || tags.length <= TAGS_COLLAPSED_LIMIT ? tags : tags.slice(0, TAGS_COLLAPSED_LIMIT)),
+    [areTagsExpanded, tags],
+  );
+  const hasHiddenTags = tags.length > visibleTags.length;
 
   useEffect(() => {
     if (layoutMode === 'triple') {
@@ -1783,82 +1792,106 @@ const DashboardApp: FunctionalComponent = () => {
       <div className="dashboard-main">
         <aside className={combineClassNames('dashboard-sidebar', sidebarOpen && 'open')}>
           <section>
-            <header>
+            <header className="sidebar-section-header">
               <h2>Boards</h2>
-              <button type="button" onClick={handleClearFilters}>
-                Filter zurücksetzen
-              </button>
+              <div className="section-buttons">
+                <button type="button" onClick={handleClearFilters}>
+                  Filter zurücksetzen
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={areBoardsExpanded}
+                  aria-controls="board-list"
+                  onClick={() => setBoardsExpanded((value) => !value)}
+                >
+                  {areBoardsExpanded ? 'Einklappen' : 'Ausklappen'}
+                </button>
+              </div>
             </header>
-            <ul className="sidebar-list">
-              {boards.map((board) => (
-                <li key={board.id}>
-                  <button
-                    type="button"
-                    className={combineClassNames('sidebar-item', activeBoardId === board.id && 'active')}
-                    onClick={() => handleSelectBoard(board.id)}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer!.dropEffect = 'move';
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const ids = parseDragPayload(event);
-                      if (ids.length > 0) {
-                        ids.forEach((id) => {
-                          if (!selectedSet.has(id)) {
-                            setSelectedIds([id]);
-                          }
-                        });
-                      }
-                      void handleDropOnBoard(board.id);
-                    }}
-                  >
-                    {board.title}
-                  </button>
-                  <ul className="sidebar-sublist">
-                    {categories
-                      .filter((category) => category.boardId === board.id)
-                      .map((category) => (
-                        <li key={category.id}>
-                          <button
-                            type="button"
-                            className={combineClassNames(
-                              'sidebar-subitem',
-                              activeCategoryId === category.id && 'active',
-                            )}
-                            onClick={() => handleSelectCategory(category.id, board.id)}
-                            onDragOver={(event) => {
-                              event.preventDefault();
-                              event.dataTransfer!.dropEffect = 'move';
-                            }}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              const ids = parseDragPayload(event);
-                              if (ids.length > 0) {
-                                ids.forEach((id) => {
-                                  if (!selectedSet.has(id)) {
-                                    setSelectedIds([id]);
-                                  }
-                                });
-                              }
-                              void handleDropOnCategory(category.id);
-                            }}
-                          >
-                            {category.title}
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
+            {areBoardsExpanded ? (
+              <ul id="board-list" className="sidebar-list">
+                {boards.map((board) => (
+                  <li key={board.id}>
+                    <button
+                      type="button"
+                      className={combineClassNames('sidebar-item', activeBoardId === board.id && 'active')}
+                      onClick={() => handleSelectBoard(board.id)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer!.dropEffect = 'move';
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const ids = parseDragPayload(event);
+                        if (ids.length > 0) {
+                          ids.forEach((id) => {
+                            if (!selectedSet.has(id)) {
+                              setSelectedIds([id]);
+                            }
+                          });
+                        }
+                        void handleDropOnBoard(board.id);
+                      }}
+                    >
+                      {board.title}
+                    </button>
+                    <ul className="sidebar-sublist">
+                      {categories
+                        .filter((category) => category.boardId === board.id)
+                        .map((category) => (
+                          <li key={category.id}>
+                            <button
+                              type="button"
+                              className={combineClassNames(
+                                'sidebar-subitem',
+                                activeCategoryId === category.id && 'active',
+                              )}
+                              onClick={() => handleSelectCategory(category.id, board.id)}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer!.dropEffect = 'move';
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                const ids = parseDragPayload(event);
+                                if (ids.length > 0) {
+                                  ids.forEach((id) => {
+                                    if (!selectedSet.has(id)) {
+                                      setSelectedIds([id]);
+                                    }
+                                  });
+                                }
+                                void handleDropOnCategory(category.id);
+                              }}
+                            >
+                              {category.title}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="sidebar-hint" id="board-list" role="status">
+                Boards eingeklappt
+              </p>
+            )}
           </section>
           <section>
-            <header>
+            <header className="sidebar-section-header">
               <h2>Tags</h2>
+              <button
+                type="button"
+                aria-expanded={areTagsExpanded}
+                aria-controls="tag-list"
+                onClick={() => setTagsExpanded((value) => !value)}
+              >
+                {areTagsExpanded ? 'Einklappen' : 'Mehr anzeigen'}
+              </button>
             </header>
-            <ul className="sidebar-tag-list">
-              {tags.slice(0, 20).map((tag) => (
+            <ul id="tag-list" className="sidebar-tag-list">
+              {visibleTags.map((tag) => (
                 <li key={tag.id}>
                   <button
                     type="button"
@@ -1870,6 +1903,11 @@ const DashboardApp: FunctionalComponent = () => {
                 </li>
               ))}
             </ul>
+            {!areTagsExpanded && hasHiddenTags ? (
+              <p className="sidebar-hint" role="status">
+                Zeigt {visibleTags.length} von {tags.length} Tags
+              </p>
+            ) : null}
           </section>
           <section className="sidebar-actions">
             <button type="button" onClick={() => setImportDialogOpen(true)}>
