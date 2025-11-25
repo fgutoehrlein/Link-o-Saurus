@@ -21,6 +21,8 @@ export const getTree = async (): Promise<BookmarkTreeNode[]> => {
   return api.getTree();
 };
 
+const isWritableFolder = (node: BookmarkTreeNode): boolean => !node.url && !node.unmodifiable;
+
 const findFolderByTitle = (
   nodes: BookmarkTreeNode[] | undefined,
   title: string,
@@ -28,8 +30,9 @@ const findFolderByTitle = (
   if (!nodes?.length) {
     return undefined;
   }
+  const normalizedTitle = title.trim().toLowerCase();
   for (const node of nodes) {
-    if (!node.url && node.title === title) {
+    if (isWritableFolder(node) && node.title.trim().toLowerCase() === normalizedTitle) {
       return node;
     }
     const childMatch = findFolderByTitle(node.children, title);
@@ -40,6 +43,28 @@ const findFolderByTitle = (
   return undefined;
 };
 
+const pickWritableRootChild = (root: BookmarkTreeNode | undefined): BookmarkTreeNode | undefined => {
+  const candidates = root?.children ?? [];
+  if (!candidates.length) {
+    return undefined;
+  }
+
+  const preferredTitles = [
+    'bookmarks bar',
+    'bookmarks toolbar',
+    'bookmarks menu',
+    'other bookmarks',
+  ];
+  for (const title of preferredTitles) {
+    const match = findFolderByTitle(candidates, title);
+    if (match) {
+      return match;
+    }
+  }
+
+  return candidates.find((child) => isWritableFolder(child));
+};
+
 export const ensureMirrorRoot = async (name: string): Promise<NativeId> => {
   const api = getBookmarksApi();
   const tree = await getTree();
@@ -48,7 +73,7 @@ export const ensureMirrorRoot = async (name: string): Promise<NativeId> => {
   if (existing) {
     return existing.id;
   }
-  const parentId = root?.id ?? '0';
+  const parentId = pickWritableRootChild(root)?.id ?? root?.id ?? '0';
   const created = await api.create({ parentId, title: name });
   return created.id;
 };

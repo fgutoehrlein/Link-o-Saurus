@@ -5,10 +5,14 @@ import { getMappingByNativeId, listMappings } from './store';
 import { initialImport, mirrorRootId, resetMirrorRootIdForTests } from './initial-import';
 import { ensureMirrorRoot, getTree } from './native';
 
-vi.mock('./native', () => ({
-  getTree: vi.fn(),
-  ensureMirrorRoot: vi.fn(),
-}));
+vi.mock('./native', async () => {
+  const actual = await vi.importActual<typeof import('./native')>('./native');
+  return {
+    ...actual,
+    getTree: vi.fn(),
+    ensureMirrorRoot: vi.fn(),
+  };
+});
 
 const mockedGetTree = vi.mocked(getTree);
 const mockedEnsureMirrorRoot = vi.mocked(ensureMirrorRoot);
@@ -25,6 +29,30 @@ const bookmark = (id: string, title: string, url: string): chrome.bookmarks.Book
   url,
   dateAdded: Date.now(),
 });
+
+const withMockedBookmarksApi = (tree: chrome.bookmarks.BookmarkTreeNode[]) => {
+  const createSpy = vi.fn(
+    async (details: chrome.bookmarks.BookmarkCreateArg): Promise<chrome.bookmarks.BookmarkTreeNode> => ({
+      id: `created-${details.parentId}`,
+      parentId: details.parentId,
+      title: details.title ?? '',
+    }),
+  );
+
+  const bookmarksApi = {
+    getTree: vi.fn().mockResolvedValue(tree),
+    create: createSpy,
+    update: vi.fn(),
+    get: vi.fn(),
+    remove: vi.fn(),
+    removeTree: vi.fn(),
+    move: vi.fn(),
+  } as unknown as typeof chrome.bookmarks;
+
+  (globalThis as { chrome?: typeof chrome }).chrome = { bookmarks: bookmarksApi } as typeof chrome;
+
+  return Object.assign(bookmarksApi, { createSpy });
+};
 
 describe('initialImport', () => {
   let database: LinkOSaurusDB;
@@ -147,5 +175,66 @@ describe('initialImport', () => {
 
     const mappings = await listMappings(database);
     expect(mappings).toHaveLength(30);
+  });
+});
+
+describe('ensureMirrorRoot', () => {
+  const originalChrome = (globalThis as { chrome?: typeof chrome }).chrome;
+
+  afterEach(() => {
+    (globalThis as { chrome?: typeof chrome }).chrome = originalChrome;
+    vi.restoreAllMocks();
+  });
+
+  it('creates mirror folder under a writable root child when available', async () => {
+    const { ensureMirrorRoot: actualEnsureMirrorRoot } = await vi.importActual<
+      typeof import('./native')
+    >('./native');
+
+    const tree = [
+      folder('root', 'root', [
+        folder('toolbar', 'Bookmarks bar'),
+        folder('other', 'Other Bookmarks'),
+      ]),
+    ];
+    const api = withMockedBookmarksApi(tree);
+
+    const id = await actualEnsureMirrorRoot('Link-O-Saurus');
+
+    expect(api.createSpy).toHaveBeenCalledWith({ parentId: 'toolbar', title: 'Link-O-Saurus' });
+    expect(id).toBe('created-toolbar');
+  });
+
+  it('falls back to the first writable root child when preferred folders are missing', async () => {
+    const { ensureMirrorRoot: actualEnsureMirrorRoot } = await vi.importActual<
+      typeof import('./native')
+    >('./native');
+
+    const tree = [
+      folder('root', 'root', [
+        { ...folder('managed', 'Managed'), unmodifiable: 'managed' },
+        folder('custom', 'Project Links'),
+      ]),
+    ];
+    const api = withMockedBookmarksApi(tree);
+
+    const id = await actualEnsureMirrorRoot('Link-O-Saurus');
+
+    expect(api.createSpy).toHaveBeenCalledWith({ parentId: 'custom', title: 'Link-O-Saurus' });
+    expect(id).toBe('created-custom');
+  });
+
+  it('gracefully falls back to the root when no writable children exist', async () => {
+    const { ensureMirrorRoot: actualEnsureMirrorRoot } = await vi.importActual<
+      typeof import('./native')
+    >('./native');
+
+    const tree = [folder('root', 'root', [{ ...folder('managed', 'Managed'), unmodifiable: 'managed' }])];
+    const api = withMockedBookmarksApi(tree);
+
+    const id = await actualEnsureMirrorRoot('Link-O-Saurus');
+
+    expect(api.createSpy).toHaveBeenCalledWith({ parentId: 'root', title: 'Link-O-Saurus' });
+    expect(id).toBe('created-root');
   });
 });
