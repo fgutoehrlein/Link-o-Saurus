@@ -235,6 +235,54 @@ test.describe('Link-O-Saurus extension', () => {
     await newTabPage.close();
   });
 
+  test('toggles the tag sidebar between expanded and collapsed states', async () => {
+    const popupHarnessPage = await context.newPage();
+    await openPopup(popupHarnessPage, extensionId);
+    await popupHarnessPage.waitForFunction(
+      () =>
+        window.__LINKOSAURUS_POPUP_READY === true &&
+        typeof window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark === 'function',
+    );
+
+    const tagNames = Array.from({ length: 5 }, (_value, index) => `tag-toggle-${index + 1}`);
+    await popupHarnessPage.evaluate((tags) => {
+      return Promise.all(
+        tags.map((tag, index) =>
+          window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark({
+            title: `Tag Toggle ${index + 1}`,
+            url: `https://tags.example/${index + 1}`,
+            tags: [tag],
+          }),
+        ),
+      );
+    }, tagNames);
+    await popupHarnessPage.close();
+
+    const dashboardPage = await context.newPage();
+    await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html?e2e=1`);
+    await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
+
+    const tagItems = dashboardPage.locator('.sidebar-tag-list .tag-item');
+    for (const tagName of tagNames) {
+      await expect(tagItems.filter({ hasText: tagName })).toBeVisible();
+    }
+
+    const collapseButton = dashboardPage.getByRole('button', { name: 'Tags einklappen' });
+    await collapseButton.click();
+
+    await expect(dashboardPage.getByRole('button', { name: 'Tags anzeigen' })).toBeVisible();
+    await expect(dashboardPage.locator('.sidebar-tag-list .tag-item')).toHaveCount(0);
+    await expect(dashboardPage.locator('#tag-list')).toHaveText(/Tags eingeklappt/);
+
+    await dashboardPage.getByRole('button', { name: 'Tags anzeigen' }).click();
+    await expect(dashboardPage.getByRole('button', { name: 'Tags einklappen' })).toBeVisible();
+    for (const tagName of tagNames) {
+      await expect(tagItems.filter({ hasText: tagName })).toBeVisible();
+    }
+
+    await dashboardPage.close();
+  });
+
   test('supports dashboard deep links, bulk import, and session workflows', async () => {
     const popupHarnessPage = await context.newPage();
     await openPopup(popupHarnessPage, extensionId);
