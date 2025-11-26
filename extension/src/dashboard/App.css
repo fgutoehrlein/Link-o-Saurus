@@ -350,6 +350,20 @@ body {
   justify-content: flex-end;
 }
 
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0.35rem;
+}
+
+.chevron {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
 .sidebar-hint {
   margin: 0.1rem 0 0;
   font-size: 0.9rem;
@@ -384,6 +398,12 @@ body {
 .dashboard-sidebar section > header button:hover {
   background: rgba(37, 99, 235, 0.16);
   border-color: rgba(37, 99, 235, 0.5);
+}
+
+.dashboard-sidebar section > header .icon-button {
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0.35rem;
 }
 
 .dashboard-sidebar section > header button:focus-visible {
