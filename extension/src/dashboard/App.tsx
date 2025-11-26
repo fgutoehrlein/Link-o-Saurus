@@ -825,6 +825,15 @@ const DashboardApp: FunctionalComponent = () => {
     return map;
   }, [boards]);
 
+  const refreshTags = useCallback(async () => {
+    try {
+      const updatedTags = await listTags();
+      setTags(updatedTags);
+    } catch (error) {
+      console.error('Failed to refresh tags', error);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1287,6 +1296,7 @@ const DashboardApp: FunctionalComponent = () => {
         setDetailState(null);
         setSelectedIds([bookmark.id]);
         setStatusMessage('Lesezeichen erstellt.');
+        await refreshTags();
       } catch (error) {
         console.error('Failed to create bookmark', error);
         setStatusMessage('Lesezeichen konnte nicht erstellt werden.');
@@ -1308,11 +1318,12 @@ const DashboardApp: FunctionalComponent = () => {
       await applySearchWorkerUpdate(updated);
       updateBookmarksState([updated]);
       setStatusMessage('Lesezeichen aktualisiert.');
+      await refreshTags();
     } catch (error) {
       console.error('Failed to update bookmark', error);
       setStatusMessage('Aktualisierung fehlgeschlagen.');
     }
-  }, [detailState, selectedIds, draft, updateBookmarksState, applySearchWorkerUpdate]);
+  }, [detailState, selectedIds, draft, updateBookmarksState, applySearchWorkerUpdate, refreshTags]);
 
   const handleBatchAddTags = useCallback(
     async (event: Event) => {
@@ -1339,12 +1350,13 @@ const DashboardApp: FunctionalComponent = () => {
         }
         updateBookmarksState(updates);
         setStatusMessage('Tags hinzugefügt.');
+        void refreshTags();
       } catch (error) {
         console.error('Failed to add tags', error);
         setStatusMessage('Tags konnten nicht hinzugefügt werden.');
       }
     },
-    [detailState, selectedIds, bookmarkEntries, applySearchWorkerUpdate, updateBookmarksState],
+    [detailState, selectedIds, bookmarkEntries, applySearchWorkerUpdate, updateBookmarksState, refreshTags],
   );
 
   const handleBatchRemoveTags = useCallback(
@@ -1381,12 +1393,13 @@ const DashboardApp: FunctionalComponent = () => {
         }
         updateBookmarksState(updates);
         setStatusMessage('Tags entfernt.');
+        void refreshTags();
       } catch (error) {
         console.error('Failed to remove tags', error);
         setStatusMessage('Tags konnten nicht entfernt werden.');
       }
     },
-    [detailState, selectedIds, bookmarkEntries, applySearchWorkerUpdate, updateBookmarksState],
+    [detailState, selectedIds, bookmarkEntries, applySearchWorkerUpdate, updateBookmarksState, refreshTags],
   );
 
   const handleBatchMove = useCallback(
@@ -1429,11 +1442,12 @@ const DashboardApp: FunctionalComponent = () => {
       setBookmarks((previous) => previous.filter((bookmark) => !selectedSet.has(bookmark.id)));
       clearSelection();
       setStatusMessage('Lesezeichen gelöscht.');
+      void refreshTags();
     } catch (error) {
       console.error('Failed to delete bookmarks', error);
       setStatusMessage('Löschen fehlgeschlagen.');
     }
-  }, [selectedIds, selectedSet, applySearchWorkerRemoval, clearSelection]);
+  }, [selectedIds, selectedSet, applySearchWorkerRemoval, clearSelection, refreshTags]);
 
   const handleDropOnCategory = useCallback(
     async (categoryId: string) => {
