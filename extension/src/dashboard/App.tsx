@@ -1842,11 +1842,19 @@ const DashboardApp: FunctionalComponent = () => {
                 </button>
                 <button
                   type="button"
+                  className="icon-button"
                   aria-expanded={areBoardsExpanded}
                   aria-controls="board-list"
+                  aria-label={areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
+                  title={areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
                   onClick={() => setBoardsExpanded((value) => !value)}
                 >
-                  {areBoardsExpanded ? 'Einklappen' : 'Ausklappen'}
+                  <span aria-hidden="true" className="chevron">
+                    {areBoardsExpanded ? '▴' : '▾'}
+                  </span>
+                  <span className="sr-only">
+                    {areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
+                  </span>
                 </button>
               </div>
             </header>
@@ -1925,11 +1933,19 @@ const DashboardApp: FunctionalComponent = () => {
               <h2>Tags</h2>
               <button
                 type="button"
+                className="icon-button"
                 aria-expanded={areTagsExpanded}
                 aria-controls="tag-list"
+                aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
                 onClick={() => setTagsExpanded((value) => !value)}
               >
-                {areTagsExpanded ? 'Einklappen' : 'Mehr anzeigen'}
+                <span aria-hidden="true" className="chevron">
+                  {areTagsExpanded ? '▴' : '▾'}
+                </span>
+                <span className="sr-only">
+                  {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                </span>
               </button>
             </header>
             <ul id="tag-list" className="sidebar-tag-list">
