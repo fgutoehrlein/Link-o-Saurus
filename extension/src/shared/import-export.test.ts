@@ -85,6 +85,10 @@ describe('import/export workflow', () => {
       });
 
       expect(importedBookmarks.map(normalize)).toEqual(originalBookmarks.map(normalize));
+
+      const importedTags = await importedDb.tags.toArray();
+      const usageByPath = Object.fromEntries(importedTags.map((tag) => [tag.path, tag.usageCount]));
+      expect(usageByPath).toEqual({ reading: 1, research: 1 });
     } finally {
       await importedDb.delete();
     }

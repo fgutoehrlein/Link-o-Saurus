@@ -250,7 +250,7 @@ const applyTagDeltas = async (
   }
 };
 
-const updateTagUsageForDiff = async (
+export const updateTagUsageForDiff = async (
   dbInstance: LinkOSaurusDB,
   previousTags: string[],
   nextTags: string[],

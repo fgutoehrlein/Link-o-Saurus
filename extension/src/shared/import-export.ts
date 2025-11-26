@@ -1,7 +1,8 @@
 import type { Table } from 'dexie';
-import { db, LinkOSaurusDB } from './db';
+import { db, LinkOSaurusDB, updateTagUsageForDiff } from './db';
 import type { Board, Bookmark, Category } from './types';
 import { normalizeUrl } from './url';
+import { normalizeTagList } from './tag-utils';
 
 export type ImportFormat = 'html' | 'json';
 
@@ -375,7 +376,7 @@ const toBookmarkRecord = (
 ): Bookmark => {
   const createdAt = candidate.addDate ?? Date.now();
   const updatedAt = candidate.lastModified ?? createdAt;
-  const tags = candidate.tags ?? [];
+  const tags = normalizeTagList(candidate.tags ?? []);
 
   return {
     id: createId(),
@@ -503,8 +504,14 @@ const commitImport = async (
 ): Promise<void> => {
   const boardRecords = Array.from(boards, (entry) => entry.board);
   const categoryRecords = Array.from(categories, (entry) => entry.category);
+  const tagList = bookmarks.flatMap((bookmark) => bookmark.tags ?? []);
 
-  const tables: Table<unknown, string>[] = [database.boards, database.categories, database.bookmarks];
+  const tables: Table<unknown, string>[] = [
+    database.boards,
+    database.categories,
+    database.bookmarks,
+    database.tags,
+  ];
 
   await database.transaction('rw', tables, async () => {
     if (boardRecords.length > 0) {
@@ -515,6 +522,9 @@ const commitImport = async (
     }
     if (bookmarks.length > 0) {
       await database.bookmarks.bulkPut(bookmarks);
+      if (tagList.length > 0) {
+        await updateTagUsageForDiff(database, [], tagList);
+      }
     }
   });
 };
@@ -904,6 +914,7 @@ export const importFromJson = async (
     const category = bookmark.categoryId ? categoryMap.get(bookmark.categoryId) : undefined;
 
     const title = normalizeTitle(bookmark.title) || normalized;
+    const tags = normalizeTagList(bookmark.tags ?? []);
     const record: Bookmark = {
       ...bookmark,
       id: createId(),
@@ -911,7 +922,7 @@ export const importFromJson = async (
       url: normalized,
       title,
       notes: bookmark.notes ?? undefined,
-      tags: [...(bookmark.tags ?? [])],
+      tags,
       createdAt: bookmark.createdAt ?? Date.now(),
       updatedAt: bookmark.updatedAt ?? Date.now(),
       visitCount: bookmark.visitCount ?? 0,
@@ -938,17 +949,10 @@ export const importFromJson = async (
     totalBookmarks: bookmarks.length,
   });
 
-  await dbInstance.transaction('rw', [dbInstance.boards, dbInstance.categories, dbInstance.bookmarks], async () => {
-    if (boardMap.size > 0) {
-      await dbInstance.boards.bulkPut(Array.from(boardMap.values()));
-    }
-    if (categoryMap.size > 0) {
-      await dbInstance.categories.bulkPut(Array.from(categoryMap.values()));
-    }
-    if (bookmarks.length > 0) {
-      await dbInstance.bookmarks.bulkPut(bookmarks);
-    }
-  });
+  const boardEntries = Array.from(boardMap.values()).map((board) => ({ board, existing: false }));
+  const categoryEntries = Array.from(categoryMap.values()).map((category) => ({ category, existing: false }));
+
+  await commitImport(dbInstance, boardEntries, categoryEntries, bookmarks);
 
   emitProgress(callbacks, {
     stage: 'saving',
