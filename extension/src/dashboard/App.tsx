@@ -151,7 +151,6 @@ const ROUTE_MAX_SEARCH_LENGTH = 512;
 const ROUTE_MAX_TITLE_LENGTH = 256;
 const ROUTE_MAX_TAG_LENGTH = 64;
 const ROUTE_MAX_TAG_COUNT = 32;
-const TAGS_COLLAPSED_LIMIT = 20;
 
 const sanitizeRouteText = (value: string, limit: number): string =>
   value.replace(ROUTE_CONTROL_CHARACTERS, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit);
@@ -565,7 +564,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
-  const [areTagsExpanded, setTagsExpanded] = useState<boolean>(false);
+  const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -600,12 +599,6 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   const layoutMode = viewportWidth >= 1200 ? 'triple' : viewportWidth >= 900 ? 'double' : 'single';
-
-  const visibleTags = useMemo(
-    () => (areTagsExpanded || tags.length <= TAGS_COLLAPSED_LIMIT ? tags : tags.slice(0, TAGS_COLLAPSED_LIMIT)),
-    [areTagsExpanded, tags],
-  );
-  const hasHiddenTags = tags.length > visibleTags.length;
 
   useEffect(() => {
     if (layoutMode === 'triple') {
@@ -1962,24 +1955,25 @@ const DashboardApp: FunctionalComponent = () => {
                 </span>
               </button>
             </header>
-            <ul id="tag-list" className="sidebar-tag-list">
-              {visibleTags.map((tag) => (
-                <li key={tag.id}>
-                  <button
-                    type="button"
-                    className={combineClassNames('tag-item', activeTag === tag.path && 'active')}
-                    onClick={() => handleSelectTag(tag.path)}
-                  >
-                    {tag.path} <span className="usage">{tag.usageCount}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {!areTagsExpanded && hasHiddenTags ? (
-              <p className="sidebar-hint" role="status">
-                Zeigt {visibleTags.length} von {tags.length} Tags
+            {areTagsExpanded ? (
+              <ul id="tag-list" className="sidebar-tag-list">
+                {tags.map((tag) => (
+                  <li key={tag.id}>
+                    <button
+                      type="button"
+                      className={combineClassNames('tag-item', activeTag === tag.path && 'active')}
+                      onClick={() => handleSelectTag(tag.path)}
+                    >
+                      {tag.path} <span className="usage">{tag.usageCount}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p id="tag-list" className="sidebar-hint" role="status">
+                Tags eingeklappt
               </p>
-            ) : null}
+            )}
           </section>
           <section className="sidebar-actions">
             <button type="button" onClick={() => setImportDialogOpen(true)}>
