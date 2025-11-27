@@ -1106,6 +1106,7 @@ export const createBookmarks = async (
         const previousTags = previous ? previous.tags : [];
         previousTags.forEach((tag) => addTagDelta(aggregateDeltas, tag, -1));
         record.tags.forEach((tag) => addTagDelta(aggregateDeltas, tag, 1));
+        existingById.set(record.id, record);
       }
       await applyTagDeltas(dbInstance, aggregateDeltas);
     },

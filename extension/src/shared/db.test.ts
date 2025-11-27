@@ -522,6 +522,36 @@ describe('IndexedDB data layer', () => {
     expect(stored).toHaveLength(targetCount);
   });
 
+  it('treats duplicate ids in bulk writes as upserts using the final payload', async () => {
+    const duplicates: CreateBookmarkInput[] = [
+      {
+        id: 'bookmark-duplicate',
+        url: 'https://example.com/initial',
+        title: 'First variant',
+        tags: ['First'],
+      },
+      {
+        id: 'bookmark-duplicate',
+        url: 'https://example.com/final',
+        title: 'Final variant',
+        tags: ['Final'],
+      },
+    ];
+
+    await createBookmarks(duplicates, database);
+
+    const stored = await getBookmark('bookmark-duplicate', database);
+    expect(stored).not.toBeUndefined();
+    expect(stored?.url).toBe('https://example.com/final');
+    expect(stored?.title).toBe('Final variant');
+    expect(stored?.tags).toEqual(['Final']);
+
+    const tags = await listTags(database);
+    const findTag = (name: string) => tags.find((tag) => tag.name === name);
+    expect(findTag('Final')?.usageCount).toBe(1);
+    expect(findTag('First')).toBeUndefined();
+  });
+
   describe('read later entries', () => {
     it('saves and retrieves entries with optional fields', async () => {
       const dueAt = Date.now() + 60_000;
