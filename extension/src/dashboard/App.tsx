@@ -1841,12 +1841,14 @@ const DashboardApp: FunctionalComponent = () => {
       <div className="dashboard-main">
         <aside className={combineClassNames('dashboard-sidebar', sidebarOpen && 'open')}>
           <section>
+            <div className="filter-reset">
+              <button type="button" onClick={handleClearFilters}>
+                Filter zurücksetzen
+              </button>
+            </div>
             <header className="sidebar-section-header">
               <h2>Boards</h2>
               <div className="section-buttons">
-                <button type="button" onClick={handleClearFilters}>
-                  Filter zurücksetzen
-                </button>
                 <button
                   type="button"
                   className="icon-button"

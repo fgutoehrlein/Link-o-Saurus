@@ -343,6 +343,12 @@ body {
   gap: 0.75rem;
 }
 
+.filter-reset {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 0.35rem;
+}
+
 .section-buttons {
   display: flex;
   flex-wrap: wrap;
