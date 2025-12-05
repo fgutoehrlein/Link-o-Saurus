@@ -509,6 +509,7 @@ body {
 .detail-actions button,
 .batch-move button,
 .modal-actions button,
+.filter-reset button,
 .file-button,
 .session-actions button {
   border-radius: 10px;
@@ -526,6 +527,7 @@ body {
 [data-theme='dark'] .detail-actions button,
 [data-theme='dark'] .batch-move button,
 [data-theme='dark'] .modal-actions button,
+[data-theme='dark'] .filter-reset button,
 [data-theme='dark'] .file-button,
 [data-theme='dark'] .session-actions button {
   border-color: var(--border-dark);
