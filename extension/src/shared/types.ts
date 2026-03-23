@@ -23,6 +23,7 @@ export type Bookmark = {
   categoryId?: EntityId;
   url: string;
   title: string;
+  faviconUrl?: string;
   notes?: string;
   tags: string[];
   pinned?: boolean;

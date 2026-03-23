@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'preact/hooks';
-import { createBookmark, listRecentBookmarks } from '../shared/db';
+import { createBookmark, listRecentBookmarks, updateBookmark } from '../shared/db';
 import type { Bookmark } from '../shared/types';
 import { openDashboard } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
@@ -104,6 +104,42 @@ const getFaviconUrl = (url: string): string | null => {
   }
 };
 
+const waitForTabFavicon = async (tabId: number, timeoutMs = 10_000): Promise<string | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.tabs?.onUpdated) {
+    return undefined;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timeoutHandle);
+    };
+    const finish = (value?: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
+      if (updatedTabId !== tabId) {
+        return;
+      }
+      if (typeof changeInfo.favIconUrl === 'string' && changeInfo.favIconUrl.trim()) {
+        finish(changeInfo.favIconUrl);
+        return;
+      }
+      if (changeInfo.status === 'complete') {
+        const candidate = tab.favIconUrl?.trim();
+        finish(candidate || undefined);
+      }
+    };
+    const timeoutHandle = window.setTimeout(() => finish(undefined), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+};
+
 const getBookmarkInitial = (bookmark: Bookmark): string => {
   const source = normalizeWhitespace(bookmark.title || extractDomain(bookmark.url) || bookmark.url);
   const firstChar = source.charAt(0);
@@ -185,21 +221,28 @@ const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
   });
 };
 
-const openUrlInNewTab = async (url: string): Promise<void> => {
+const openUrlInNewTab = async (url: string): Promise<string | undefined> => {
   if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-    await new Promise<void>((resolve, reject) => {
-      chrome.tabs.create({ url, active: true }, () => {
+    const tab = await new Promise<chrome.tabs.Tab>((resolve, reject) => {
+      chrome.tabs.create({ url, active: true }, (createdTab) => {
         const error = chrome.runtime?.lastError;
         if (error) {
           reject(new Error(error.message));
           return;
         }
-        resolve();
+        resolve(createdTab);
       });
     });
-    return;
+    if (typeof tab.id === 'number') {
+      const loadedFavicon = await waitForTabFavicon(tab.id);
+      if (loadedFavicon) {
+        return loadedFavicon;
+      }
+    }
+    return tab.favIconUrl?.trim() || undefined;
   }
   window.open(url, '_blank', 'noopener');
+  return undefined;
 };
 
 const TagInput: FunctionalComponent<TagInputProps> = ({ id, tags, onChange }) => {
@@ -272,7 +315,7 @@ const TagInput: FunctionalComponent<TagInputProps> = ({ id, tags, onChange }) =>
 };
 
 const BookmarkFavicon: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({ bookmark }) => {
-  const faviconUrl = getFaviconUrl(bookmark.url);
+  const faviconUrl = bookmark.faviconUrl;
   return (
     <span className="favicon" aria-hidden="true">
       <span className="favicon__placeholder">{getBookmarkInitial(bookmark)}</span>
@@ -507,9 +550,17 @@ const App: FunctionalComponent = () => {
   }, [searchTerm]);
 
   const handleOpenUrl = useCallback(
-    async (targetUrl: string) => {
+    async (bookmark: Bookmark) => {
       try {
-        await openUrlInNewTab(targetUrl);
+        const latestFaviconUrl = await openUrlInNewTab(bookmark.url);
+        if (latestFaviconUrl && latestFaviconUrl !== bookmark.faviconUrl) {
+          const updated = await updateBookmark(bookmark.id, { faviconUrl: latestFaviconUrl });
+          setSearchEntries((previous) => previous.map((entry) => (
+            entry.bookmark.id === updated.id
+              ? { ...entry, bookmark: updated }
+              : entry
+          )));
+        }
       } catch (error) {
         console.error(error);
         setStatus({ tone: 'error', text: 'Tab konnte nicht geöffnet werden.' });
@@ -531,6 +582,7 @@ const App: FunctionalComponent = () => {
         id: crypto.randomUUID(),
         url: normalizedUrl,
         title: normalizedTitle,
+        faviconUrl: getFaviconUrl(normalizedUrl) ?? undefined,
         tags: uniqueTags,
         createdAt: now,
         updatedAt: now,
@@ -616,7 +668,10 @@ const App: FunctionalComponent = () => {
       } else if (event.key === 'Enter') {
         if (searchSelection >= 0 && searchSelection < searchResults.length) {
           event.preventDefault();
-          void handleOpenUrl(searchResults[searchSelection]?.bookmark.url ?? '');
+          const selectedBookmark = searchResults[searchSelection]?.bookmark;
+          if (selectedBookmark) {
+            void handleOpenUrl(selectedBookmark);
+          }
         }
       }
     },
@@ -764,7 +819,7 @@ const App: FunctionalComponent = () => {
                   <button
                     type="button"
                     className="recent-item"
-                    onClick={() => void handleOpenUrl(bookmark.url)}
+                    onClick={() => void handleOpenUrl(bookmark)}
                     aria-label={`${bookmark.title} öffnen`}
                   >
                     <BookmarkFavicon bookmark={bookmark} />
@@ -800,7 +855,7 @@ const App: FunctionalComponent = () => {
                     role="option"
                     aria-selected={index === searchSelection}
                     className={`search-result${index === searchSelection ? ' is-active' : ''}`}
-                    onClick={() => void handleOpenUrl(entry.bookmark.url)}
+                    onClick={() => void handleOpenUrl(entry.bookmark)}
                     onMouseEnter={() => setSearchSelection(index)}
                   >
                     <span className="search-result__title">{entry.bookmark.title}</span>

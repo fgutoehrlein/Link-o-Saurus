@@ -236,6 +236,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       id: crypto.randomUUID(),
       title,
       url,
+      faviconUrl: tab.favIconUrl ?? undefined,
       tags: response.tags,
       categoryId: response.categoryId || undefined,
     });
