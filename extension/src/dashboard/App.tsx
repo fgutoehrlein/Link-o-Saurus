@@ -451,6 +451,44 @@ const openBookmarkLink = async (bookmark: Bookmark): Promise<string | undefined>
   return undefined;
 };
 
+const refreshBookmarkFavicon = async (bookmark: Bookmark): Promise<string | undefined> => {
+  const url = bookmark.url?.trim();
+  if (!url) {
+    return undefined;
+  }
+
+  const fallbackFavicon = getFaviconUrl(url) ?? bookmark.faviconUrl;
+  if (typeof chrome === 'undefined' || !chrome.tabs?.create) {
+    return fallbackFavicon ?? undefined;
+  }
+
+  let tabId: number | undefined;
+  try {
+    const tab = await new Promise<chrome.tabs.Tab>((resolve, reject) => {
+      chrome.tabs.create({ url, active: false }, (createdTab) => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve(createdTab);
+      });
+    });
+    tabId = typeof tab.id === 'number' ? tab.id : undefined;
+    const loadedFavicon = tabId ? await waitForTabFavicon(tabId) : undefined;
+    return loadedFavicon ?? tab.favIconUrl?.trim() ?? fallbackFavicon ?? undefined;
+  } catch (error) {
+    console.warn('Failed to refresh favicon via hidden tab', error);
+    return fallbackFavicon ?? undefined;
+  } finally {
+    if (typeof tabId === 'number' && chrome.tabs?.remove) {
+      chrome.tabs.remove(tabId, () => {
+        void chrome.runtime?.lastError;
+      });
+    }
+  }
+};
+
 const getBookmarkInitial = (bookmark: Bookmark): string => {
   const source = bookmark.title?.trim() || bookmark.url;
   return source ? source.charAt(0).toUpperCase() : '🔖';
@@ -609,6 +647,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
   const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
+  const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -1211,6 +1250,29 @@ const DashboardApp: FunctionalComponent = () => {
     })();
   }, [updateBookmarksState]);
 
+  const handleRefreshFavicon = useCallback(async (bookmark: Bookmark) => {
+    setRefreshingFavicon(true);
+    try {
+      const refreshedFavicon = await refreshBookmarkFavicon(bookmark);
+      if (!refreshedFavicon) {
+        setStatusMessage('Kein Favicon gefunden.');
+        return;
+      }
+      if (refreshedFavicon === bookmark.faviconUrl) {
+        setStatusMessage('Favicon ist bereits aktuell.');
+        return;
+      }
+      const updated = await updateBookmark(bookmark.id, { faviconUrl: refreshedFavicon });
+      updateBookmarksState([updated]);
+      setStatusMessage('Favicon aktualisiert.');
+    } catch (error) {
+      console.error('Failed to refresh favicon', error);
+      setStatusMessage('Favicon konnte nicht aktualisiert werden.');
+    } finally {
+      setRefreshingFavicon(false);
+    }
+  }, [updateBookmarksState]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
@@ -1733,6 +1795,13 @@ const DashboardApp: FunctionalComponent = () => {
               disabled={!entry?.bookmark?.url}
             >
               Link im neuen Tab öffnen
+            </button>
+            <button
+              type="button"
+              onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
+              disabled={!entry?.bookmark?.url || isRefreshingFavicon}
+            >
+              {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
             </button>
           </div>
           <label>
