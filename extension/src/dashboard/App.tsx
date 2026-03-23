@@ -68,6 +68,7 @@ type BookmarkListData = {
   readonly bookmarkById: Map<string, BookmarkListEntry>;
   readonly selected: Set<string>;
   readonly onRowClick: (event: MouseEvent | KeyboardEvent, id: string) => void;
+  readonly onOpenBookmark: (bookmark: Bookmark) => void;
   readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
   readonly onDragStart: (event: DragEvent, id: string) => void;
   readonly setRowHeight: (id: string, height: number) => void;
@@ -225,6 +226,42 @@ const getFaviconUrl = (url: string): string | null => {
   }
 };
 
+const waitForTabFavicon = async (tabId: number, timeoutMs = 10_000): Promise<string | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.tabs?.onUpdated) {
+    return undefined;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timeoutHandle);
+    };
+    const finish = (value?: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
+      if (updatedTabId !== tabId) {
+        return;
+      }
+      if (typeof changeInfo.favIconUrl === 'string' && changeInfo.favIconUrl.trim()) {
+        finish(changeInfo.favIconUrl);
+        return;
+      }
+      if (changeInfo.status === 'complete') {
+        const candidate = tab.favIconUrl?.trim();
+        finish(candidate || undefined);
+      }
+    };
+    const timeoutHandle = window.setTimeout(() => finish(undefined), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+};
+
 const createDragPayload = (ids: readonly string[]): string => {
   return JSON.stringify({ ids: Array.from(new Set(ids)) });
 };
@@ -380,31 +417,38 @@ const openTabs = async (tabs: SessionPack['tabs']): Promise<void> => {
   }
 };
 
-const openBookmarkLink = async (bookmark: Bookmark): Promise<void> => {
+const openBookmarkLink = async (bookmark: Bookmark): Promise<string | undefined> => {
   const url = bookmark.url?.trim();
   if (!url) {
-    return;
+    return undefined;
   }
 
   if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
     try {
-      await new Promise<void>((resolve, reject) => {
-        chrome.tabs.create({ url, active: true }, () => {
+      const tab = await new Promise<chrome.tabs.Tab>((resolve, reject) => {
+        chrome.tabs.create({ url, active: true }, (createdTab) => {
           const error = chrome.runtime?.lastError;
           if (error) {
             reject(new Error(error.message));
             return;
           }
-          resolve();
+          resolve(createdTab);
         });
       });
-      return;
+      if (typeof tab.id === 'number') {
+        const loadedFavicon = await waitForTabFavicon(tab.id);
+        if (loadedFavicon) {
+          return loadedFavicon;
+        }
+      }
+      return tab.favIconUrl?.trim() || undefined;
     } catch (error) {
       console.warn('Falling back to window.open after chrome.tabs.create failure', error);
     }
   }
 
   window.open(url, '_blank', 'noopener,noreferrer');
+  return undefined;
 };
 
 const getBookmarkInitial = (bookmark: Bookmark): string => {
@@ -426,7 +470,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   }
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
-  const favicon = getFaviconUrl(bookmark.url);
+  const favicon = bookmark.faviconUrl;
   const rowRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -470,7 +514,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
 
   const handleDoubleClick = (event: MouseEvent) => {
     event.preventDefault();
-    void openBookmarkLink(bookmark);
+    data.onOpenBookmark(bookmark);
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1153,11 +1197,26 @@ const DashboardApp: FunctionalComponent = () => {
     listRef.current?.resetAfterIndex(0, true);
   }, [filteredIds]);
 
+  const handleOpenBookmark = useCallback((bookmark: Bookmark) => {
+    void (async () => {
+      const latestFaviconUrl = await openBookmarkLink(bookmark);
+      if (latestFaviconUrl && latestFaviconUrl !== bookmark.faviconUrl) {
+        try {
+          const updated = await updateBookmark(bookmark.id, { faviconUrl: latestFaviconUrl });
+          updateBookmarksState([updated]);
+        } catch (error) {
+          console.warn('Failed to persist refreshed favicon', error);
+        }
+      }
+    })();
+  }, [updateBookmarksState]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
     selected: selectedSet,
     onRowClick: handleRowSelection,
+    onOpenBookmark: handleOpenBookmark,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
     setRowHeight,
@@ -1166,6 +1225,7 @@ const DashboardApp: FunctionalComponent = () => {
     bookmarkEntries,
     selectedSet,
     handleRowSelection,
+    handleOpenBookmark,
     handleRowContextMenu,
     handleRowDragStart,
     setRowHeight,
@@ -1275,6 +1335,7 @@ const DashboardApp: FunctionalComponent = () => {
         const bookmark: Bookmark = await createBookmark({
           title: detailState.title,
           url: normalizedUrl,
+          faviconUrl: getFaviconUrl(normalizedUrl) ?? undefined,
           tags: normalizedTags,
           notes: detailState.notes,
           categoryId: detailState.categoryId || undefined,
@@ -1668,7 +1729,7 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="detail-actions">
             <button
               type="button"
-              onClick={() => entry?.bookmark && void openBookmarkLink(entry.bookmark)}
+              onClick={() => entry?.bookmark && handleOpenBookmark(entry.bookmark)}
               disabled={!entry?.bookmark?.url}
             >
               Link im neuen Tab öffnen
