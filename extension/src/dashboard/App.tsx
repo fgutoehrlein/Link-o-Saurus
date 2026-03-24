@@ -214,6 +214,21 @@ const formatTimestamp = (timestamp: number | undefined): string => {
   }
 };
 
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('Invalid file payload'));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('File konnte nicht gelesen werden.'));
+    reader.readAsDataURL(file);
+  });
+
 const getFaviconUrl = (url: string): string | null => {
   if (!url) {
     return null;
@@ -648,6 +663,8 @@ const DashboardApp: FunctionalComponent = () => {
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
   const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
+  const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
+  const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -655,6 +672,7 @@ const DashboardApp: FunctionalComponent = () => {
   const rowHeightsRef = useRef<Map<string, number>>(new Map());
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const manualIconInputRef = useRef<HTMLInputElement | null>(null);
   const lastSelectionRef = useRef<SelectionChange>({ ids: [], anchorIndex: null });
   const hashSyncRef = useRef<boolean>(false);
   const initialRouteRef = useRef<RouteSnapshot | null>(null);
@@ -1273,6 +1291,47 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, [updateBookmarksState]);
 
+  const handleManualIconUpload = useCallback(async (bookmark: Bookmark, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage('Bitte eine Bilddatei für das Icon auswählen.');
+      return;
+    }
+
+    setUploadingIcon(true);
+    try {
+      const iconDataUrl = await readFileAsDataUrl(file);
+      const updated = await updateBookmark(bookmark.id, { faviconUrl: iconDataUrl });
+      updateBookmarksState([updated]);
+      setStatusMessage('Icon wurde manuell gesetzt.');
+    } catch (error) {
+      console.error('Failed to upload manual icon', error);
+      setStatusMessage('Icon konnte nicht hochgeladen werden.');
+    } finally {
+      setUploadingIcon(false);
+      setIconDropActive(false);
+    }
+  }, [updateBookmarksState]);
+
+  const handleManualIconInputChange = useCallback((event: Event, bookmark: Bookmark | undefined) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !bookmark) {
+      return;
+    }
+    void handleManualIconUpload(bookmark, file);
+    input.value = '';
+  }, [handleManualIconUpload]);
+
+  const handleIconDrop = useCallback((event: DragEvent, bookmark: Bookmark | undefined) => {
+    event.preventDefault();
+    setIconDropActive(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (!file || !bookmark) {
+      return;
+    }
+    void handleManualIconUpload(bookmark, file);
+  }, [handleManualIconUpload]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
@@ -1796,14 +1855,59 @@ const DashboardApp: FunctionalComponent = () => {
             >
               Link im neuen Tab öffnen
             </button>
-            <button
-              type="button"
-              onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
-              disabled={!entry?.bookmark?.url || isRefreshingFavicon}
-            >
-              {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
-            </button>
           </div>
+          <section className="detail-icon-section" aria-label="Icon">
+            <h3>Icon</h3>
+            <div className="detail-actions">
+              <button
+                type="button"
+                onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
+                disabled={!entry?.bookmark?.url || isRefreshingFavicon || isUploadingIcon}
+              >
+                {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
+              </button>
+            </div>
+            <input
+              ref={manualIconInputRef}
+              className="visually-hidden"
+              type="file"
+              accept="image/*"
+              onChange={(event) => handleManualIconInputChange(event, entry?.bookmark)}
+            />
+            <div
+              className={`icon-upload-dropzone${isIconDropActive ? ' is-active' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label="Icon hochladen"
+              onClick={() => manualIconInputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  manualIconInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIconDropActive(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer!.dropEffect = 'copy';
+                setIconDropActive(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                const relatedTarget = event.relatedTarget as Node | null;
+                if (!relatedTarget || !(event.currentTarget as HTMLElement).contains(relatedTarget)) {
+                  setIconDropActive(false);
+                }
+              }}
+              onDrop={(event) => handleIconDrop(event, entry?.bookmark)}
+            >
+              <strong>{isUploadingIcon ? 'Icon wird hochgeladen…' : 'Icon hier ablegen'}</strong>
+              <span>oder klicken, um eine Bilddatei auszuwählen.</span>
+            </div>
+          </section>
           <label>
             <span>Titel</span>
             <input type="text" value={detailState.title} onInput={handleDetailChange('title')} />
