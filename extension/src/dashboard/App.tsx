@@ -117,6 +117,7 @@ type RouteSnapshot = {
 
 const DEFAULT_ITEM_HEIGHT = 90;
 const MAX_QUERY_RESULTS = 600;
+const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 
 type ThemeOption = {
   readonly value: ThemeChoice;
@@ -670,6 +671,8 @@ const DashboardApp: FunctionalComponent = () => {
   const [listHeight, setListHeight] = useState<number>(320);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
   const rowHeightsRef = useRef<Map<string, number>>(new Map());
+  const pendingResetIndexRef = useRef<number | null>(null);
+  const pendingResetFrameRef = useRef<number | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const manualIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -1231,13 +1234,28 @@ const DashboardApp: FunctionalComponent = () => {
     (id: string, size: number) => {
       const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
       const current = rowHeightsRef.current.get(id);
-      if (current === height) {
+      if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
         return;
       }
       rowHeightsRef.current.set(id, height);
       const index = filteredIds.indexOf(id);
       if (index >= 0) {
-        listRef.current?.resetAfterIndex(index, true);
+        pendingResetIndexRef.current =
+          pendingResetIndexRef.current === null
+            ? index
+            : Math.min(pendingResetIndexRef.current, index);
+        if (pendingResetFrameRef.current !== null) {
+          return;
+        }
+        pendingResetFrameRef.current = window.requestAnimationFrame(() => {
+          pendingResetFrameRef.current = null;
+          const resetIndex = pendingResetIndexRef.current;
+          pendingResetIndexRef.current = null;
+          if (resetIndex === null) {
+            return;
+          }
+          listRef.current?.resetAfterIndex(resetIndex, false);
+        });
       }
     },
     [filteredIds],
@@ -1253,6 +1271,17 @@ const DashboardApp: FunctionalComponent = () => {
     }
     listRef.current?.resetAfterIndex(0, true);
   }, [filteredIds]);
+
+  useEffect(
+    () => () => {
+      if (pendingResetFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingResetFrameRef.current);
+        pendingResetFrameRef.current = null;
+      }
+      pendingResetIndexRef.current = null;
+    },
+    [],
+  );
 
   const handleOpenBookmark = useCallback((bookmark: Bookmark) => {
     void (async () => {
@@ -2272,6 +2301,7 @@ const DashboardApp: FunctionalComponent = () => {
                 itemCount={filteredIds.length}
                 itemSize={getRowHeight}
                 estimatedItemSize={DEFAULT_ITEM_HEIGHT}
+                overscanCount={6}
                 itemData={listData}
                 ref={(instance) => {
                   listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
