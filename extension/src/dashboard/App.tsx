@@ -43,9 +43,21 @@ import type {
 import type { ImportExportWorkerApi } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress } from '../shared/import-export';
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
-import { canonicalizeTagId, normalizeTagList, normalizeTagPath } from '../shared/tag-utils';
+import { canonicalizeTagId, normalizeTagList } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
 import { isDashboardMessage } from '../shared/messaging';
+import {
+  EMPTY_TAG_FILTER_STATE,
+  applyNegativeTagContextAction,
+  getTagFilterMode,
+  matchesTagFilter,
+  normalizeTagFilterState,
+  parseTagFilterFromParams,
+  toggleTagFilter,
+  type TagFilterMode,
+  type TagFilterState,
+  writeTagFilterToParams,
+} from '../shared/tag-filter';
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 
@@ -108,7 +120,8 @@ type SelectionChange = {
 type RouteSnapshot = {
   readonly search: string;
   readonly boardId: string;
-  readonly tag: string;
+  readonly includeTags: string[];
+  readonly excludeTags: string[];
   readonly isNew: boolean;
   readonly newTitle: string;
   readonly newUrl: string;
@@ -321,14 +334,30 @@ const parseInitialRoute = (): RouteSnapshot => {
 
   const search = sanitizeRouteText(params.get('q') ?? '', ROUTE_MAX_SEARCH_LENGTH);
   const boardId = params.get('board')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
-  const tag = params.get('tag')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
+  const parsedTagFilters = parseTagFilterFromParams(params);
+  const includeTags = sanitizeRouteTagsParam(parsedTagFilters.include);
+  const excludeTags = sanitizeRouteTagsParam(parsedTagFilters.exclude);
   const isNew = params.get('new') === '1';
   const newTitle = sanitizeRouteText(params.get('title') ?? '', ROUTE_MAX_TITLE_LENGTH);
   const newUrl = sanitizeRouteUrl(params.get('url') ?? '');
   const tags = sanitizeRouteTagsParam(params.getAll('tags'));
   const newTags = tags.join(', ');
 
-  return { search, boardId, tag, isNew, newTitle, newUrl, newTags };
+  const normalizedFilters = normalizeTagFilterState({
+    include: includeTags,
+    exclude: excludeTags,
+  });
+
+  return {
+    search,
+    boardId,
+    includeTags: normalizedFilters.include,
+    excludeTags: normalizedFilters.exclude,
+    isNew,
+    newTitle,
+    newUrl,
+    newTags,
+  };
 };
 
 const updateRouteHash = (snapshot: RouteSnapshot): void => {
@@ -339,9 +368,10 @@ const updateRouteHash = (snapshot: RouteSnapshot): void => {
   if (snapshot.boardId) {
     params.set('board', snapshot.boardId);
   }
-  if (snapshot.tag) {
-    params.set('tag', snapshot.tag);
-  }
+  writeTagFilterToParams(params, {
+    include: snapshot.includeTags,
+    exclude: snapshot.excludeTags,
+  });
   if (snapshot.isNew) {
     params.set('new', '1');
     if (snapshot.newTitle) {
@@ -643,7 +673,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
-  const [activeTag, setActiveTag] = useState<string>('');
+  const [activeTagFilters, setActiveTagFilters] = useState<TagFilterState>(EMPTY_TAG_FILTER_STATE);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -777,7 +807,10 @@ const DashboardApp: FunctionalComponent = () => {
     initialRouteRef.current = snapshot;
     setSearchQuery(snapshot.search);
     setActiveBoardId(snapshot.boardId);
-    setActiveTag(snapshot.tag);
+    setActiveTagFilters({
+      include: snapshot.includeTags,
+      exclude: snapshot.excludeTags,
+    });
     if (snapshot.isNew) {
       setDraft({
         title: snapshot.newTitle,
@@ -798,7 +831,10 @@ const DashboardApp: FunctionalComponent = () => {
       const nextSnapshot = parseInitialRoute();
       setSearchQuery(nextSnapshot.search);
       setActiveBoardId(nextSnapshot.boardId);
-      setActiveTag(nextSnapshot.tag);
+      setActiveTagFilters({
+        include: nextSnapshot.includeTags,
+        exclude: nextSnapshot.excludeTags,
+      });
       if (nextSnapshot.isNew) {
         setDraft({
           title: nextSnapshot.newTitle,
@@ -821,7 +857,8 @@ const DashboardApp: FunctionalComponent = () => {
     const snapshot: RouteSnapshot = {
       search: searchQuery,
       boardId: activeBoardId,
-      tag: activeTag,
+      includeTags: activeTagFilters.include,
+      excludeTags: activeTagFilters.exclude,
       isNew: draft !== null,
       newTitle: draft?.title ?? '',
       newUrl: draft?.url ?? '',
@@ -829,7 +866,7 @@ const DashboardApp: FunctionalComponent = () => {
     };
     hashSyncRef.current = true;
     updateRouteHash(snapshot);
-  }, [searchQuery, activeBoardId, activeTag, draft?.title, draft?.url, draft?.tags]);
+  }, [searchQuery, activeBoardId, activeTagFilters, draft?.title, draft?.url, draft?.tags]);
 
   useEffect(() => {
     let listener:
@@ -854,7 +891,7 @@ const DashboardApp: FunctionalComponent = () => {
           setDetailState(null);
           setActiveBoardId('');
           setActiveCategoryId('');
-          setActiveTag('');
+          setActiveTagFilters(EMPTY_TAG_FILTER_STATE);
           setSelectedIds([]);
           lastSelectionRef.current = { ids: [], anchorIndex: null };
           setSearchQuery(sanitized);
@@ -884,7 +921,7 @@ const DashboardApp: FunctionalComponent = () => {
           setStatusMessage('');
           setActiveBoardId('');
           setActiveCategoryId('');
-          setActiveTag('');
+          setActiveTagFilters(EMPTY_TAG_FILTER_STATE);
           setSelectedIds([]);
           lastSelectionRef.current = { ids: [], anchorIndex: null };
           setDraft(newDraft);
@@ -968,7 +1005,9 @@ const DashboardApp: FunctionalComponent = () => {
             try {
               const initialHits = await searchWorkerRef.current.query(
                 initialSearch,
-                initialRoute.tag ? { tags: [initialRoute.tag] } : undefined,
+                initialRoute.includeTags.length > 0 || initialRoute.excludeTags.length > 0
+                  ? { tags: initialRoute.includeTags, excludeTags: initialRoute.excludeTags }
+                  : undefined,
                 MAX_QUERY_RESULTS,
               );
               if (!cancelled) {
@@ -1014,7 +1053,9 @@ const DashboardApp: FunctionalComponent = () => {
       try {
         const hits = await searchWorkerRef.current!.query(
           trimmed,
-          activeTag ? { tags: [activeTag] } : undefined,
+          activeTagFilters.include.length > 0 || activeTagFilters.exclude.length > 0
+            ? { tags: activeTagFilters.include, excludeTags: activeTagFilters.exclude }
+            : undefined,
           MAX_QUERY_RESULTS,
         );
         if (!cancelled) {
@@ -1036,7 +1077,7 @@ const DashboardApp: FunctionalComponent = () => {
     return () => {
       cancelled = true;
     };
-  }, [searchQuery, activeTag, searchGeneration]);
+  }, [searchQuery, activeTagFilters, searchGeneration]);
 
   const bookmarkEntries = useMemo(() => {
     const map = new Map<string, BookmarkListEntry>();
@@ -1048,7 +1089,7 @@ const DashboardApp: FunctionalComponent = () => {
     return map;
   }, [bookmarks, categoryById, boardById]);
 
-  const activeTagCanonical = useMemo(() => canonicalizeTagId(activeTag ?? ''), [activeTag]);
+  const activeTagFilterState = useMemo(() => normalizeTagFilterState(activeTagFilters), [activeTagFilters]);
 
     const filteredIds = useMemo(() => {
     const matchesFilters = (entry: BookmarkListEntry): boolean => {
@@ -1065,13 +1106,8 @@ const DashboardApp: FunctionalComponent = () => {
           return false;
         }
       }
-      if (activeTagCanonical) {
-        const normalized = entry.bookmark.tags
-          .map((tag) => canonicalizeTagId(normalizeTagPath(tag)))
-          .filter((tag): tag is string => Boolean(tag));
-        if (!normalized.some((tag) => tag === activeTagCanonical || tag.startsWith(`${activeTagCanonical}/`))) {
-          return false;
-        }
+      if (!matchesTagFilter(entry.bookmark.tags, activeTagFilterState)) {
+        return false;
       }
       return true;
     };
@@ -1113,7 +1149,7 @@ const DashboardApp: FunctionalComponent = () => {
       .filter(matchesFilters)
       .sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt)
       .map((entry) => entry.id);
-    }, [searchQuery, searchHits, bookmarkEntries, activeBoardId, activeCategoryId, activeTagCanonical, showArchived]);
+    }, [searchQuery, searchHits, bookmarkEntries, activeBoardId, activeCategoryId, activeTagFilterState, showArchived]);
 
     const totalBookmarkCount = bookmarks.length;
     const visibleBookmarkCount = filteredIds.length;
@@ -1413,15 +1449,15 @@ const DashboardApp: FunctionalComponent = () => {
     clearSelection();
   }, [clearSelection]);
 
-  const handleSelectTag = useCallback((tag: string) => {
-    setActiveTag((previous) => (previous === tag ? '' : tag));
+  const handleSelectTag = useCallback((tag: string, mode: TagFilterMode) => {
+    setActiveTagFilters((previous) => toggleTagFilter(previous, tag, mode));
     clearSelection();
   }, [clearSelection]);
 
   const handleClearFilters = useCallback(() => {
     setActiveBoardId('');
     setActiveCategoryId('');
-    setActiveTag('');
+    setActiveTagFilters(EMPTY_TAG_FILTER_STATE);
     clearSelection();
   }, [clearSelection]);
 
@@ -2222,17 +2258,38 @@ const DashboardApp: FunctionalComponent = () => {
             </header>
             {areTagsExpanded ? (
               <ul id="tag-list" className="sidebar-tag-list">
-                {tags.map((tag) => (
+                {tags.map((tag) => {
+                  const mode = getTagFilterMode(activeTagFilterState, tag.path);
+                  return (
                   <li key={tag.id}>
                     <button
                       type="button"
-                      className={combineClassNames('tag-item', activeTag === tag.path && 'active')}
-                      onClick={() => handleSelectTag(tag.path)}
+                      className={combineClassNames(
+                        'tag-item',
+                        mode === 'include' && 'active',
+                        mode === 'exclude' && 'active-negative',
+                      )}
+                      aria-pressed={mode !== null}
+                      aria-label={`${tag.path} filtern (${mode === 'exclude' ? 'negativ' : mode === 'include' ? 'positiv' : 'inaktiv'})`}
+                      title="Linksklick: positiv · Rechtsklick: negativ · Taste N: negativ"
+                      onClick={() => handleSelectTag(tag.path, 'include')}
+                      onContextMenu={(event) => {
+                        applyNegativeTagContextAction(event, () => {
+                          handleSelectTag(tag.path, 'exclude');
+                        });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key.toLowerCase() === 'n') {
+                          event.preventDefault();
+                          handleSelectTag(tag.path, 'exclude');
+                        }
+                      }}
                     >
                       {tag.path} <span className="usage">{tag.usageCount}</span>
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p id="tag-list" className="sidebar-hint" role="status">

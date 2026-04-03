@@ -457,6 +457,18 @@ body {
   color: var(--accent);
 }
 
+.tag-item.active-negative {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.58);
+  color: #c2410c;
+}
+
+[data-theme='dark'] .tag-item.active-negative {
+  background: rgba(249, 115, 22, 0.22);
+  border-color: rgba(251, 146, 60, 0.62);
+  color: #fdba74;
+}
+
 .tag-item .usage {
   font-size: 0.75rem;
   margin-left: 0.5rem;
