@@ -32,6 +32,7 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'system',
+  dashboardViewMode: 'list',
   newTabEnabled: false,
   hotkeys: {},
   bookmarkSync: { ...DEFAULT_SYNC_SETTINGS },

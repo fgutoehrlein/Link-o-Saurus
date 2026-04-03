@@ -60,6 +60,12 @@ import {
 } from '../shared/tag-filter';
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
+import {
+  getGridColumnCount,
+  resolveBookmarkViewMode,
+  toGridRows,
+  type BookmarkViewMode,
+} from './view-mode';
 
 declare global {
   interface Window {
@@ -84,6 +90,11 @@ type BookmarkListData = {
   readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
   readonly onDragStart: (event: DragEvent, id: string) => void;
   readonly setRowHeight: (id: string, height: number) => void;
+};
+
+type BookmarkTileListData = Omit<BookmarkListData, 'ids' | 'setRowHeight'> & {
+  readonly rows: readonly (readonly string[])[];
+  readonly columnCount: number;
 };
 
 type DraftBookmark = {
@@ -129,6 +140,7 @@ type RouteSnapshot = {
 };
 
 const DEFAULT_ITEM_HEIGHT = 90;
+const TILE_ROW_HEIGHT = 220;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 
@@ -540,10 +552,21 @@ const getBookmarkInitial = (bookmark: Bookmark): string => {
   return source ? source.charAt(0).toUpperCase() : '🔖';
 };
 
+const getBookmarkDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./u, '');
+  } catch {
+    return url;
+  }
+};
+
 type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
 
 const VirtualList = VariableSizeList as unknown as FunctionalComponent<
   VariableSizeListProps<BookmarkListData>
+>;
+const TileVirtualList = VariableSizeList as unknown as FunctionalComponent<
+  VariableSizeListProps<BookmarkTileListData>
 >;
 
 const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
@@ -664,6 +687,88 @@ const BookmarkRowRenderer = BookmarkRow as unknown as ReactComponentType<
   ListChildComponentProps<BookmarkListData>
 >;
 
+type BookmarkTileRowProps = ListChildComponentProps<BookmarkTileListData>;
+
+const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Element => {
+  const row = data.rows[index] ?? [];
+  return (
+    <div
+      className="bookmark-tile-row"
+      style={
+        {
+          ...(style as JSX.CSSProperties),
+          '--tile-columns': String(data.columnCount),
+        } as JSX.CSSProperties
+      }
+    >
+      {row.map((id) => {
+        const entry = data.bookmarkById.get(id);
+        if (!entry) {
+          return null;
+        }
+        const { bookmark, board, category } = entry;
+        const isSelected = data.selected.has(id);
+        const favicon = bookmark.faviconUrl;
+        const domain = getBookmarkDomain(bookmark.url);
+        return (
+          <article
+            key={id}
+            role="option"
+            aria-selected={isSelected}
+            tabIndex={0}
+            className={combineClassNames('bookmark-tile', isSelected && 'selected')}
+            onClick={(event) => data.onRowClick(event, id)}
+            onDblClick={(event) => {
+              event.preventDefault();
+              data.onOpenBookmark(bookmark);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                data.onRowClick(event, id);
+              }
+            }}
+            onContextMenu={(event) => data.onRowContextMenu(event, id)}
+            draggable
+            onDragStart={(event) => data.onDragStart(event, id)}
+          >
+            <div className="bookmark-tile-head">
+              <div className="bookmark-avatar" aria-hidden="true">
+                {favicon ? <img src={favicon} alt="" /> : <span>{getBookmarkInitial(bookmark)}</span>}
+              </div>
+              <div className="bookmark-tile-main">
+                <h3 className="bookmark-title" title={bookmark.title || bookmark.url}>
+                  {bookmark.title || bookmark.url}
+                </h3>
+                <p className="bookmark-domain" title={bookmark.url}>
+                  {domain}
+                </p>
+              </div>
+            </div>
+            <div className="bookmark-meta">
+              {category ? <span className="bookmark-category">{category.title}</span> : null}
+              {board ? <span className="bookmark-board">{board.title}</span> : null}
+            </div>
+            {bookmark.tags.length > 0 ? (
+              <ul className="bookmark-tags" aria-label="Tags">
+                {bookmark.tags.map((tag) => (
+                  <li key={`${bookmark.id}-${tag}`}>{tag}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+};
+
+const BookmarkTileRowRenderer = BookmarkTileRow as unknown as ReactComponentType<
+  ListChildComponentProps<BookmarkTileListData>
+>;
+
 const DashboardApp: FunctionalComponent = () => {
   const [boards, setBoards] = useState<readonly Board[]>([]);
   const [categories, setCategories] = useState<readonly Category[]>([]);
@@ -689,6 +794,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [detailState, setDetailState] = useState<DraftBookmark | null>(null);
   const [batchMove, setBatchMove] = useState<BatchMoveState>({ boardId: '', categoryId: '' });
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>('system');
+  const [bookmarkViewMode, setBookmarkViewMode] = useState<BookmarkViewMode>('list');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
@@ -699,6 +805,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
+  const [listWidth, setListWidth] = useState<number>(MIN_RESIZE_WIDTH);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
   const rowHeightsRef = useRef<Map<string, number>>(new Map());
   const pendingResetIndexRef = useRef<number | null>(null);
@@ -747,6 +854,17 @@ const DashboardApp: FunctionalComponent = () => {
     if (!element) {
       return undefined;
     }
+    const measureWidth = (entry?: ResizeObserverEntry): number => {
+      if (entry?.borderBoxSize) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (borderBox) {
+          return borderBox.inlineSize;
+        }
+      }
+      return element.getBoundingClientRect().width;
+    };
     const measureHeight = (entry?: ResizeObserverEntry): number => {
       if (entry?.borderBoxSize) {
         const borderBox = Array.isArray(entry.borderBoxSize)
@@ -758,6 +876,7 @@ const DashboardApp: FunctionalComponent = () => {
       }
       return element.getBoundingClientRect().height;
     };
+    setListWidth(measureWidth());
     setListHeight(measureHeight());
     if (typeof ResizeObserver === 'undefined') {
       return undefined;
@@ -766,6 +885,7 @@ const DashboardApp: FunctionalComponent = () => {
       if (!entries.length) {
         return;
       }
+      setListWidth(measureWidth(entries[0]));
       setListHeight(measureHeight(entries[0]));
     });
     observer.observe(element);
@@ -989,6 +1109,7 @@ const DashboardApp: FunctionalComponent = () => {
         setTags(loadedTags);
         setSessions(loadedSessions);
         setThemeChoice(settings.theme);
+        setBookmarkViewMode(resolveBookmarkViewMode(settings));
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
           try {
@@ -1415,6 +1536,32 @@ const DashboardApp: FunctionalComponent = () => {
     handleRowContextMenu,
     handleRowDragStart,
     setRowHeight,
+  ]);
+
+  const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
+  const tileRows = useMemo(
+    () => toGridRows(filteredIds, tileColumnCount),
+    [filteredIds, tileColumnCount],
+  );
+
+  const tileListData = useMemo<BookmarkTileListData>(() => ({
+    rows: tileRows,
+    columnCount: tileColumnCount,
+    bookmarkById: bookmarkEntries,
+    selected: selectedSet,
+    onRowClick: handleRowSelection,
+    onOpenBookmark: handleOpenBookmark,
+    onRowContextMenu: handleRowContextMenu,
+    onDragStart: handleRowDragStart,
+  }), [
+    tileRows,
+    tileColumnCount,
+    bookmarkEntries,
+    selectedSet,
+    handleRowSelection,
+    handleOpenBookmark,
+    handleRowContextMenu,
+    handleRowDragStart,
   ]);
 
   const clearSelection = useCallback(() => {
@@ -1850,6 +1997,17 @@ const DashboardApp: FunctionalComponent = () => {
     } catch (error) {
       console.error('Failed to save theme', error);
       setStatusMessage('Theme konnte nicht gespeichert werden.');
+    }
+  }, []);
+
+  const handleViewModeChange = useCallback(async (mode: BookmarkViewMode) => {
+    setBookmarkViewMode(mode);
+    try {
+      await saveUserSettings({ dashboardViewMode: mode });
+      setStatusMessage(`Ansicht auf ${mode === 'list' ? 'Liste' : 'Kacheln'} gestellt.`);
+    } catch (error) {
+      console.error('Failed to save view mode', error);
+      setStatusMessage('Ansicht konnte nicht gespeichert werden.');
     }
   }, []);
 
@@ -2338,6 +2496,28 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
+              <div className="view-toggle" role="group" aria-label="Ansicht wechseln">
+                <button
+                  type="button"
+                  className={combineClassNames(bookmarkViewMode === 'list' && 'active')}
+                  aria-pressed={bookmarkViewMode === 'list'}
+                  onClick={() => {
+                    void handleViewModeChange('list');
+                  }}
+                >
+                  Liste
+                </button>
+                <button
+                  type="button"
+                  className={combineClassNames(bookmarkViewMode === 'tiles' && 'active')}
+                  aria-pressed={bookmarkViewMode === 'tiles'}
+                  onClick={() => {
+                    void handleViewModeChange('tiles');
+                  }}
+                >
+                  Kacheln
+                </button>
+              </div>
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren
               </button>
@@ -2352,20 +2532,35 @@ const DashboardApp: FunctionalComponent = () => {
                 {isSearching ? 'Suche…' : 'Keine Einträge gefunden.'}
               </div>
             ) : listHeight > 0 ? (
-              <VirtualList
-                height={listHeight}
-                width="100%"
-                itemCount={filteredIds.length}
-                itemSize={getRowHeight}
-                estimatedItemSize={DEFAULT_ITEM_HEIGHT}
-                overscanCount={6}
-                itemData={listData}
-                ref={(instance) => {
-                  listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
-                }}
-              >
-                {BookmarkRowRenderer}
-              </VirtualList>
+              bookmarkViewMode === 'list' ? (
+                <VirtualList
+                  height={listHeight}
+                  width="100%"
+                  itemCount={filteredIds.length}
+                  itemSize={getRowHeight}
+                  estimatedItemSize={DEFAULT_ITEM_HEIGHT}
+                  overscanCount={6}
+                  itemData={listData}
+                  ref={(instance) => {
+                    listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
+                  }}
+                >
+                  {BookmarkRowRenderer}
+                </VirtualList>
+              ) : (
+                <TileVirtualList
+                  height={listHeight}
+                  width="100%"
+                  itemCount={tileRows.length}
+                  itemSize={() => TILE_ROW_HEIGHT}
+                  estimatedItemSize={TILE_ROW_HEIGHT}
+                  overscanCount={4}
+                  itemData={tileListData}
+                  className="bookmark-tiles-list"
+                >
+                  {BookmarkTileRowRenderer}
+                </TileVirtualList>
+              )
             ) : null}
           </div>
         </section>
