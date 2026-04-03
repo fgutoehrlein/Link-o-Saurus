@@ -89,7 +89,6 @@ type BookmarkListData = {
   readonly onOpenBookmark: (bookmark: Bookmark) => void;
   readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
   readonly onDragStart: (event: DragEvent, id: string) => void;
-  readonly setRowHeight: (id: string, height: number) => void;
 };
 
 type BookmarkTileListData = Omit<BookmarkListData, 'ids' | 'setRowHeight'> & {
@@ -599,43 +598,6 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   }
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const element = rowRef.current;
-    if (!element) {
-      return undefined;
-    }
-    const measureHeight = (entry?: ResizeObserverEntry): number => {
-      const natural = Math.max(
-        element.scrollHeight,
-        element.offsetHeight,
-        element.getBoundingClientRect().height,
-      );
-      if (entry?.borderBoxSize) {
-        const borderBox = Array.isArray(entry.borderBoxSize)
-          ? entry.borderBoxSize[0]
-          : entry.borderBoxSize;
-        if (borderBox) {
-          return Math.max(borderBox.blockSize, natural);
-        }
-      }
-      return natural;
-    };
-    data.setRowHeight(id, measureHeight());
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-    const observer = new ResizeObserver((entries) => {
-      if (!entries.length) {
-        return;
-      }
-      data.setRowHeight(id, measureHeight(entries[0]));
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [data, id, bookmark, board, category, isSelected]);
-
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
   };
@@ -667,7 +629,6 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       tabIndex={0}
       className={combineClassNames('bookmark-row', isSelected && 'selected')}
       style={style as JSX.CSSProperties}
-      ref={rowRef}
       onClick={handleClick}
       onDblClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
@@ -884,10 +845,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [listWidth, setListWidth] = useState<number>(MIN_RESIZE_WIDTH);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
   const tileListRef = useRef<VariableSizeListHandle<BookmarkTileListData> | null>(null);
-  const rowHeightsRef = useRef<Map<string, number>>(new Map());
   const tileRowHeightsRef = useRef<Map<number, number>>(new Map());
-  const pendingResetIndexRef = useRef<number | null>(null);
-  const pendingResetFrameRef = useRef<number | null>(null);
   const pendingTileResetIndexRef = useRef<number | null>(null);
   const pendingTileResetFrameRef = useRef<number | null>(null);
 
@@ -1457,69 +1415,16 @@ const DashboardApp: FunctionalComponent = () => {
   );
 
   const getRowHeight = useCallback(
-    (index: number) => {
-      const id = filteredIds[index];
-      if (!id) {
-        return DEFAULT_ITEM_HEIGHT;
-      }
-      return rowHeightsRef.current.get(id) ?? DEFAULT_ITEM_HEIGHT;
-    },
-    [filteredIds],
+    (_index: number) => DEFAULT_ITEM_HEIGHT,
+    [],
   );
-
-  const setRowHeight = useCallback(
-    (id: string, size: number) => {
-      const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
-      const current = rowHeightsRef.current.get(id);
-      if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
-        return;
-      }
-      rowHeightsRef.current.set(id, height);
-      const index = filteredIds.indexOf(id);
-      if (index >= 0) {
-        pendingResetIndexRef.current =
-          pendingResetIndexRef.current === null
-            ? index
-            : Math.min(pendingResetIndexRef.current, index);
-        if (pendingResetFrameRef.current !== null) {
-          return;
-        }
-        pendingResetFrameRef.current = window.requestAnimationFrame(() => {
-          pendingResetFrameRef.current = null;
-          const resetIndex = pendingResetIndexRef.current;
-          pendingResetIndexRef.current = null;
-          if (resetIndex === null) {
-            return;
-          }
-          listRef.current?.resetAfterIndex(resetIndex, false);
-        });
-      }
-    },
-    [filteredIds],
-  );
-
-  useEffect(() => {
-    const knownIds = new Set(filteredIds);
-    const map = rowHeightsRef.current;
-    for (const key of Array.from(map.keys())) {
-      if (!knownIds.has(key)) {
-        map.delete(key);
-      }
-    }
-    listRef.current?.resetAfterIndex(0, true);
-  }, [filteredIds]);
 
   useEffect(
     () => () => {
-      if (pendingResetFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingResetFrameRef.current);
-        pendingResetFrameRef.current = null;
-      }
       if (pendingTileResetFrameRef.current !== null) {
         window.cancelAnimationFrame(pendingTileResetFrameRef.current);
         pendingTileResetFrameRef.current = null;
       }
-      pendingResetIndexRef.current = null;
       pendingTileResetIndexRef.current = null;
     },
     [],
@@ -1611,7 +1516,6 @@ const DashboardApp: FunctionalComponent = () => {
     onOpenBookmark: handleOpenBookmark,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
-    setRowHeight,
   }), [
     filteredIds,
     bookmarkEntries,
@@ -1620,7 +1524,6 @@ const DashboardApp: FunctionalComponent = () => {
     handleOpenBookmark,
     handleRowContextMenu,
     handleRowDragStart,
-    setRowHeight,
   ]);
 
   const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
