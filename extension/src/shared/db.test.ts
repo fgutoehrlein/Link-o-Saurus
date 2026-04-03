@@ -492,10 +492,12 @@ describe('IndexedDB data layer', () => {
   it('saves and merges user settings', async () => {
     const defaults = await getUserSettings(database);
     expect(defaults.theme).toBe('system');
+    expect(defaults.dashboardViewMode).toBe('list');
 
-    await saveUserSettings({ theme: 'dark', newTabEnabled: true }, database);
+    await saveUserSettings({ theme: 'dark', dashboardViewMode: 'tiles', newTabEnabled: true }, database);
     const stored = await getUserSettings(database);
     expect(stored.theme).toBe('dark');
+    expect(stored.dashboardViewMode).toBe('tiles');
     expect(stored.newTabEnabled).toBe(true);
   });
 

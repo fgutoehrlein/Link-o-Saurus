@@ -70,6 +70,7 @@ export type SessionPack = {
 
 export type UserSettings = {
   theme: 'light' | 'dark' | 'system';
+  dashboardViewMode: 'list' | 'tiles';
   newTabEnabled: boolean;
   hotkeys?: Record<string, string>;
   bookmarkSync: SyncSettings;
