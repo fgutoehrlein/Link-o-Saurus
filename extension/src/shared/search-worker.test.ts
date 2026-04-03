@@ -72,6 +72,17 @@ describe('search worker tag filtering', () => {
     expect(unmatchedHits).toHaveLength(0);
   });
 
+  it('excludes bookmarks matching excluded tags', async () => {
+    await rebuildIndex([
+      createBookmark({ id: 'x1', title: 'Video: EV review', tags: ['Video', 'Auto'] }),
+      createBookmark({ id: 'x2', title: 'Video: React conf', tags: ['Video', 'Dev'] }),
+      createBookmark({ id: 'x3', title: 'Text only', tags: ['Dev'] }),
+    ]);
+
+    const hits = await query('', { tags: ['Video'], excludeTags: ['Auto'] });
+    expect(hits.map((hit) => hit.id)).toEqual(['x2']);
+  });
+
   it('matches hierarchical tag prefixes', async () => {
     await rebuildIndex([
       createBookmark({ id: 'd1', title: 'React patterns', tags: ['dev/js/react'] }),
@@ -84,6 +95,17 @@ describe('search worker tag filtering', () => {
 
     const reactHits = await query('', { tags: ['dev/js/react'] });
     expect(reactHits.map((hit) => hit.id)).toEqual(['d1']);
+  });
+
+  it('applies mixed include and hierarchical exclude filters', async () => {
+    await rebuildIndex([
+      createBookmark({ id: 'm1', title: 'React docs', tags: ['dev/js/react'] }),
+      createBookmark({ id: 'm2', title: 'Vue docs', tags: ['dev/js/vue'] }),
+      createBookmark({ id: 'm3', title: 'Python docs', tags: ['dev/python'] }),
+    ]);
+
+    const hits = await query('', { tags: ['dev'], excludeTags: ['dev/js/vue'] });
+    expect(hits.map((hit) => hit.id).sort()).toEqual(['m1', 'm3']);
   });
 
   it('updates tag indexes when a bookmark document changes', async () => {

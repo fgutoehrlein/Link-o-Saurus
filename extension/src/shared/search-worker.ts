@@ -2,7 +2,8 @@ import { expose } from 'comlink';
 import FlexSearch from 'flexsearch';
 import type { EnrichedDocumentSearchResultSetUnit, Id } from 'flexsearch';
 import type { Bookmark } from './types';
-import { canonicalizeTagId, isAncestorSlug, normalizeTagList } from './tag-utils';
+import { canonicalizeTagId, normalizeTagList } from './tag-utils';
+import { matchesTagFilter } from './tag-filter';
 
 type BookmarkDocument = Pick<
   Bookmark,
@@ -13,6 +14,7 @@ type BookmarkDocument = Pick<
 
 export type SearchFilters = {
   readonly tags?: string[];
+  readonly excludeTags?: string[];
   readonly archived?: boolean;
   readonly pinned?: boolean;
 };
@@ -136,14 +138,11 @@ const matchesFilters = (doc: BookmarkDocument, filters?: SearchFilters): boolean
     return false;
   }
 
-  if (filters.tags && filters.tags.length > 0) {
-    const normalized = doc.normalizedTags;
-    const required = filters.tags
-      .map((tag) => canonicalizeTagId(tag))
-      .filter((tag): tag is string => Boolean(tag));
-    return required.every((requiredTag) =>
-      normalized.some((candidate) => isAncestorSlug(requiredTag, candidate)),
-    );
+  if ((filters.tags && filters.tags.length > 0) || (filters.excludeTags && filters.excludeTags.length > 0)) {
+    return matchesTagFilter(doc.normalizedTags, {
+      include: filters.tags ?? [],
+      exclude: filters.excludeTags ?? [],
+    });
   }
 
   return true;
@@ -226,4 +225,3 @@ if (
 }
 
 export { rebuildIndex, updateDoc, removeDoc, query };
-
