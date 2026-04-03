@@ -717,8 +717,24 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
     if (!element) {
       return undefined;
     }
+    const measureTilesHeight = (): number => {
+      const computed = window.getComputedStyle(element);
+      const paddingTop = Number.parseFloat(computed.paddingTop) || 0;
+      const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
+      let maxTileHeight = 0;
+      element.querySelectorAll<HTMLElement>('.bookmark-tile').forEach((tile) => {
+        const tileHeight = Math.max(
+          tile.scrollHeight,
+          tile.offsetHeight,
+          tile.getBoundingClientRect().height,
+        );
+        maxTileHeight = Math.max(maxTileHeight, tileHeight);
+      });
+      return Math.ceil(maxTileHeight + paddingTop + paddingBottom);
+    };
     const measureHeight = (entry?: ResizeObserverEntry): number => {
       const natural = Math.max(
+        measureTilesHeight(),
         element.scrollHeight,
         element.offsetHeight,
         element.getBoundingClientRect().height,
@@ -1647,6 +1663,14 @@ const DashboardApp: FunctionalComponent = () => {
     tileRowHeightsRef.current.clear();
     tileListRef.current?.resetAfterIndex(0, true);
   }, [tileColumnCount, filteredIds]);
+
+  useEffect(() => {
+    if (bookmarkViewMode !== 'tiles') {
+      return;
+    }
+    tileRowHeightsRef.current.clear();
+    tileListRef.current?.resetAfterIndex(0, true);
+  }, [bookmarkViewMode]);
 
   const tileListData = useMemo<BookmarkTileListData>(() => ({
     rows: tileRows,
