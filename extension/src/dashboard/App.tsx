@@ -95,6 +95,7 @@ type BookmarkListData = {
 type BookmarkTileListData = Omit<BookmarkListData, 'ids' | 'setRowHeight'> & {
   readonly rows: readonly (readonly string[])[];
   readonly columnCount: number;
+  readonly setRowHeight: (rowIndex: number, height: number) => void;
 };
 
 type DraftBookmark = {
@@ -140,7 +141,7 @@ type RouteSnapshot = {
 };
 
 const DEFAULT_ITEM_HEIGHT = 90;
-const TILE_ROW_HEIGHT = 220;
+const DEFAULT_TILE_ROW_HEIGHT = 248;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 
@@ -560,6 +561,27 @@ const getBookmarkDomain = (url: string): string => {
   }
 };
 
+const BookmarkAvatar: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({ bookmark }) => {
+  const [hasImageError, setHasImageError] = useState(false);
+  const favicon = bookmark.faviconUrl?.trim();
+  const showFavicon = Boolean(favicon) && !hasImageError;
+  return (
+    <div className="bookmark-avatar" aria-hidden="true">
+      {showFavicon ? (
+        <img
+          src={favicon}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setHasImageError(true)}
+        />
+      ) : (
+        <span className="bookmark-avatar-fallback">{getBookmarkInitial(bookmark)}</span>
+      )}
+    </div>
+  );
+};
+
 type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
 
 const VirtualList = VariableSizeList as unknown as FunctionalComponent<
@@ -577,7 +599,6 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   }
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
-  const favicon = bookmark.faviconUrl;
   const rowRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -654,9 +675,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       draggable
       onDragStart={handleDragStart}
     >
-      <div className="bookmark-avatar" aria-hidden="true">
-        {favicon ? <img src={favicon} alt="" /> : <span>{getBookmarkInitial(bookmark)}</span>}
-      </div>
+      <BookmarkAvatar bookmark={bookmark} />
       <div className="bookmark-content">
         <div className="bookmark-title" title={bookmark.title || bookmark.url}>
           {bookmark.title || bookmark.url}
@@ -691,9 +710,47 @@ type BookmarkTileRowProps = ListChildComponentProps<BookmarkTileListData>;
 
 const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Element => {
   const row = data.rows[index] ?? [];
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const element = rowRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const measureHeight = (entry?: ResizeObserverEntry): number => {
+      const natural = Math.max(
+        element.scrollHeight,
+        element.offsetHeight,
+        element.getBoundingClientRect().height,
+      );
+      if (entry?.borderBoxSize) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (borderBox) {
+          return Math.max(borderBox.blockSize, natural);
+        }
+      }
+      return natural;
+    };
+    data.setRowHeight(index, measureHeight());
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      if (!entries.length) {
+        return;
+      }
+      data.setRowHeight(index, measureHeight(entries[0]));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [data, index, row]);
+
   return (
     <div
       className="bookmark-tile-row"
+      ref={rowRef}
       style={
         {
           ...(style as JSX.CSSProperties),
@@ -708,8 +765,8 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         }
         const { bookmark, board, category } = entry;
         const isSelected = data.selected.has(id);
-        const favicon = bookmark.faviconUrl;
         const domain = getBookmarkDomain(bookmark.url);
+        const notes = bookmark.notes?.trim();
         return (
           <article
             key={id}
@@ -733,9 +790,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             onDragStart={(event) => data.onDragStart(event, id)}
           >
             <div className="bookmark-tile-head">
-              <div className="bookmark-avatar" aria-hidden="true">
-                {favicon ? <img src={favicon} alt="" /> : <span>{getBookmarkInitial(bookmark)}</span>}
-              </div>
+              <BookmarkAvatar bookmark={bookmark} />
               <div className="bookmark-tile-main">
                 <h3 className="bookmark-title" title={bookmark.title || bookmark.url}>
                   {bookmark.title || bookmark.url}
@@ -745,6 +800,11 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
                 </p>
               </div>
             </div>
+            {notes ? (
+              <p className="bookmark-notes" title={notes}>
+                {notes}
+              </p>
+            ) : null}
             <div className="bookmark-meta">
               {category ? <span className="bookmark-category">{category.title}</span> : null}
               {board ? <span className="bookmark-board">{board.title}</span> : null}
@@ -807,9 +867,13 @@ const DashboardApp: FunctionalComponent = () => {
   const [listHeight, setListHeight] = useState<number>(320);
   const [listWidth, setListWidth] = useState<number>(MIN_RESIZE_WIDTH);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
+  const tileListRef = useRef<VariableSizeListHandle<BookmarkTileListData> | null>(null);
   const rowHeightsRef = useRef<Map<string, number>>(new Map());
+  const tileRowHeightsRef = useRef<Map<number, number>>(new Map());
   const pendingResetIndexRef = useRef<number | null>(null);
   const pendingResetFrameRef = useRef<number | null>(null);
+  const pendingTileResetIndexRef = useRef<number | null>(null);
+  const pendingTileResetFrameRef = useRef<number | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const manualIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -1435,7 +1499,12 @@ const DashboardApp: FunctionalComponent = () => {
         window.cancelAnimationFrame(pendingResetFrameRef.current);
         pendingResetFrameRef.current = null;
       }
+      if (pendingTileResetFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingTileResetFrameRef.current);
+        pendingTileResetFrameRef.current = null;
+      }
       pendingResetIndexRef.current = null;
+      pendingTileResetIndexRef.current = null;
     },
     [],
   );
@@ -1544,6 +1613,41 @@ const DashboardApp: FunctionalComponent = () => {
     [filteredIds, tileColumnCount],
   );
 
+  const getTileRowHeight = useCallback(
+    (index: number) => tileRowHeightsRef.current.get(index) ?? DEFAULT_TILE_ROW_HEIGHT,
+    [],
+  );
+
+  const setTileRowHeight = useCallback((rowIndex: number, size: number) => {
+    const height = Math.max(DEFAULT_TILE_ROW_HEIGHT, Math.ceil(size));
+    const current = tileRowHeightsRef.current.get(rowIndex);
+    if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
+      return;
+    }
+    tileRowHeightsRef.current.set(rowIndex, height);
+    pendingTileResetIndexRef.current =
+      pendingTileResetIndexRef.current === null
+        ? rowIndex
+        : Math.min(pendingTileResetIndexRef.current, rowIndex);
+    if (pendingTileResetFrameRef.current !== null) {
+      return;
+    }
+    pendingTileResetFrameRef.current = window.requestAnimationFrame(() => {
+      pendingTileResetFrameRef.current = null;
+      const resetIndex = pendingTileResetIndexRef.current;
+      pendingTileResetIndexRef.current = null;
+      if (resetIndex === null) {
+        return;
+      }
+      tileListRef.current?.resetAfterIndex(resetIndex, false);
+    });
+  }, []);
+
+  useEffect(() => {
+    tileRowHeightsRef.current.clear();
+    tileListRef.current?.resetAfterIndex(0, true);
+  }, [tileColumnCount, filteredIds]);
+
   const tileListData = useMemo<BookmarkTileListData>(() => ({
     rows: tileRows,
     columnCount: tileColumnCount,
@@ -1553,6 +1657,7 @@ const DashboardApp: FunctionalComponent = () => {
     onOpenBookmark: handleOpenBookmark,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
+    setRowHeight: setTileRowHeight,
   }), [
     tileRows,
     tileColumnCount,
@@ -1562,6 +1667,7 @@ const DashboardApp: FunctionalComponent = () => {
     handleOpenBookmark,
     handleRowContextMenu,
     handleRowDragStart,
+    setTileRowHeight,
   ]);
 
   const clearSelection = useCallback(() => {
@@ -2552,11 +2658,14 @@ const DashboardApp: FunctionalComponent = () => {
                   height={listHeight}
                   width="100%"
                   itemCount={tileRows.length}
-                  itemSize={() => TILE_ROW_HEIGHT}
-                  estimatedItemSize={TILE_ROW_HEIGHT}
+                  itemSize={getTileRowHeight}
+                  estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
                   overscanCount={4}
                   itemData={tileListData}
                   className="bookmark-tiles-list"
+                  ref={(instance) => {
+                    tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
+                  }}
                 >
                   {BookmarkTileRowRenderer}
                 </TileVirtualList>
