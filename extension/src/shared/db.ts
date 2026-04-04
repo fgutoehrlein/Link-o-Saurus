@@ -33,6 +33,7 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'system',
   dashboardViewMode: 'list',
+  bookmarkSortMode: 'relevance',
   newTabEnabled: false,
   hotkeys: {},
   bookmarkSync: { ...DEFAULT_SYNC_SETTINGS },
@@ -1178,6 +1179,27 @@ export const updateBookmark = async (
     });
   }
   return next;
+};
+
+export const recordBookmarkVisit = async (
+  id: string,
+  database?: LinkOSaurusDB,
+): Promise<Bookmark> => {
+  const dbInstance = withDatabase(database);
+  const existing = await getBookmark(id, dbInstance);
+  if (!existing) {
+    throw new Error(`Bookmark ${id} not found`);
+  }
+  const now = Date.now();
+  return updateBookmark(
+    id,
+    {
+      visitCount: Math.max(0, existing.visitCount ?? 0) + 1,
+      lastVisitedAt: now,
+      updatedAt: now,
+    },
+    dbInstance,
+  );
 };
 
 export const getBookmark = async (

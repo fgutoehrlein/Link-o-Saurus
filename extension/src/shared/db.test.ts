@@ -42,6 +42,7 @@ import {
   listRules,
   listSessions,
   listTags,
+  recordBookmarkVisit,
   saveUserSettings,
   saveReadLater,
   decrementTagUsage,
@@ -493,12 +494,37 @@ describe('IndexedDB data layer', () => {
     const defaults = await getUserSettings(database);
     expect(defaults.theme).toBe('system');
     expect(defaults.dashboardViewMode).toBe('list');
+    expect(defaults.bookmarkSortMode).toBe('relevance');
 
-    await saveUserSettings({ theme: 'dark', dashboardViewMode: 'tiles', newTabEnabled: true }, database);
+    await saveUserSettings({
+      theme: 'dark',
+      dashboardViewMode: 'tiles',
+      bookmarkSortMode: 'alphabetical',
+      newTabEnabled: true,
+    }, database);
     const stored = await getUserSettings(database);
     expect(stored.theme).toBe('dark');
     expect(stored.dashboardViewMode).toBe('tiles');
+    expect(stored.bookmarkSortMode).toBe('alphabetical');
     expect(stored.newTabEnabled).toBe(true);
+  });
+
+  it('increments visit metadata when recording bookmark usage', async () => {
+    await createBookmark({
+      id: 'bookmark-visit',
+      url: 'https://example.com/visit',
+      title: 'Visit',
+      tags: [],
+      visitCount: 2,
+      lastVisitedAt: 1_000,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    }, database);
+
+    const updated = await recordBookmarkVisit('bookmark-visit', database);
+    expect(updated.visitCount).toBe(3);
+    expect(updated.lastVisitedAt).toBeTypeOf('number');
+    expect(updated.lastVisitedAt).toBeGreaterThan(1_000);
   });
 
   it('runs bookmark bulk write within performance budget', async () => {
