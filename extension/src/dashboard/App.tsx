@@ -964,6 +964,9 @@ const DashboardApp: FunctionalComponent = () => {
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
   const [isDetailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(true);
+  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(false);
+  const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
+  const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -2288,6 +2291,14 @@ const DashboardApp: FunctionalComponent = () => {
 
   const hasActiveFilters = activeFilterChips.length > 0;
   const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
+  const selectedCountLabel =
+    selectedIds.length === 0 ? 'Keine Auswahl' : `${selectedIds.length} ausgewählt`;
+
+  useEffect(() => {
+    if (hasActiveFilters) {
+      setShowFilterDetails(true);
+    }
+  }, [hasActiveFilters]);
 
   const detailPanel = () => {
     if (draft) {
@@ -2537,7 +2548,7 @@ const DashboardApp: FunctionalComponent = () => {
         </button>
         <div className="header-titles">
           <h1>Link-o-Saurus Dashboard</h1>
-          <p>Alle Boards, Tags, Sessions und Exporte in einer Arbeitsfläche.</p>
+          <p>Fokussierte Arbeitsfläche für Suche, Auswahl und Bearbeitung.</p>
         </div>
         <div className="header-actions">
           <label className="search-field prominent-search">
@@ -2558,25 +2569,60 @@ const DashboardApp: FunctionalComponent = () => {
         </div>
       </header>
       <div className="dashboard-toolbar">
-        <div>
-          <label className="toggle">
-            <input type="checkbox" checked={showArchived} onChange={handleToggleArchived} />
-            Archivierte anzeigen
-          </label>
-        </div>
-        <div>
-          <label className="toolbar-select">
-            <span>Sortierung</span>
-            <select value={bookmarkSortMode} onChange={handleSortModeChange}>
-              <option value="relevance">Relevanz</option>
-              <option value="alphabetical">Alphabetisch</option>
-              <option value="newest">Neueste</option>
-            </select>
-          </label>
+        <div className="toolbar-primary">
+          <span className="status-chip">{searchResultLabel}</span>
+          <span className="status-chip muted">{selectedCountLabel}</span>
+          <button
+            type="button"
+            className="toolbar-disclosure"
+            aria-expanded={showAdvancedControls}
+            onClick={() => setShowAdvancedControls((value) => !value)}
+          >
+            {showAdvancedControls ? 'Weniger Optionen' : 'Mehr Optionen'}
+          </button>
         </div>
         <div className="status" aria-live="polite">
           {isSearching ? 'Suche…' : `${searchResultLabel}${statusMessage || searchError ? ` · ${statusMessage || searchError}` : ''}`}
         </div>
+        {showAdvancedControls ? (
+          <div className="toolbar-advanced" role="group" aria-label="Erweiterte Ansichtsoptionen">
+            <label className="toggle">
+              <input type="checkbox" checked={showArchived} onChange={handleToggleArchived} />
+              Archivierte anzeigen
+            </label>
+            <label className="toolbar-select">
+              <span>Sortierung</span>
+              <select value={bookmarkSortMode} onChange={handleSortModeChange}>
+                <option value="relevance">Relevanz</option>
+                <option value="alphabetical">Alphabetisch</option>
+                <option value="newest">Neueste</option>
+              </select>
+            </label>
+            <div className="view-toggle compact" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
+              {VIEW_MODE_OPTIONS.map((option) => {
+                const isActive = bookmarkViewMode === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    className={combineClassNames('view-toggle-option', isActive && 'active')}
+                    aria-checked={isActive}
+                    title={option.description}
+                    onClick={() => {
+                      void handleViewModeChange(option.value);
+                    }}
+                  >
+                    <span className="view-toggle-icon">{option.icon}</span>
+                    <span className="view-toggle-copy">
+                      <strong>{option.label}</strong>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="dashboard-main">
         <aside
@@ -2786,64 +2832,50 @@ const DashboardApp: FunctionalComponent = () => {
             <button type="button" onClick={() => setSessionDialogOpen(true)}>
               Sessions
             </button>
-            <div className="theme-card" role="group" aria-label="Theme selection">
-              <div className="theme-card-header">
-                <p className="theme-card-label">Theme</p>
-                <p className="theme-card-hint">Wähle den Look, der zu dir passt.</p>
+            <button
+              type="button"
+              className="toolbar-disclosure"
+              aria-expanded={areUtilitiesExpanded}
+              onClick={() => setUtilitiesExpanded((value) => !value)}
+            >
+              {areUtilitiesExpanded ? 'Darstellung ausblenden' : 'Darstellung anzeigen'}
+            </button>
+            {areUtilitiesExpanded ? (
+              <div className="theme-card" role="group" aria-label="Theme selection">
+                <div className="theme-card-header">
+                  <p className="theme-card-label">Theme</p>
+                  <p className="theme-card-hint">Wähle den Look, der zu dir passt.</p>
+                </div>
+                <div className="theme-options">
+                  {THEME_OPTIONS.map((option) => {
+                    const isActive = themeChoice === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={combineClassNames('theme-option', isActive && 'selected')}
+                        aria-pressed={isActive}
+                        onClick={() => handleThemeChange(option.value)}
+                      >
+                        <span className="theme-option-icon" aria-hidden="true">
+                          {option.icon}
+                        </span>
+                        <span className="theme-option-copy">
+                          <strong>{option.title}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="theme-options">
-                {THEME_OPTIONS.map((option) => {
-                  const isActive = themeChoice === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={combineClassNames('theme-option', isActive && 'selected')}
-                      aria-pressed={isActive}
-                      onClick={() => handleThemeChange(option.value)}
-                    >
-                      <span className="theme-option-icon" aria-hidden="true">
-                        {option.icon}
-                      </span>
-                      <span className="theme-option-copy">
-                        <strong>{option.title}</strong>
-                        <small>{option.description}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            ) : null}
           </section>
         </aside>
         <section className="bookmark-list" role="listbox" aria-multiselectable="true">
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
-              <div className="view-toggle" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
-                {VIEW_MODE_OPTIONS.map((option) => {
-                  const isActive = bookmarkViewMode === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      className={combineClassNames('view-toggle-option', isActive && 'active')}
-                      aria-checked={isActive}
-                      title={option.description}
-                      onClick={() => {
-                        void handleViewModeChange(option.value);
-                      }}
-                    >
-                      <span className="view-toggle-icon">{option.icon}</span>
-                      <span className="view-toggle-copy">
-                        <strong>{option.label}</strong>
-                        <small>{option.description}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren
               </button>
@@ -2856,33 +2888,45 @@ const DashboardApp: FunctionalComponent = () => {
             <div className="active-tag-filters-header">
               <p className="active-tag-filters-title">Aktive Filter</p>
               <div className="active-filter-summary">{searchResultLabel}</div>
+              <button
+                type="button"
+                className="active-filter-disclosure"
+                aria-expanded={showFilterDetails}
+                onClick={() => setShowFilterDetails((value) => !value)}
+              >
+                {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
+              </button>
             </div>
-            {hasActiveFilters ? (
-              <ul className="active-tag-chip-list" aria-label="Aktive Filter">
-                {activeFilterChips.map((chip) => (
-                  <li key={chip.id}>
-                    <button
-                      type="button"
-                      className={combineClassNames('active-tag-chip', chip.tone === 'include' && 'include', chip.tone === 'exclude' && 'exclude')}
-                      onClick={chip.remove}
-                      title={`${chip.label} entfernen`}
-                    >
-                      {chip.label} <span aria-hidden="true">×</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="active-filter-empty">Keine aktiven Filter – alle Bookmarks sichtbar.</p>
-            )}
-            <button
-              type="button"
-              className="active-filter-reset"
-              onClick={handleResetAllFilters}
-              disabled={!hasActiveFilters}
-            >
-              Alle Filter entfernen
-            </button>
+            {showFilterDetails ? (
+              <>
+                {hasActiveFilters ? (
+                  <ul className="active-tag-chip-list" aria-label="Aktive Filter">
+                    {activeFilterChips.map((chip) => (
+                      <li key={chip.id}>
+                        <button
+                          type="button"
+                          className={combineClassNames('active-tag-chip', chip.tone === 'include' && 'include', chip.tone === 'exclude' && 'exclude')}
+                          onClick={chip.remove}
+                          title={`${chip.label} entfernen`}
+                        >
+                          {chip.label} <span aria-hidden="true">×</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="active-filter-empty">Keine aktiven Filter – alle Bookmarks sichtbar.</p>
+                )}
+                <button
+                  type="button"
+                  className="active-filter-reset"
+                  onClick={handleResetAllFilters}
+                  disabled={!hasActiveFilters}
+                >
+                  Alle Filter entfernen
+                </button>
+              </>
+            ) : null}
           </div>
           <div
             ref={listContainerRef}
