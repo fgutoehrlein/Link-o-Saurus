@@ -476,6 +476,10 @@ body {
 .sidebar-subitem,
 .tag-item {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   text-align: left;
   padding: 0.45rem 0.65rem;
   border-radius: 10px;
@@ -518,6 +522,32 @@ body {
   color: var(--text-muted-light);
 }
 
+.tag-item .tag-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.tag-state-indicator {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.tag-item.active .tag-state-indicator {
+  background: rgba(37, 99, 235, 0.24);
+}
+
+.tag-item.active-negative .tag-state-indicator {
+  background: rgba(249, 115, 22, 0.24);
+}
+
 [data-theme='dark'] .tag-item .usage {
   color: var(--text-muted-dark);
 }
@@ -548,6 +578,58 @@ body {
 
 [data-theme='dark'] .list-header {
   border-color: var(--border-dark);
+}
+
+.active-tag-filters {
+  padding: 0.75rem 1.25rem 0.65rem;
+  border-bottom: 1px solid var(--border-light);
+  background: rgba(37, 99, 235, 0.03);
+}
+
+[data-theme='dark'] .active-tag-filters {
+  border-bottom-color: var(--border-dark);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.active-tag-filters-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.8rem;
+  color: var(--text-muted-light);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-theme='dark'] .active-tag-filters-title {
+  color: var(--text-muted-dark);
+}
+
+.active-tag-chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.active-tag-chip {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.active-tag-chip.include {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.35);
+  color: var(--accent);
+}
+
+.active-tag-chip.exclude {
+  background: rgba(249, 115, 22, 0.16);
+  border-color: rgba(249, 115, 22, 0.5);
+  color: #c2410c;
 }
 
 .list-header h2 {
@@ -747,6 +829,11 @@ button.danger {
 }
 
 .bookmark-tags li {
+  font-size: 0.74rem;
+  line-height: 1.25;
+}
+
+.bookmark-tag-chip {
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
   border: 1px solid rgba(37, 99, 235, 0.18);
@@ -755,6 +842,24 @@ button.danger {
   line-height: 1.25;
   font-weight: 500;
   color: color-mix(in srgb, var(--accent) 76%, #1e293b);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.bookmark-tag-chip:hover {
+  background: rgba(37, 99, 235, 0.24);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.bookmark-tag-chip.is-include {
+  background: rgba(37, 99, 235, 0.25);
+  border-color: rgba(37, 99, 235, 0.58);
+}
+
+.bookmark-tag-chip.is-exclude {
+  background: rgba(249, 115, 22, 0.18);
+  border-color: rgba(249, 115, 22, 0.58);
+  color: #c2410c;
 }
 
 .bookmark-updated {
@@ -901,10 +1006,16 @@ button.danger {
   color: var(--text-muted-light) !important;
 }
 
-[data-theme='dark'] .bookmark-tags li {
+[data-theme='dark'] .bookmark-tag-chip {
   border-color: rgba(96, 165, 250, 0.28);
   background: rgba(59, 130, 246, 0.2);
   color: rgba(219, 234, 254, 0.94);
+}
+
+[data-theme='dark'] .bookmark-tag-chip.is-exclude {
+  background: rgba(249, 115, 22, 0.28);
+  border-color: rgba(251, 146, 60, 0.62);
+  color: #fdba74;
 }
 
 [data-theme='dark'] .bookmark-tag-overflow {
