@@ -222,6 +222,7 @@ const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
     icon: <TileViewIcon />,
   },
 ];
+const BOARD_ICON_SET = ['🗂️', '📁', '📌', '📚', '🧭', '🧩', '⭐'] as const;
 const MIN_RESIZE_WIDTH = 320;
 
 const ROUTE_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/gu;
@@ -958,6 +959,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
   const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
+  const [isSidebarCompact, setSidebarCompact] = useState<boolean>(false);
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
@@ -1001,12 +1003,14 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   const layoutMode = viewportWidth >= 1200 ? 'triple' : viewportWidth >= 900 ? 'double' : 'single';
+  const canUseCompactSidebar = layoutMode !== 'single';
 
   useEffect(() => {
     if (layoutMode === 'triple') {
       setSidebarOpen(true);
     } else if (layoutMode === 'single') {
       setSidebarOpen(false);
+      setSidebarCompact(false);
     }
   }, [layoutMode]);
 
@@ -2575,12 +2579,31 @@ const DashboardApp: FunctionalComponent = () => {
         </div>
       </div>
       <div className="dashboard-main">
-        <aside className={combineClassNames('dashboard-sidebar', sidebarOpen && 'open')}>
+        <aside
+          className={combineClassNames(
+            'dashboard-sidebar',
+            sidebarOpen && 'open',
+            isSidebarCompact && canUseCompactSidebar && 'compact',
+          )}
+        >
           <section>
             <div className="filter-reset">
               <button type="button" onClick={handleClearFilters}>
                 Filter zurücksetzen
               </button>
+              {canUseCompactSidebar ? (
+                <button
+                  type="button"
+                  className="sidebar-compact-toggle"
+                  aria-pressed={isSidebarCompact}
+                  aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
+                  title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
+                  onClick={() => setSidebarCompact((value) => !value)}
+                >
+                  <span aria-hidden="true">{isSidebarCompact ? '⟩⟩' : '⟨⟨'}</span>
+                  <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
+                </button>
+              ) : null}
             </div>
             <header className="sidebar-section-header">
               <h2>Boards</h2>
@@ -2605,11 +2628,16 @@ const DashboardApp: FunctionalComponent = () => {
             </header>
             {areBoardsExpanded ? (
               <ul id="board-list" className="sidebar-list">
-                {boards.map((board) => (
+                {boards.map((board, boardIndex) => {
+                  const boardCategories = categories.filter((category) => category.boardId === board.id);
+                  const boardIcon = BOARD_ICON_SET[boardIndex % BOARD_ICON_SET.length];
+                  return (
                   <li key={board.id}>
                     <button
                       type="button"
                       className={combineClassNames('sidebar-item', activeBoardId === board.id && 'active')}
+                      aria-current={activeBoardId === board.id ? 'page' : undefined}
+                      title={isSidebarCompact && canUseCompactSidebar ? board.title : undefined}
                       onClick={() => handleSelectBoard(board.id)}
                       onDragOver={(event) => {
                         event.preventDefault();
@@ -2628,12 +2656,16 @@ const DashboardApp: FunctionalComponent = () => {
                         void handleDropOnBoard(board.id);
                       }}
                     >
-                      {board.title}
+                      <span className="sidebar-item-label">
+                        <span className="sidebar-item-icon" aria-hidden="true">
+                          {boardIcon}
+                        </span>
+                        <span className="sidebar-item-text">{board.title}</span>
+                      </span>
+                      <span className="usage">{boardCategories.length}</span>
                     </button>
                     <ul className="sidebar-sublist">
-                      {categories
-                        .filter((category) => category.boardId === board.id)
-                        .map((category) => (
+                      {boardCategories.map((category) => (
                           <li key={category.id}>
                             <button
                               type="button"
@@ -2641,6 +2673,7 @@ const DashboardApp: FunctionalComponent = () => {
                                 'sidebar-subitem',
                                 activeCategoryId === category.id && 'active',
                               )}
+                              title={isSidebarCompact && canUseCompactSidebar ? category.title : undefined}
                               onClick={() => handleSelectCategory(category.id, board.id)}
                               onDragOver={(event) => {
                                 event.preventDefault();
@@ -2659,13 +2692,19 @@ const DashboardApp: FunctionalComponent = () => {
                                 void handleDropOnCategory(category.id);
                               }}
                             >
-                              {category.title}
+                              <span className="sidebar-item-label">
+                                <span className="sidebar-item-icon" aria-hidden="true">
+                                  •
+                                </span>
+                                <span className="sidebar-item-text">{category.title}</span>
+                              </span>
                             </button>
                           </li>
                         ))}
                     </ul>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="sidebar-hint" id="board-list" role="status">
@@ -2707,8 +2746,8 @@ const DashboardApp: FunctionalComponent = () => {
                         mode === 'exclude' && 'active-negative',
                       )}
                       aria-pressed={mode !== null}
+                      title={isSidebarCompact && canUseCompactSidebar ? tag.path : undefined}
                       aria-label={`${tag.path} filtern (${mode === 'exclude' ? 'negativ' : mode === 'include' ? 'positiv' : 'inaktiv'})`}
-                      title="Linksklick: positiv · Rechtsklick: negativ · Taste N: negativ"
                       onClick={() => handleSelectTag(tag.path, 'include')}
                       onContextMenu={(event) => {
                         applyNegativeTagContextAction(event, () => {
