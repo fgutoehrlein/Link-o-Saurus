@@ -165,6 +165,28 @@ type ThemeOption = {
   readonly icon: string;
 };
 
+type ViewModeOption = {
+  readonly value: BookmarkViewMode;
+  readonly label: string;
+  readonly description: string;
+  readonly icon: JSX.Element;
+};
+
+const ListViewIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M4 6.75h16M4 12h16M4 17.25h16" />
+  </svg>
+);
+
+const TileViewIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <rect x="4" y="4" width="6.5" height="6.5" rx="1.25" />
+    <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.25" />
+    <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.25" />
+    <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.25" />
+  </svg>
+);
+
 const THEME_OPTIONS: readonly ThemeOption[] = [
   {
     value: 'system',
@@ -183,6 +205,21 @@ const THEME_OPTIONS: readonly ThemeOption[] = [
     title: 'Default mode',
     description: 'Unser fokussierter Standard-Look.',
     icon: '🌙',
+  },
+];
+
+const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
+  {
+    value: 'list',
+    label: 'Liste',
+    description: 'Detaillierte Zeilenansicht mit Metadaten zum schnellen Scannen.',
+    icon: <ListViewIcon />,
+  },
+  {
+    value: 'tiles',
+    label: 'Kacheln',
+    description: 'Visueller Überblick mit Fokus auf Titel, Icons und schnelle Orientierung.',
+    icon: <TileViewIcon />,
   },
 ];
 const MIN_RESIZE_WIDTH = 320;
@@ -2744,27 +2781,29 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
-              <div className="view-toggle" role="group" aria-label="Ansicht wechseln">
-                <button
-                  type="button"
-                  className={combineClassNames(bookmarkViewMode === 'list' && 'active')}
-                  aria-pressed={bookmarkViewMode === 'list'}
-                  onClick={() => {
-                    void handleViewModeChange('list');
-                  }}
-                >
-                  Liste
-                </button>
-                <button
-                  type="button"
-                  className={combineClassNames(bookmarkViewMode === 'tiles' && 'active')}
-                  aria-pressed={bookmarkViewMode === 'tiles'}
-                  onClick={() => {
-                    void handleViewModeChange('tiles');
-                  }}
-                >
-                  Kacheln
-                </button>
+              <div className="view-toggle" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
+                {VIEW_MODE_OPTIONS.map((option) => {
+                  const isActive = bookmarkViewMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      className={combineClassNames('view-toggle-option', isActive && 'active')}
+                      aria-checked={isActive}
+                      title={option.description}
+                      onClick={() => {
+                        void handleViewModeChange(option.value);
+                      }}
+                    >
+                      <span className="view-toggle-icon">{option.icon}</span>
+                      <span className="view-toggle-copy">
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren
@@ -2806,44 +2845,50 @@ const DashboardApp: FunctionalComponent = () => {
               Alle Filter entfernen
             </button>
           </div>
-          <div ref={listContainerRef} className="list-viewport" aria-busy={isSearching}>
+          <div
+            ref={listContainerRef}
+            className="list-viewport"
+            aria-busy={isSearching}
+          >
             {filteredIds.length === 0 ? (
               <div className="empty-state">
                 {isSearching ? 'Suche…' : 'Keine Einträge gefunden.'}
               </div>
             ) : listHeight > 0 ? (
-              bookmarkViewMode === 'list' ? (
-                <VirtualList
-                  height={listHeight}
-                  width="100%"
-                  itemCount={filteredIds.length}
-                  itemSize={getRowHeight}
-                  estimatedItemSize={DEFAULT_ITEM_HEIGHT}
-                  overscanCount={6}
-                  itemData={listData}
-                  ref={(instance) => {
-                    listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
-                  }}
-                >
-                  {BookmarkRowRenderer}
-                </VirtualList>
-              ) : (
-                <TileVirtualList
-                  height={listHeight}
-                  width="100%"
-                  itemCount={tileRows.length}
-                  itemSize={getTileRowHeight}
-                  estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
-                  overscanCount={4}
-                  itemData={tileListData}
-                  className="bookmark-tiles-list"
-                  ref={(instance) => {
-                    tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
-                  }}
-                >
-                  {BookmarkTileRowRenderer}
-                </TileVirtualList>
-              )
+              <div className={combineClassNames('view-mode-stage', bookmarkViewMode === 'tiles' && 'is-tiles')}>
+                {bookmarkViewMode === 'list' ? (
+                  <VirtualList
+                    height={listHeight}
+                    width="100%"
+                    itemCount={filteredIds.length}
+                    itemSize={getRowHeight}
+                    estimatedItemSize={DEFAULT_ITEM_HEIGHT}
+                    overscanCount={6}
+                    itemData={listData}
+                    ref={(instance) => {
+                      listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
+                    }}
+                  >
+                    {BookmarkRowRenderer}
+                  </VirtualList>
+                ) : (
+                  <TileVirtualList
+                    height={listHeight}
+                    width="100%"
+                    itemCount={tileRows.length}
+                    itemSize={getTileRowHeight}
+                    estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
+                    overscanCount={4}
+                    itemData={tileListData}
+                    className="bookmark-tiles-list"
+                    ref={(instance) => {
+                      tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
+                    }}
+                  >
+                    {BookmarkTileRowRenderer}
+                  </TileVirtualList>
+                )}
+              </div>
             ) : null}
           </div>
         </section>

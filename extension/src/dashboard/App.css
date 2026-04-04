@@ -724,38 +724,84 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: flex-start;
 }
 
 .view-toggle {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid var(--border-light);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
+  background: rgba(148, 163, 184, 0.08);
+  min-width: min(100%, 420px);
 }
 
 [data-theme='dark'] .view-toggle {
   border-color: var(--border-dark);
+  background: rgba(148, 163, 184, 0.1);
 }
 
-.view-toggle button {
+.view-toggle-option {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
   border: none;
   border-right: 1px solid var(--border-light);
   background: transparent;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.86rem;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  color: inherit;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
 
-.view-toggle button:last-child {
+.view-toggle-option:last-child {
   border-right: none;
 }
 
-[data-theme='dark'] .view-toggle button {
+[data-theme='dark'] .view-toggle-option {
   border-right-color: var(--border-dark);
 }
 
-.view-toggle button.active {
-  background: rgba(37, 99, 235, 0.18);
-  color: var(--accent);
+.view-toggle-option.active {
+  background: rgba(37, 99, 235, 0.2);
+  color: color-mix(in srgb, var(--accent) 88%, #111827);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.view-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-toggle-icon svg {
+  width: 1rem;
+  height: 1rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+}
+
+.view-toggle-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.view-toggle-copy strong {
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.view-toggle-copy small {
+  font-size: 0.7rem;
+  line-height: 1.25;
+  color: var(--text-muted-light);
+}
+
+[data-theme='dark'] .view-toggle-copy small {
+  color: var(--text-muted-dark);
 }
 
 .list-actions button,
@@ -807,6 +853,22 @@ button.danger {
   position: relative;
 }
 
+.view-mode-stage {
+  height: 100%;
+  animation: view-mode-enter 180ms ease;
+}
+
+@keyframes view-mode-enter {
+  from {
+    opacity: 0.55;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .empty-state {
   padding: 2rem;
   text-align: center;
@@ -838,7 +900,7 @@ button.danger {
 
 .bookmark-row:focus-visible,
 .bookmark-tile:focus-visible,
-.view-toggle button:focus-visible {
+.view-toggle-option:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
