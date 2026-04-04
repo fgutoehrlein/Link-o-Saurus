@@ -29,11 +29,13 @@ import {
   listCategories,
   listSessions,
   listTags,
+  recordBookmarkVisit,
   saveUserSettings,
   updateBookmark,
 } from '../shared/db';
 import type {
   Bookmark,
+  BookmarkSortMode,
   Board,
   Category,
   SessionPack,
@@ -60,6 +62,7 @@ import {
 } from '../shared/tag-filter';
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
+import { sortBookmarks } from '../shared/bookmark-sort';
 import {
   getGridColumnCount,
   resolveBookmarkViewMode,
@@ -131,6 +134,7 @@ type SelectionChange = {
 type RouteSnapshot = {
   readonly search: string;
   readonly boardId: string;
+  readonly sortMode?: BookmarkSortMode;
   readonly includeTags: string[];
   readonly excludeTags: string[];
   readonly isNew: boolean;
@@ -346,6 +350,11 @@ const parseInitialRoute = (): RouteSnapshot => {
 
   const search = sanitizeRouteText(params.get('q') ?? '', ROUTE_MAX_SEARCH_LENGTH);
   const boardId = params.get('board')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
+  const sortParam = (params.get('sort') ?? '').toLowerCase();
+  const sortMode: BookmarkSortMode | undefined =
+    sortParam === 'relevance' || sortParam === 'alphabetical' || sortParam === 'newest'
+      ? sortParam
+      : undefined;
   const parsedTagFilters = parseTagFilterFromParams(params);
   const includeTags = sanitizeRouteTagsParam(parsedTagFilters.include);
   const excludeTags = sanitizeRouteTagsParam(parsedTagFilters.exclude);
@@ -363,6 +372,7 @@ const parseInitialRoute = (): RouteSnapshot => {
   return {
     search,
     boardId,
+    sortMode,
     includeTags: normalizedFilters.include,
     excludeTags: normalizedFilters.exclude,
     isNew,
@@ -379,6 +389,9 @@ const updateRouteHash = (snapshot: RouteSnapshot): void => {
   }
   if (snapshot.boardId) {
     params.set('board', snapshot.boardId);
+  }
+  if (snapshot.sortMode) {
+    params.set('sort', snapshot.sortMode);
   }
   writeTagFilterToParams(params, {
     include: snapshot.includeTags,
@@ -832,6 +845,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [batchMove, setBatchMove] = useState<BatchMoveState>({ boardId: '', categoryId: '' });
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>('system');
   const [bookmarkViewMode, setBookmarkViewMode] = useState<BookmarkViewMode>('list');
+  const [bookmarkSortMode, setBookmarkSortMode] = useState<BookmarkSortMode>('relevance');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
@@ -965,6 +979,9 @@ const DashboardApp: FunctionalComponent = () => {
     initialRouteRef.current = snapshot;
     setSearchQuery(snapshot.search);
     setActiveBoardId(snapshot.boardId);
+    if (snapshot.sortMode) {
+      setBookmarkSortMode(snapshot.sortMode);
+    }
     setActiveTagFilters({
       include: snapshot.includeTags,
       exclude: snapshot.excludeTags,
@@ -989,6 +1006,9 @@ const DashboardApp: FunctionalComponent = () => {
       const nextSnapshot = parseInitialRoute();
       setSearchQuery(nextSnapshot.search);
       setActiveBoardId(nextSnapshot.boardId);
+      if (nextSnapshot.sortMode) {
+        setBookmarkSortMode(nextSnapshot.sortMode);
+      }
       setActiveTagFilters({
         include: nextSnapshot.includeTags,
         exclude: nextSnapshot.excludeTags,
@@ -1015,6 +1035,7 @@ const DashboardApp: FunctionalComponent = () => {
     const snapshot: RouteSnapshot = {
       search: searchQuery,
       boardId: activeBoardId,
+      sortMode: bookmarkSortMode,
       includeTags: activeTagFilters.include,
       excludeTags: activeTagFilters.exclude,
       isNew: draft !== null,
@@ -1024,7 +1045,7 @@ const DashboardApp: FunctionalComponent = () => {
     };
     hashSyncRef.current = true;
     updateRouteHash(snapshot);
-  }, [searchQuery, activeBoardId, activeTagFilters, draft?.title, draft?.url, draft?.tags]);
+  }, [searchQuery, activeBoardId, bookmarkSortMode, activeTagFilters, draft?.title, draft?.url, draft?.tags]);
 
   useEffect(() => {
     let listener:
@@ -1147,6 +1168,7 @@ const DashboardApp: FunctionalComponent = () => {
         setTags(loadedTags);
         setSessions(loadedSessions);
         setThemeChoice(settings.theme);
+        setBookmarkSortMode(initialRouteRef.current?.sortMode ?? settings.bookmarkSortMode);
         setBookmarkViewMode(resolveBookmarkViewMode(settings));
         document.documentElement.dataset.theme = settings.theme;
         if (searchWorkerRef.current) {
@@ -1250,7 +1272,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   const activeTagFilterState = useMemo(() => normalizeTagFilterState(activeTagFilters), [activeTagFilters]);
 
-    const filteredIds = useMemo(() => {
+  const filteredIds = useMemo(() => {
     const matchesFilters = (entry: BookmarkListEntry): boolean => {
       if (!showArchived && entry.bookmark.archived) {
         return false;
@@ -1282,7 +1304,10 @@ const DashboardApp: FunctionalComponent = () => {
         ordered.push(entry);
       }
       if (ordered.length > 0) {
-        return ordered.map((entry) => entry.id);
+        return sortBookmarks(
+          ordered.map((entry) => entry.bookmark),
+          bookmarkSortMode,
+        ).map((bookmark) => bookmark.id);
       }
 
       const normalizedQuery = trimmedQuery.toLowerCase();
@@ -1300,22 +1325,26 @@ const DashboardApp: FunctionalComponent = () => {
           fallback.push(entry);
         }
       }
-      fallback.sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt);
-      return fallback.map((entry) => entry.id);
+      return sortBookmarks(
+        fallback.map((entry) => entry.bookmark),
+        bookmarkSortMode,
+      ).map((bookmark) => bookmark.id);
     }
 
-    return Array.from(bookmarkEntries.values())
-      .filter(matchesFilters)
-      .sort((a, b) => b.bookmark.updatedAt - a.bookmark.updatedAt)
-      .map((entry) => entry.id);
-    }, [searchQuery, searchHits, bookmarkEntries, activeBoardId, activeCategoryId, activeTagFilterState, showArchived]);
+    return sortBookmarks(
+      Array.from(bookmarkEntries.values())
+        .filter(matchesFilters)
+        .map((entry) => entry.bookmark),
+      bookmarkSortMode,
+    ).map((bookmark) => bookmark.id);
+  }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeBoardId, activeCategoryId, activeTagFilterState, showArchived]);
 
-    const totalBookmarkCount = bookmarks.length;
-    const visibleBookmarkCount = filteredIds.length;
-    const bookmarkCountLabel =
-      visibleBookmarkCount === totalBookmarkCount
-        ? `Bookmarks (${totalBookmarkCount})`
-        : `Bookmarks (${totalBookmarkCount} / ${visibleBookmarkCount})`;
+  const totalBookmarkCount = bookmarks.length;
+  const visibleBookmarkCount = filteredIds.length;
+  const bookmarkCountLabel =
+    visibleBookmarkCount === totalBookmarkCount
+      ? `Bookmarks (${totalBookmarkCount})`
+      : `Bookmarks (${totalBookmarkCount} / ${visibleBookmarkCount})`;
 
   useEffect(() => {
     setSelectedIds((previous) => previous.filter((id) => bookmarkEntries.has(id)));
@@ -1433,6 +1462,12 @@ const DashboardApp: FunctionalComponent = () => {
   const handleOpenBookmark = useCallback((bookmark: Bookmark) => {
     void (async () => {
       const latestFaviconUrl = await openBookmarkLink(bookmark);
+      try {
+        const visited = await recordBookmarkVisit(bookmark.id);
+        updateBookmarksState([visited]);
+      } catch (error) {
+        console.warn('Failed to track bookmark visit', error);
+      }
       if (latestFaviconUrl && latestFaviconUrl !== bookmark.faviconUrl) {
         try {
           const updated = await updateBookmark(bookmark.id, { faviconUrl: latestFaviconUrl });
@@ -1443,6 +1478,15 @@ const DashboardApp: FunctionalComponent = () => {
       }
     })();
   }, [updateBookmarksState]);
+
+  const handleSortModeChange = useCallback((event: Event) => {
+    const nextMode = (event.currentTarget as HTMLSelectElement).value as BookmarkSortMode;
+    setBookmarkSortMode(nextMode);
+    void saveUserSettings({ bookmarkSortMode: nextMode }).catch((error) => {
+      console.error('Failed to persist bookmark sort mode', error);
+      setStatusMessage('Sortierung konnte nicht gespeichert werden.');
+    });
+  }, []);
 
   const handleRefreshFavicon = useCallback(async (bookmark: Bookmark) => {
     setRefreshingFavicon(true);
@@ -2322,6 +2366,16 @@ const DashboardApp: FunctionalComponent = () => {
           <label className="toggle">
             <input type="checkbox" checked={showArchived} onChange={handleToggleArchived} />
             Archivierte anzeigen
+          </label>
+        </div>
+        <div>
+          <label className="toolbar-select">
+            <span>Sortierung</span>
+            <select value={bookmarkSortMode} onChange={handleSortModeChange}>
+              <option value="relevance">Relevanz</option>
+              <option value="alphabetical">Alphabetisch</option>
+              <option value="newest">Neueste</option>
+            </select>
           </label>
         </div>
         <div className="status" aria-live="polite">

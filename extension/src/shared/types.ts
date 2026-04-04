@@ -34,6 +34,8 @@ export type Bookmark = {
   lastVisitedAt?: number;
 };
 
+export type BookmarkSortMode = 'relevance' | 'alphabetical' | 'newest';
+
 export type Comment = {
   id: EntityId;
   bookmarkId: EntityId;
@@ -71,6 +73,7 @@ export type SessionPack = {
 export type UserSettings = {
   theme: 'light' | 'dark' | 'system';
   dashboardViewMode: 'list' | 'tiles';
+  bookmarkSortMode: BookmarkSortMode;
   newTabEnabled: boolean;
   hotkeys?: Record<string, string>;
   bookmarkSync: SyncSettings;

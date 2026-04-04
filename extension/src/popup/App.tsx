@@ -6,10 +6,18 @@ import {
   useRef,
   useState,
 } from 'preact/hooks';
-import { createBookmark, listRecentBookmarks, updateBookmark } from '../shared/db';
-import type { Bookmark } from '../shared/types';
+import {
+  createBookmark,
+  getUserSettings,
+  listBookmarks,
+  recordBookmarkVisit,
+  saveUserSettings,
+  updateBookmark,
+} from '../shared/db';
+import type { Bookmark, BookmarkSortMode } from '../shared/types';
 import { openDashboard } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
+import { sortBookmarks } from '../shared/bookmark-sort';
 import './App.css';
 
 type PopupHarness = {
@@ -344,6 +352,7 @@ const App: FunctionalComponent = () => {
   const searchEntriesRef = useRef<SearchEntry[]>([]);
   const [searchSelection, setSearchSelection] = useState(-1);
   const [saving, setSaving] = useState(false);
+  const [bookmarkSortMode, setBookmarkSortMode] = useState<BookmarkSortMode>('relevance');
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hadTabsPermissionRef = useRef(false);
@@ -367,9 +376,13 @@ const App: FunctionalComponent = () => {
   useEffect(() => {
     let cancelled = false;
     const loadIndex = async () => {
-      const bookmarks = await listRecentBookmarks(SEARCH_INDEX_LIMIT);
+      const [bookmarks, settings] = await Promise.all([
+        listBookmarks({ includeArchived: false, limit: SEARCH_INDEX_LIMIT }),
+        getUserSettings(),
+      ]);
       if (!cancelled) {
-        setSearchEntries(bookmarks.map((bookmark) => buildSearchEntry(bookmark)));
+        setBookmarkSortMode(settings.bookmarkSortMode);
+        setSearchEntries(sortBookmarks(bookmarks, settings.bookmarkSortMode).map((bookmark) => buildSearchEntry(bookmark)));
       }
     };
     void loadIndex();
@@ -414,11 +427,15 @@ const App: FunctionalComponent = () => {
   }, [searchEntries, url]);
 
   const recentBookmarks = useMemo(
-    () => searchEntries.slice(0, RECENT_LIMIT).map((entry) => entry.bookmark),
-    [searchEntries],
+    () =>
+      sortBookmarks(
+        searchEntries.map((entry) => entry.bookmark),
+        bookmarkSortMode,
+      ).slice(0, RECENT_LIMIT),
+    [bookmarkSortMode, searchEntries],
   );
 
-  const computeSearchResults = useCallback((term: string, entries: SearchEntry[]): SearchEntry[] => {
+  const computeSearchResults = useCallback((term: string, entries: SearchEntry[], sortMode: BookmarkSortMode): SearchEntry[] => {
     const tokens = term
       .toLowerCase()
       .split(/\s+/)
@@ -427,7 +444,7 @@ const App: FunctionalComponent = () => {
     if (tokens.length === 0) {
       return [];
     }
-    return entries
+    const scored = entries
       .map((entry) => {
         const matches = tokens.every(
           (token) =>
@@ -443,22 +460,42 @@ const App: FunctionalComponent = () => {
           : 1;
         return { entry, score: strongMatch };
       })
-      .filter((value): value is { entry: SearchEntry; score: number } => value !== null)
-      .sort((a, b) => {
-        if (a.score !== b.score) {
-          return a.score - b.score;
+      .filter((value): value is { entry: SearchEntry; score: number } => value !== null);
+
+    scored.sort((a, b) => a.score - b.score);
+    const grouped = new Map<number, SearchEntry[]>();
+    scored.forEach((item) => {
+      const group = grouped.get(item.score);
+      if (group) {
+        group.push(item.entry);
+      } else {
+        grouped.set(item.score, [item.entry]);
+      }
+    });
+
+    const sortedEntries: SearchEntry[] = [];
+    for (const score of Array.from(grouped.keys()).sort((a, b) => a - b)) {
+      const group = grouped.get(score) ?? [];
+      const sortedGroup = sortBookmarks(
+        group.map((entry) => entry.bookmark),
+        sortMode,
+      );
+      sortedGroup.forEach((bookmark) => {
+        const original = group.find((entry) => entry.bookmark.id === bookmark.id);
+        if (original) {
+          sortedEntries.push(original);
         }
-        return b.entry.bookmark.createdAt - a.entry.bookmark.createdAt;
-      })
-      .slice(0, SEARCH_RESULTS_LIMIT)
-      .map((item) => item.entry);
+      });
+    }
+
+    return sortedEntries.slice(0, SEARCH_RESULTS_LIMIT);
   }, []);
 
   const hasQuery = searchTerm.trim().length > 0;
 
   const searchResults = useMemo(
-    () => (hasQuery ? computeSearchResults(searchTerm, searchEntries) : []),
-    [computeSearchResults, hasQuery, searchEntries, searchTerm],
+    () => (hasQuery ? computeSearchResults(searchTerm, searchEntries, bookmarkSortMode) : []),
+    [bookmarkSortMode, computeSearchResults, hasQuery, searchEntries, searchTerm],
   );
 
   useEffect(() => {
@@ -549,24 +586,42 @@ const App: FunctionalComponent = () => {
     }
   }, [searchTerm]);
 
+  const handleSortModeChange = useCallback((event: Event) => {
+    const nextMode = (event.currentTarget as HTMLSelectElement).value as BookmarkSortMode;
+    setBookmarkSortMode(nextMode);
+    setSearchEntries((previous) =>
+      sortBookmarks(
+        previous.map((entry) => entry.bookmark),
+        nextMode,
+      ).map((bookmark) => buildSearchEntry(bookmark)),
+    );
+    void saveUserSettings({ bookmarkSortMode: nextMode }).catch((error) => {
+      console.error('Sort mode could not be saved', error);
+    });
+  }, []);
+
   const handleOpenUrl = useCallback(
     async (bookmark: Bookmark) => {
       try {
         const latestFaviconUrl = await openUrlInNewTab(bookmark.url);
+        let updatedBookmark = await recordBookmarkVisit(bookmark.id);
         if (latestFaviconUrl && latestFaviconUrl !== bookmark.faviconUrl) {
-          const updated = await updateBookmark(bookmark.id, { faviconUrl: latestFaviconUrl });
-          setSearchEntries((previous) => previous.map((entry) => (
-            entry.bookmark.id === updated.id
-              ? { ...entry, bookmark: updated }
-              : entry
-          )));
+          updatedBookmark = await updateBookmark(bookmark.id, { faviconUrl: latestFaviconUrl });
         }
+        setSearchEntries((previous) =>
+          sortBookmarks(
+            previous.map((entry) => (
+              entry.bookmark.id === updatedBookmark.id ? updatedBookmark : entry.bookmark
+            )),
+            bookmarkSortMode,
+          ).map((item) => buildSearchEntry(item)),
+        );
       } catch (error) {
         console.error(error);
         setStatus({ tone: 'error', text: 'Tab konnte nicht geöffnet werden.' });
       }
     },
-    [],
+    [bookmarkSortMode],
   );
 
   const saveBookmark = useCallback(
@@ -588,14 +643,18 @@ const App: FunctionalComponent = () => {
         updatedAt: now,
       });
       setSearchEntries((previous) => {
-        const filtered = previous.filter((entry) => entry.bookmark.id !== bookmark.id);
-        const next = [buildSearchEntry(bookmark), ...filtered].slice(0, SEARCH_INDEX_LIMIT);
+        const filtered = previous
+          .filter((entry) => entry.bookmark.id !== bookmark.id)
+          .map((entry) => entry.bookmark);
+        const next = sortBookmarks([bookmark, ...filtered], bookmarkSortMode)
+          .slice(0, SEARCH_INDEX_LIMIT)
+          .map((item) => buildSearchEntry(item));
         searchEntriesRef.current = next;
         return next;
       });
       return bookmark;
     },
-    [],
+    [bookmarkSortMode],
   );
 
   const handleQuickAddSubmit = useCallback(
@@ -809,6 +868,14 @@ const App: FunctionalComponent = () => {
         <section className="section" aria-labelledby="recent-heading">
           <div className="section-header">
             <h2 id="recent-heading">Kürzlich hinzugefügt</h2>
+            <label className="sort-select">
+              <span className="sr-only">Sortierung auswählen</span>
+              <select value={bookmarkSortMode} onChange={handleSortModeChange} aria-label="Sortierung">
+                <option value="relevance">Relevanz</option>
+                <option value="alphabetical">Alphabetisch</option>
+                <option value="newest">Neueste</option>
+              </select>
+            </label>
           </div>
           {recentBookmarks.length === 0 ? (
             <p className="empty-state">Noch keine Bookmarks gespeichert.</p>

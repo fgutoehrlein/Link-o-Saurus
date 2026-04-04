@@ -12,6 +12,7 @@ import type { UserSettings } from '../shared/types';
 const createSettings = (overrides: Partial<UserSettings> = {}): UserSettings => ({
   theme: 'system',
   dashboardViewMode: 'list',
+  bookmarkSortMode: 'relevance',
   newTabEnabled: false,
   hotkeys: {},
   bookmarkSync: {

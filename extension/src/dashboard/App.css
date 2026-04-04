@@ -135,6 +135,26 @@ body {
   font-size: 0.9rem;
 }
 
+.toolbar-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.toolbar-select select {
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  padding: 0.35rem 0.6rem;
+  background: var(--panel-light);
+  color: inherit;
+}
+
+[data-theme='dark'] .toolbar-select select {
+  border-color: var(--border-dark);
+  background: rgba(15, 23, 42, 0.8);
+}
+
 .status {
   font-size: 0.85rem;
   color: var(--text-muted-light);
