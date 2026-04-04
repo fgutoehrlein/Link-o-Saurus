@@ -739,7 +739,7 @@ button.danger {
 .bookmark-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -747,10 +747,14 @@ button.danger {
 }
 
 .bookmark-tags li {
-  padding: 0.15rem 0.5rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.16);
-  font-size: 0.75rem;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.14);
+  font-size: 0.74rem;
+  line-height: 1.25;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--accent) 76%, #1e293b);
 }
 
 .bookmark-updated {
@@ -771,8 +775,8 @@ button.danger {
 .bookmark-tile-row {
   display: grid;
   grid-template-columns: repeat(var(--tile-columns, 1), minmax(0, 1fr));
-  gap: 0.9rem;
-  padding: 0 0.25rem 0.9rem;
+  gap: 1rem;
+  padding: 0 0.25rem 1rem;
   align-items: stretch;
   box-sizing: border-box;
 }
@@ -782,11 +786,11 @@ button.danger {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  padding: 0.9rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  min-height: 180px;
+  gap: 0.75rem;
+  min-height: 156px;
   max-width: 100%;
   overflow: hidden;
   cursor: pointer;
@@ -812,17 +816,35 @@ button.danger {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
+  min-height: 48px;
 }
 
 .bookmark-tile-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.375rem;
+  padding-top: 0.125rem;
+}
+
+.bookmark-tile .bookmark-avatar {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, white);
+}
+
+[data-theme='dark'] .bookmark-tile .bookmark-avatar {
+  background: color-mix(in srgb, var(--accent) 18%, #0f172a);
 }
 
 .bookmark-tile .bookmark-title {
   margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--text-main-light);
   white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -830,9 +852,14 @@ button.danger {
   -webkit-box-orient: vertical;
 }
 
+[data-theme='dark'] .bookmark-tile .bookmark-title {
+  color: var(--text-main-dark);
+}
+
 .bookmark-domain {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
   color: var(--text-muted-light);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -866,6 +893,24 @@ button.danger {
 
 [data-theme='dark'] .bookmark-tags-empty {
   color: var(--text-muted-dark);
+}
+
+.bookmark-tag-overflow {
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  color: var(--text-muted-light) !important;
+}
+
+[data-theme='dark'] .bookmark-tags li {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(59, 130, 246, 0.2);
+  color: rgba(219, 234, 254, 0.94);
+}
+
+[data-theme='dark'] .bookmark-tag-overflow {
+  background: rgba(71, 85, 105, 0.32) !important;
+  border-color: rgba(100, 116, 139, 0.45) !important;
+  color: var(--text-muted-dark) !important;
 }
 
 .detail-column {

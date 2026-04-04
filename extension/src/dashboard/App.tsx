@@ -756,7 +756,9 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         const { bookmark, board, category } = entry;
         const isSelected = data.selected.has(id);
         const domain = getBookmarkDomain(bookmark.url);
-        const notes = bookmark.notes?.trim();
+        const visibleTags = bookmark.tags.slice(0, 3);
+        const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
+        const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
         return (
           <article
             key={id}
@@ -778,6 +780,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             onContextMenu={(event) => data.onRowContextMenu(event, id)}
             draggable
             onDragStart={(event) => data.onDragStart(event, id)}
+            title={secondaryMeta || undefined}
           >
             <div className="bookmark-tile-head">
               <BookmarkAvatar bookmark={bookmark} />
@@ -790,20 +793,16 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
                 </p>
               </div>
             </div>
-            {notes ? (
-              <p className="bookmark-notes" title={notes}>
-                {notes}
-              </p>
-            ) : null}
-            <div className="bookmark-meta">
-              {category ? <span className="bookmark-category">{category.title}</span> : null}
-              {board ? <span className="bookmark-board">{board.title}</span> : null}
-            </div>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
-                {bookmark.tags.map((tag) => (
+                {visibleTags.map((tag) => (
                   <li key={`${bookmark.id}-${tag}`}>{tag}</li>
                 ))}
+                {hiddenTagCount > 0 ? (
+                  <li className="bookmark-tag-overflow" aria-label={`${hiddenTagCount} weitere Tags`}>
+                    +{hiddenTagCount}
+                  </li>
+                ) : null}
               </ul>
             ) : (
               <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
