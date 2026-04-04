@@ -2233,7 +2233,9 @@ const DashboardApp: FunctionalComponent = () => {
   useEffect(() => {
     if (hasActiveDetailContext) {
       setDetailPanelCollapsed(false);
+      return;
     }
+    setDetailPanelCollapsed(true);
   }, [hasActiveDetailContext]);
 
   const selectedEntries = useMemo(() => selectedIds.map((id) => bookmarkEntries.get(id)).filter(Boolean) as BookmarkListEntry[], [selectedIds, bookmarkEntries]);
@@ -2304,34 +2306,43 @@ const DashboardApp: FunctionalComponent = () => {
     if (draft) {
       return (
         <div className="detail-panel" aria-live="polite">
-          <h2>Neues Lesezeichen</h2>
-          <label>
-            <span>Titel</span>
-            <input type="text" value={detailState?.title ?? ''} onInput={handleDetailChange('title')} />
-          </label>
-          <label>
-            <span>URL</span>
-            <input type="url" value={detailState?.url ?? ''} onInput={handleDetailChange('url')} />
-          </label>
-          <label>
-            <span>Tags (Kommagetrennt)</span>
-            <input type="text" value={detailState?.tags ?? ''} onInput={handleDetailChange('tags')} />
-          </label>
-          <label>
-            <span>Notizen</span>
-            <textarea value={detailState?.notes ?? ''} onInput={handleDetailChange('notes')} />
-          </label>
-          <label>
-            <span>Kategorie</span>
-            <select value={detailState?.categoryId ?? ''} onChange={handleDetailCategoryChange}>
-              <option value="">Ohne Kategorie</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
-                </option>
-              ))}
-            </select>
-          </label>
+          <header className="detail-panel-head">
+            <h2>Neues Lesezeichen</h2>
+            <p className="detail-panel-subtitle">Füge Kerninformationen hinzu. Weitere Angaben sind optional.</p>
+          </header>
+          <section className="detail-section" aria-label="Allgemeine Informationen">
+            <h3>Allgemeine Informationen</h3>
+            <label>
+              <span>Titel</span>
+              <input type="text" value={detailState?.title ?? ''} onInput={handleDetailChange('title')} />
+            </label>
+            <label>
+              <span>URL</span>
+              <input type="url" value={detailState?.url ?? ''} onInput={handleDetailChange('url')} />
+            </label>
+            <label>
+              <span>Kategorie</span>
+              <select value={detailState?.categoryId ?? ''} onChange={handleDetailCategoryChange}>
+                <option value="">Ohne Kategorie</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+          <section className="detail-section" aria-label="Tags und Notizen">
+            <h3>Tags</h3>
+            <label>
+              <span>Tags (Kommagetrennt)</span>
+              <input type="text" value={detailState?.tags ?? ''} onInput={handleDetailChange('tags')} />
+            </label>
+            <label>
+              <span>Notizen</span>
+              <textarea value={detailState?.notes ?? ''} onInput={handleDetailChange('notes')} />
+            </label>
+          </section>
           <div className="detail-actions">
             <button type="button" className="primary" onClick={handleSaveDetail}>
               Speichern
@@ -2348,98 +2359,117 @@ const DashboardApp: FunctionalComponent = () => {
       const entry = selectedEntries[0];
       return (
         <div className="detail-panel" aria-live="polite">
-          <h2>Details</h2>
-          <p className="detail-meta">
-            Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt)}
-          </p>
-          <div className="detail-actions">
-            <button
-              type="button"
-              onClick={() => entry?.bookmark && handleOpenBookmark(entry.bookmark)}
-              disabled={!entry?.bookmark?.url}
-            >
-              Link im neuen Tab öffnen
-            </button>
-          </div>
-          <section className="detail-icon-section" aria-label="Icon">
-            <h3>Icon</h3>
+          <header className="detail-panel-head">
+            <h2>{detailState.title.trim() || 'Unbenanntes Lesezeichen'}</h2>
+            <p className="detail-meta">Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt)}</p>
+          </header>
+          <section className="detail-section" aria-label="Allgemeine Informationen">
+            <h3>Allgemeine Informationen</h3>
+            <label>
+              <span>Titel</span>
+              <input type="text" value={detailState.title} onInput={handleDetailChange('title')} />
+            </label>
+            <label>
+              <span>URL</span>
+              <input type="url" value={detailState.url} onInput={handleDetailChange('url')} />
+            </label>
+            <label>
+              <span>Kategorie</span>
+              <select value={detailState.categoryId ?? ''} onChange={handleDetailCategoryChange}>
+                <option value="">Ohne Kategorie</option>
+                {activeBoardCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="detail-actions">
               <button
                 type="button"
-                onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
-                disabled={!entry?.bookmark?.url || isRefreshingFavicon || isUploadingIcon}
+                onClick={() => entry?.bookmark && handleOpenBookmark(entry.bookmark)}
+                disabled={!entry?.bookmark?.url}
               >
-                {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
+                Link im neuen Tab öffnen
               </button>
             </div>
-            <input
-              ref={manualIconInputRef}
-              className="visually-hidden"
-              type="file"
-              accept="image/*"
-              onChange={(event) => handleManualIconInputChange(event, entry?.bookmark)}
-            />
-            <div
-              className={`icon-upload-dropzone${isIconDropActive ? ' is-active' : ''}`}
-              role="button"
-              tabIndex={0}
-              aria-label="Icon hochladen"
-              onClick={() => manualIconInputRef.current?.click()}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  manualIconInputRef.current?.click();
-                }
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setIconDropActive(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer!.dropEffect = 'copy';
-                setIconDropActive(true);
-              }}
-              onDragLeave={(event) => {
-                event.preventDefault();
-                const relatedTarget = event.relatedTarget as Node | null;
-                if (!relatedTarget || !(event.currentTarget as HTMLElement).contains(relatedTarget)) {
-                  setIconDropActive(false);
-                }
-              }}
-              onDrop={(event) => handleIconDrop(event, entry?.bookmark)}
-            >
-              <strong>{isUploadingIcon ? 'Icon wird hochgeladen…' : 'Icon hier ablegen'}</strong>
-              <span>oder klicken, um eine Bilddatei auszuwählen.</span>
-            </div>
           </section>
-          <label>
-            <span>Titel</span>
-            <input type="text" value={detailState.title} onInput={handleDetailChange('title')} />
-          </label>
-          <label>
-            <span>URL</span>
-            <input type="url" value={detailState.url} onInput={handleDetailChange('url')} />
-          </label>
-          <label>
-            <span>Tags (Kommagetrennt)</span>
-            <input type="text" value={detailState.tags} onInput={handleDetailChange('tags')} />
-          </label>
-          <label>
-            <span>Notizen</span>
-            <textarea value={detailState.notes} onInput={handleDetailChange('notes')} />
-          </label>
-          <label>
-            <span>Kategorie</span>
-            <select value={detailState.categoryId ?? ''} onChange={handleDetailCategoryChange}>
-              <option value="">Ohne Kategorie</option>
-              {activeBoardCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
-                </option>
-              ))}
-            </select>
-          </label>
+          <section className="detail-section" aria-label="Tags und Notizen">
+            <h3>Tags</h3>
+            <label>
+              <span>Tags (Kommagetrennt)</span>
+              <input type="text" value={detailState.tags} onInput={handleDetailChange('tags')} />
+            </label>
+            <h3>Notizen</h3>
+            <label>
+              <span>Notizen</span>
+              <textarea value={detailState.notes} onInput={handleDetailChange('notes')} />
+            </label>
+          </section>
+          <details className="detail-section detail-section-collapsible">
+            <summary>Metadaten &amp; Icon</summary>
+            <div className="detail-meta-grid">
+              <p>
+                <span>Erstellt</span>
+                <strong>{formatTimestamp(entry.bookmark.createdAt)}</strong>
+              </p>
+              <p>
+                <span>Besuche</span>
+                <strong>{entry.bookmark.visitCount}</strong>
+              </p>
+            </div>
+            <section className="detail-icon-section" aria-label="Icon">
+              <div className="detail-actions">
+                <button
+                  type="button"
+                  onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
+                  disabled={!entry?.bookmark?.url || isRefreshingFavicon || isUploadingIcon}
+                >
+                  {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
+                </button>
+              </div>
+              <input
+                ref={manualIconInputRef}
+                className="visually-hidden"
+                type="file"
+                accept="image/*"
+                onChange={(event) => handleManualIconInputChange(event, entry?.bookmark)}
+              />
+              <div
+                className={`icon-upload-dropzone${isIconDropActive ? ' is-active' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-label="Icon hochladen"
+                onClick={() => manualIconInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    manualIconInputRef.current?.click();
+                  }
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIconDropActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer!.dropEffect = 'copy';
+                  setIconDropActive(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  const relatedTarget = event.relatedTarget as Node | null;
+                  if (!relatedTarget || !(event.currentTarget as HTMLElement).contains(relatedTarget)) {
+                    setIconDropActive(false);
+                  }
+                }}
+                onDrop={(event) => handleIconDrop(event, entry?.bookmark)}
+              >
+                <strong>{isUploadingIcon ? 'Icon wird hochgeladen…' : 'Icon hier ablegen'}</strong>
+                <span>oder klicken, um eine Bilddatei auszuwählen.</span>
+              </div>
+            </section>
+          </details>
           <div className="detail-actions">
             <button type="button" className="primary" onClick={handleSaveDetail}>
               Speichern
@@ -2455,66 +2485,75 @@ const DashboardApp: FunctionalComponent = () => {
     if (selectedIds.length > 1) {
       return (
         <div className="detail-panel" aria-live="polite">
-          <h2>{selectedIds.length} Lesezeichen ausgewählt</h2>
-          <label>
-            <span>Tags hinzufügen/entfernen</span>
-            <input
-              type="text"
-              value={detailState?.tags ?? ''}
-              onInput={handleDetailChange('tags')}
-              placeholder="tag-a, tag-b"
-            />
-          </label>
-          <div className="detail-actions">
-            <button type="button" onClick={handleBatchAddTags}>
-              Tags hinzufügen
-            </button>
-            <button type="button" onClick={handleBatchRemoveTags}>
-              Tags entfernen
-            </button>
-          </div>
-          <form className="batch-move" onSubmit={handleBatchMove}>
+          <header className="detail-panel-head">
+            <h2>{selectedIds.length} Lesezeichen ausgewählt</h2>
+            <p className="detail-panel-subtitle">Batch-Aktionen werden auf die gesamte Auswahl angewendet.</p>
+          </header>
+          <section className="detail-section" aria-label="Tags">
+            <h3>Tags</h3>
             <label>
-              <span>Board</span>
-              <select
-                value={batchMove.boardId}
-                onChange={(event) =>
-                  setBatchMove((previous) => ({ ...previous, boardId: (event.currentTarget as HTMLSelectElement).value }))
-                }
-              >
-                <option value="">Board wählen</option>
-                {boards.map((board) => (
-                  <option key={board.id} value={board.id}>
-                    {board.title}
-                  </option>
-                ))}
-              </select>
+              <span>Tags hinzufügen/entfernen</span>
+              <input
+                type="text"
+                value={detailState?.tags ?? ''}
+                onInput={handleDetailChange('tags')}
+                placeholder="tag-a, tag-b"
+              />
             </label>
-            <label>
-              <span>Kategorie</span>
-              <select
-                value={batchMove.categoryId}
-                onChange={(event) =>
-                  setBatchMove((previous) => ({ ...previous, categoryId: (event.currentTarget as HTMLSelectElement).value }))
-                }
-              >
-                <option value="">Auto</option>
-                {categories
-                  .filter((category) => !batchMove.boardId || category.boardId === batchMove.boardId)
-                  .map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.title}
+            <div className="detail-actions">
+              <button type="button" onClick={handleBatchAddTags}>
+                Tags hinzufügen
+              </button>
+              <button type="button" onClick={handleBatchRemoveTags}>
+                Tags entfernen
+              </button>
+            </div>
+          </section>
+          <details className="detail-section detail-section-collapsible">
+            <summary>Mehr Aktionen</summary>
+            <form className="batch-move" onSubmit={handleBatchMove}>
+              <label>
+                <span>Board</span>
+                <select
+                  value={batchMove.boardId}
+                  onChange={(event) =>
+                    setBatchMove((previous) => ({ ...previous, boardId: (event.currentTarget as HTMLSelectElement).value }))
+                  }
+                >
+                  <option value="">Board wählen</option>
+                  {boards.map((board) => (
+                    <option key={board.id} value={board.id}>
+                      {board.title}
                     </option>
                   ))}
-              </select>
-            </label>
-            <button type="submit" className="primary">
-              Verschieben
+                </select>
+              </label>
+              <label>
+                <span>Kategorie</span>
+                <select
+                  value={batchMove.categoryId}
+                  onChange={(event) =>
+                    setBatchMove((previous) => ({ ...previous, categoryId: (event.currentTarget as HTMLSelectElement).value }))
+                  }
+                >
+                  <option value="">Auto</option>
+                  {categories
+                    .filter((category) => !batchMove.boardId || category.boardId === batchMove.boardId)
+                    .map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.title}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button type="submit" className="primary">
+                Verschieben
+              </button>
+            </form>
+            <button type="button" className="danger" onClick={handleBatchDelete}>
+              Ausgewählte löschen
             </button>
-          </form>
-          <button type="button" className="danger" onClick={handleBatchDelete}>
-            Ausgewählte löschen
-          </button>
+          </details>
         </div>
       );
     }
