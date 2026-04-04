@@ -115,6 +115,13 @@ type BatchMoveState = {
   categoryId: string;
 };
 
+type ActiveFilterChip = {
+  readonly id: string;
+  readonly label: string;
+  readonly tone?: 'default' | 'include' | 'exclude';
+  readonly remove: () => void;
+};
+
 type ImportDialogState = {
   busy: boolean;
   progress: ImportProgress | null;
@@ -1765,6 +1772,15 @@ const DashboardApp: FunctionalComponent = () => {
     clearSelection();
   }, [clearSelection]);
 
+  const handleResetAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setActiveBoardId('');
+    setActiveCategoryId('');
+    setActiveTagFilters(EMPTY_TAG_FILTER_STATE);
+    clearSelection();
+    setStatusMessage('Alle Filter zurückgesetzt.');
+  }, [clearSelection]);
+
   const applySearchWorkerUpdate = useCallback(async (bookmark: Bookmark) => {
     if (searchWorkerRef.current) {
       try {
@@ -2183,6 +2199,55 @@ const DashboardApp: FunctionalComponent = () => {
     [categories, activeBoardId],
   );
 
+  const activeFilterChips = useMemo<readonly ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = [];
+    const trimmedSearch = searchQuery.trim();
+    if (trimmedSearch) {
+      chips.push({
+        id: `search-${trimmedSearch.toLowerCase()}`,
+        label: `Suche: "${trimmedSearch}"`,
+        remove: () => setSearchQuery(''),
+      });
+    }
+    if (activeBoardId) {
+      chips.push({
+        id: `board-${activeBoardId}`,
+        label: `Board: ${boardById.get(activeBoardId)?.title ?? 'Unbekannt'}`,
+        remove: () => {
+          setActiveBoardId('');
+          setActiveCategoryId('');
+        },
+      });
+    }
+    if (activeCategoryId) {
+      chips.push({
+        id: `category-${activeCategoryId}`,
+        label: `Kategorie: ${categoryById.get(activeCategoryId)?.title ?? 'Unbekannt'}`,
+        remove: () => setActiveCategoryId(''),
+      });
+    }
+    activeTagFilterState.include.forEach((tag) => {
+      chips.push({
+        id: `tag-include-${tag}`,
+        label: `Tag + ${tag}`,
+        tone: 'include',
+        remove: () => setActiveTagFilters((previous) => toggleTagFilter(previous, tag, 'include')),
+      });
+    });
+    activeTagFilterState.exclude.forEach((tag) => {
+      chips.push({
+        id: `tag-exclude-${tag}`,
+        label: `Tag − ${tag}`,
+        tone: 'exclude',
+        remove: () => setActiveTagFilters((previous) => toggleTagFilter(previous, tag, 'exclude')),
+      });
+    });
+    return chips;
+  }, [searchQuery, activeBoardId, activeCategoryId, activeTagFilterState, boardById, categoryById]);
+
+  const hasActiveFilters = activeFilterChips.length > 0;
+  const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
+
   const detailPanel = () => {
     if (draft) {
       return (
@@ -2434,15 +2499,17 @@ const DashboardApp: FunctionalComponent = () => {
           <p>Alle Boards, Tags, Sessions und Exporte in einer Arbeitsfläche.</p>
         </div>
         <div className="header-actions">
-          <label className="search-field">
-            <span className="sr-only">Suche</span>
+          <label className="search-field prominent-search">
+            <span className="search-field-label">Dashboard durchsuchen</span>
             <input
               ref={searchInputRef}
               type="search"
               value={searchQuery}
               onInput={handleSearchChange}
-              placeholder="Suche nach Titel, URL oder Tag"
+              placeholder="Suche nach Titel, URL, Notiz oder Tag"
+              aria-label="Dashboard durchsuchen"
             />
+            <span className="search-field-hint">Live-Filter ohne Bestätigung</span>
           </label>
           <button type="button" onClick={focusSearch}>
             Fokus Suche
@@ -2467,7 +2534,7 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
         <div className="status" aria-live="polite">
-          {isSearching ? 'Suche…' : statusMessage || searchError}
+          {isSearching ? 'Suche…' : `${searchResultLabel}${statusMessage || searchError ? ` · ${statusMessage || searchError}` : ''}`}
         </div>
       </div>
       <div className="dashboard-main">
@@ -2707,37 +2774,38 @@ const DashboardApp: FunctionalComponent = () => {
               </button>
             </div>
           </div>
-          {activeTagFilterState.include.length > 0 || activeTagFilterState.exclude.length > 0 ? (
-            <div className="active-tag-filters" role="status" aria-live="polite">
-              <p className="active-tag-filters-title">Aktive Tag-Filter</p>
-              <ul className="active-tag-chip-list" aria-label="Aktive Tag-Filter">
-                {activeTagFilterState.include.map((tag) => (
-                  <li key={`include-${tag}`}>
+          <div className="active-tag-filters" role="status" aria-live="polite">
+            <div className="active-tag-filters-header">
+              <p className="active-tag-filters-title">Aktive Filter</p>
+              <div className="active-filter-summary">{searchResultLabel}</div>
+            </div>
+            {hasActiveFilters ? (
+              <ul className="active-tag-chip-list" aria-label="Aktive Filter">
+                {activeFilterChips.map((chip) => (
+                  <li key={chip.id}>
                     <button
                       type="button"
-                      className="active-tag-chip include"
-                      onClick={(event) => handleTagFilterAction(event, tag, 'include')}
-                      title="Einschluss entfernen"
+                      className={combineClassNames('active-tag-chip', chip.tone === 'include' && 'include', chip.tone === 'exclude' && 'exclude')}
+                      onClick={chip.remove}
+                      title={`${chip.label} entfernen`}
                     >
-                      <span aria-hidden="true">+</span> {tag} <span aria-hidden="true">×</span>
-                    </button>
-                  </li>
-                ))}
-                {activeTagFilterState.exclude.map((tag) => (
-                  <li key={`exclude-${tag}`}>
-                    <button
-                      type="button"
-                      className="active-tag-chip exclude"
-                      onClick={(event) => handleTagFilterAction(event, tag, 'exclude')}
-                      title="Ausschluss entfernen"
-                    >
-                      <span aria-hidden="true">−</span> {tag} <span aria-hidden="true">×</span>
+                      {chip.label} <span aria-hidden="true">×</span>
                     </button>
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            ) : (
+              <p className="active-filter-empty">Keine aktiven Filter – alle Bookmarks sichtbar.</p>
+            )}
+            <button
+              type="button"
+              className="active-filter-reset"
+              onClick={handleResetAllFilters}
+              disabled={!hasActiveFilters}
+            >
+              Alle Filter entfernen
+            </button>
+          </div>
           <div ref={listContainerRef} className="list-viewport" aria-busy={isSearching}>
             {filteredIds.length === 0 ? (
               <div className="empty-state">
