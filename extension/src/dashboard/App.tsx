@@ -853,6 +853,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
+  const [isDetailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(true);
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -2088,6 +2089,14 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, []);
 
+  const hasActiveDetailContext = draft !== null || selectedIds.length > 0;
+
+  useEffect(() => {
+    if (hasActiveDetailContext) {
+      setDetailPanelCollapsed(false);
+    }
+  }, [hasActiveDetailContext]);
+
   const selectedEntries = useMemo(() => selectedIds.map((id) => bookmarkEntries.get(id)).filter(Boolean) as BookmarkListEntry[], [selectedIds, bookmarkEntries]);
 
   const activeBoardCategories = useMemo(
@@ -2654,7 +2663,34 @@ const DashboardApp: FunctionalComponent = () => {
             ) : null}
           </div>
         </section>
-        <aside className="detail-column">{detailPanel()}</aside>
+        <aside
+          className={combineClassNames(
+            'detail-column',
+            !hasActiveDetailContext && 'is-muted',
+            isDetailPanelCollapsed && 'is-collapsed',
+          )}
+        >
+          <div className="detail-column-header">
+            <p className="detail-column-title">Detailbereich</p>
+            <button
+              type="button"
+              className="detail-collapse-toggle"
+              aria-expanded={!isDetailPanelCollapsed}
+              onClick={() => setDetailPanelCollapsed((value) => !value)}
+            >
+              {isDetailPanelCollapsed ? 'Einblenden' : 'Einklappen'}
+            </button>
+          </div>
+          {isDetailPanelCollapsed ? (
+            <p className="detail-column-placeholder">
+              {hasActiveDetailContext
+                ? 'Ein Lesezeichen ist ausgewählt. Öffne den Bereich für Bearbeitungen.'
+                : 'Wähle ein Lesezeichen aus, um Details und Aktionen anzuzeigen.'}
+            </p>
+          ) : (
+            detailPanel()
+          )}
+        </aside>
       </div>
 
       {isImportDialogOpen ? (
