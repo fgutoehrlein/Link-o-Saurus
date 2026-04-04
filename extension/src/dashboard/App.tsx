@@ -92,6 +92,8 @@ type BookmarkListData = {
   readonly onOpenBookmark: (bookmark: Bookmark) => void;
   readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
   readonly onDragStart: (event: DragEvent, id: string) => void;
+  readonly activeTagFilters: TagFilterState;
+  readonly onTagFilterAction: (event: MouseEvent | KeyboardEvent, tag: string, mode: TagFilterMode) => void;
 };
 
 type BookmarkTileListData = Omit<BookmarkListData, 'ids' | 'setRowHeight'> & {
@@ -147,6 +149,7 @@ const DEFAULT_ITEM_HEIGHT = 90;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
+const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 
 type ThemeOption = {
   readonly value: ThemeChoice;
@@ -663,9 +666,44 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
         </div>
         {bookmark.tags.length > 0 ? (
           <ul className="bookmark-tags" aria-label="Tags">
-            {bookmark.tags.map((tag) => (
-              <li key={`${bookmark.id}-${tag}`}>{tag}</li>
-            ))}
+            {bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS).map((tag) => {
+              const mode = getTagFilterMode(data.activeTagFilters, tag);
+              return (
+                <li key={`${bookmark.id}-${tag}`}>
+                  <button
+                    type="button"
+                    className={combineClassNames(
+                      'bookmark-tag-chip',
+                      mode === 'include' && 'is-include',
+                      mode === 'exclude' && 'is-exclude',
+                    )}
+                    aria-label={`${tag} ${mode === 'exclude' ? 'ausgeschlossen' : mode === 'include' ? 'eingeschlossen' : 'filtern'}`}
+                    title="Klick: einschließen · Rechtsklick oder Taste N: ausschließen"
+                    onClick={(event) => data.onTagFilterAction(event, tag, 'include')}
+                    onContextMenu={(event) => {
+                      applyNegativeTagContextAction(event, () => {
+                        data.onTagFilterAction(event, tag, 'exclude');
+                      });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key.toLowerCase() === 'n') {
+                        data.onTagFilterAction(event, tag, 'exclude');
+                      }
+                    }}
+                  >
+                    {tag}
+                  </button>
+                </li>
+              );
+            })}
+            {bookmark.tags.length > MAX_VISIBLE_BOOKMARK_TAGS ? (
+              <li
+                className="bookmark-tag-overflow"
+                aria-label={`${bookmark.tags.length - MAX_VISIBLE_BOOKMARK_TAGS} weitere Tags`}
+              >
+                +{bookmark.tags.length - MAX_VISIBLE_BOOKMARK_TAGS}
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>
@@ -756,7 +794,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         const { bookmark, board, category } = entry;
         const isSelected = data.selected.has(id);
         const domain = getBookmarkDomain(bookmark.url);
-        const visibleTags = bookmark.tags.slice(0, 3);
+        const visibleTags = bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS);
         const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
         return (
@@ -795,9 +833,36 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             </div>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
-                {visibleTags.map((tag) => (
-                  <li key={`${bookmark.id}-${tag}`}>{tag}</li>
-                ))}
+                {visibleTags.map((tag) => {
+                  const mode = getTagFilterMode(data.activeTagFilters, tag);
+                  return (
+                    <li key={`${bookmark.id}-${tag}`}>
+                      <button
+                        type="button"
+                        className={combineClassNames(
+                          'bookmark-tag-chip',
+                          mode === 'include' && 'is-include',
+                          mode === 'exclude' && 'is-exclude',
+                        )}
+                        aria-label={`${tag} ${mode === 'exclude' ? 'ausgeschlossen' : mode === 'include' ? 'eingeschlossen' : 'filtern'}`}
+                        title="Klick: einschließen · Rechtsklick oder Taste N: ausschließen"
+                        onClick={(event) => data.onTagFilterAction(event, tag, 'include')}
+                        onContextMenu={(event) => {
+                          applyNegativeTagContextAction(event, () => {
+                            data.onTagFilterAction(event, tag, 'exclude');
+                          });
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key.toLowerCase() === 'n') {
+                            data.onTagFilterAction(event, tag, 'exclude');
+                          }
+                        }}
+                      >
+                        {tag}
+                      </button>
+                    </li>
+                  );
+                })}
                 {hiddenTagCount > 0 ? (
                   <li className="bookmark-tag-overflow" aria-label={`${hiddenTagCount} weitere Tags`}>
                     +{hiddenTagCount}
@@ -1552,6 +1617,22 @@ const DashboardApp: FunctionalComponent = () => {
     void handleManualIconUpload(bookmark, file);
   }, [handleManualIconUpload]);
 
+  const clearSelection = useCallback(() => {
+    setSelectedIds([]);
+    lastSelectionRef.current = { ids: [], anchorIndex: null };
+  }, []);
+
+  const handleSelectTag = useCallback((tag: string, mode: TagFilterMode) => {
+    setActiveTagFilters((previous) => toggleTagFilter(previous, tag, mode));
+    clearSelection();
+  }, [clearSelection]);
+
+  const handleTagFilterAction = useCallback((event: MouseEvent | KeyboardEvent, tag: string, mode: TagFilterMode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleSelectTag(tag, mode);
+  }, [handleSelectTag]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
@@ -1560,6 +1641,8 @@ const DashboardApp: FunctionalComponent = () => {
     onOpenBookmark: handleOpenBookmark,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
+    activeTagFilters: activeTagFilterState,
+    onTagFilterAction: handleTagFilterAction,
   }), [
     filteredIds,
     bookmarkEntries,
@@ -1568,6 +1651,8 @@ const DashboardApp: FunctionalComponent = () => {
     handleOpenBookmark,
     handleRowContextMenu,
     handleRowDragStart,
+    activeTagFilterState,
+    handleTagFilterAction,
   ]);
 
   const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
@@ -1628,6 +1713,8 @@ const DashboardApp: FunctionalComponent = () => {
     onOpenBookmark: handleOpenBookmark,
     onRowContextMenu: handleRowContextMenu,
     onDragStart: handleRowDragStart,
+    activeTagFilters: activeTagFilterState,
+    onTagFilterAction: handleTagFilterAction,
     setRowHeight: setTileRowHeight,
   }), [
     tileRows,
@@ -1638,13 +1725,10 @@ const DashboardApp: FunctionalComponent = () => {
     handleOpenBookmark,
     handleRowContextMenu,
     handleRowDragStart,
+    activeTagFilterState,
+    handleTagFilterAction,
     setTileRowHeight,
   ]);
-
-  const clearSelection = useCallback(() => {
-    setSelectedIds([]);
-    lastSelectionRef.current = { ids: [], anchorIndex: null };
-  }, []);
 
   const focusSearch = useCallback(() => {
     searchInputRef.current?.focus();
@@ -1673,10 +1757,6 @@ const DashboardApp: FunctionalComponent = () => {
     clearSelection();
   }, [clearSelection]);
 
-  const handleSelectTag = useCallback((tag: string, mode: TagFilterMode) => {
-    setActiveTagFilters((previous) => toggleTagFilter(previous, tag, mode));
-    clearSelection();
-  }, [clearSelection]);
 
   const handleClearFilters = useCallback(() => {
     setActiveBoardId('');
@@ -2538,7 +2618,13 @@ const DashboardApp: FunctionalComponent = () => {
                         }
                       }}
                     >
-                      {tag.path} <span className="usage">{tag.usageCount}</span>
+                      <span className="tag-item-label">
+                        <span className="tag-state-indicator" aria-hidden="true">
+                          {mode === 'exclude' ? '−' : mode === 'include' ? '+' : '#'}
+                        </span>
+                        <span>{tag.path}</span>
+                      </span>
+                      <span className="usage">{tag.usageCount}</span>
                     </button>
                   </li>
                   );
@@ -2621,6 +2707,37 @@ const DashboardApp: FunctionalComponent = () => {
               </button>
             </div>
           </div>
+          {activeTagFilterState.include.length > 0 || activeTagFilterState.exclude.length > 0 ? (
+            <div className="active-tag-filters" role="status" aria-live="polite">
+              <p className="active-tag-filters-title">Aktive Tag-Filter</p>
+              <ul className="active-tag-chip-list" aria-label="Aktive Tag-Filter">
+                {activeTagFilterState.include.map((tag) => (
+                  <li key={`include-${tag}`}>
+                    <button
+                      type="button"
+                      className="active-tag-chip include"
+                      onClick={(event) => handleTagFilterAction(event, tag, 'include')}
+                      title="Einschluss entfernen"
+                    >
+                      <span aria-hidden="true">+</span> {tag} <span aria-hidden="true">×</span>
+                    </button>
+                  </li>
+                ))}
+                {activeTagFilterState.exclude.map((tag) => (
+                  <li key={`exclude-${tag}`}>
+                    <button
+                      type="button"
+                      className="active-tag-chip exclude"
+                      onClick={(event) => handleTagFilterAction(event, tag, 'exclude')}
+                      title="Ausschluss entfernen"
+                    >
+                      <span aria-hidden="true">−</span> {tag} <span aria-hidden="true">×</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div ref={listContainerRef} className="list-viewport" aria-busy={isSearching}>
             {filteredIds.length === 0 ? (
               <div className="empty-state">
