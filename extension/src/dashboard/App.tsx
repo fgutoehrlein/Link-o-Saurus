@@ -964,7 +964,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
   const [isDetailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(true);
-  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(false);
+  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
   const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
 
@@ -2613,11 +2613,12 @@ const DashboardApp: FunctionalComponent = () => {
           <span className="status-chip muted">{selectedCountLabel}</span>
           <button
             type="button"
-            className="toolbar-disclosure"
+            className={combineClassNames('toolbar-disclosure', showAdvancedControls && 'active')}
             aria-expanded={showAdvancedControls}
             onClick={() => setShowAdvancedControls((value) => !value)}
           >
-            {showAdvancedControls ? 'Weniger Optionen' : 'Mehr Optionen'}
+            <span aria-hidden="true">{showAdvancedControls ? '●' : '○'}</span> Mehr Optionen
+            {showAdvancedControls ? <span className="toolbar-disclosure-state">Aktiv</span> : null}
           </button>
         </div>
         <div className="status" aria-live="polite">
