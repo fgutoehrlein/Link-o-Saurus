@@ -2683,7 +2683,6 @@ const DashboardApp: FunctionalComponent = () => {
               placeholder="Suche…"
               aria-label="Dashboard durchsuchen"
             />
-            <span className="search-field-hint">Live-Filter ohne Bestätigung</span>
           </label>
         </div>
       </header>
