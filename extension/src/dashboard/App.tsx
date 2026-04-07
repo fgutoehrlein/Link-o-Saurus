@@ -1781,10 +1781,6 @@ const DashboardApp: FunctionalComponent = () => {
     setTileRowHeight,
   ]);
 
-  const focusSearch = useCallback(() => {
-    searchInputRef.current?.focus();
-  }, []);
-
   const handleSearchChange = useCallback((event: Event) => {
     const input = event.currentTarget as HTMLInputElement;
     setSearchQuery(input.value);
@@ -2597,14 +2593,11 @@ const DashboardApp: FunctionalComponent = () => {
               type="search"
               value={searchQuery}
               onInput={handleSearchChange}
-              placeholder="Suche nach Titel, URL, Notiz oder Tag"
+              placeholder="Suche…"
               aria-label="Dashboard durchsuchen"
             />
             <span className="search-field-hint">Live-Filter ohne Bestätigung</span>
           </label>
-          <button type="button" onClick={focusSearch}>
-            Fokus Suche
-          </button>
         </div>
       </header>
       <div className="dashboard-toolbar">
