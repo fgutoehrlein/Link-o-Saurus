@@ -87,6 +87,7 @@ type BookmarkListEntry = {
 type BookmarkListData = {
   readonly ids: readonly string[];
   readonly bookmarkById: Map<string, BookmarkListEntry>;
+  readonly setRowHeight: (rowIndex: number, height: number) => void;
   readonly selected: Set<string>;
   readonly onRowClick: (event: MouseEvent | KeyboardEvent, id: string) => void;
   readonly onOpenBookmark: (bookmark: Bookmark) => void;
@@ -653,6 +654,43 @@ const TileVirtualList = VariableSizeList as unknown as FunctionalComponent<
 
 const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   const id = data.ids[index];
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const element = rowRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const measureHeight = (entry?: ResizeObserverEntry): number => {
+      const natural = Math.max(
+        element.scrollHeight,
+        element.offsetHeight,
+        element.getBoundingClientRect().height,
+      );
+      if (entry?.borderBoxSize) {
+        const borderBox = Array.isArray(entry.borderBoxSize)
+          ? entry.borderBoxSize[0]
+          : entry.borderBoxSize;
+        if (borderBox) {
+          return Math.max(borderBox.blockSize, natural);
+        }
+      }
+      return natural;
+    };
+    data.setRowHeight(index, measureHeight());
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      if (!entries.length) {
+        return;
+      }
+      data.setRowHeight(index, measureHeight(entries[0]));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [data, index, id]);
+
   const entry = data.bookmarkById.get(id);
   if (!entry) {
     return <div style={style as JSX.CSSProperties} className="bookmark-row placeholder" />;
@@ -689,6 +727,7 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
       aria-selected={isSelected}
       tabIndex={0}
       className={combineClassNames('bookmark-row', isSelected && 'selected')}
+      ref={rowRef}
       style={style as JSX.CSSProperties}
       onClick={handleClick}
       onDblClick={handleDoubleClick}
@@ -973,7 +1012,10 @@ const DashboardApp: FunctionalComponent = () => {
   const [listWidth, setListWidth] = useState<number>(MIN_RESIZE_WIDTH);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
   const tileListRef = useRef<VariableSizeListHandle<BookmarkTileListData> | null>(null);
+  const listRowHeightsRef = useRef<Map<number, number>>(new Map());
   const tileRowHeightsRef = useRef<Map<number, number>>(new Map());
+  const pendingListResetIndexRef = useRef<number | null>(null);
+  const pendingListResetFrameRef = useRef<number | null>(null);
   const pendingTileResetIndexRef = useRef<number | null>(null);
   const pendingTileResetFrameRef = useRef<number | null>(null);
 
@@ -1560,12 +1602,42 @@ const DashboardApp: FunctionalComponent = () => {
   );
 
   const getRowHeight = useCallback(
-    (_index: number) => DEFAULT_ITEM_HEIGHT,
+    (index: number) => listRowHeightsRef.current.get(index) ?? DEFAULT_ITEM_HEIGHT,
     [],
   );
 
+  const setListRowHeight = useCallback((rowIndex: number, size: number) => {
+    const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
+    const current = listRowHeightsRef.current.get(rowIndex);
+    if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
+      return;
+    }
+    listRowHeightsRef.current.set(rowIndex, height);
+    pendingListResetIndexRef.current =
+      pendingListResetIndexRef.current === null
+        ? rowIndex
+        : Math.min(pendingListResetIndexRef.current, rowIndex);
+    if (pendingListResetFrameRef.current !== null) {
+      return;
+    }
+    pendingListResetFrameRef.current = window.requestAnimationFrame(() => {
+      pendingListResetFrameRef.current = null;
+      const resetIndex = pendingListResetIndexRef.current;
+      pendingListResetIndexRef.current = null;
+      if (resetIndex === null) {
+        return;
+      }
+      listRef.current?.resetAfterIndex(resetIndex, false);
+    });
+  }, []);
+
   useEffect(
     () => () => {
+      if (pendingListResetFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingListResetFrameRef.current);
+        pendingListResetFrameRef.current = null;
+      }
+      pendingListResetIndexRef.current = null;
       if (pendingTileResetFrameRef.current !== null) {
         window.cancelAnimationFrame(pendingTileResetFrameRef.current);
         pendingTileResetFrameRef.current = null;
@@ -1687,6 +1759,7 @@ const DashboardApp: FunctionalComponent = () => {
   const listData = useMemo<BookmarkListData>(() => ({
     ids: filteredIds,
     bookmarkById: bookmarkEntries,
+    setRowHeight: setListRowHeight,
     selected: selectedSet,
     onRowClick: handleRowSelection,
     onOpenBookmark: handleOpenBookmark,
@@ -1697,6 +1770,7 @@ const DashboardApp: FunctionalComponent = () => {
   }), [
     filteredIds,
     bookmarkEntries,
+    setListRowHeight,
     selectedSet,
     handleRowSelection,
     handleOpenBookmark,
@@ -1741,6 +1815,19 @@ const DashboardApp: FunctionalComponent = () => {
       tileListRef.current?.resetAfterIndex(resetIndex, false);
     });
   }, []);
+
+  useEffect(() => {
+    listRowHeightsRef.current.clear();
+    listRef.current?.resetAfterIndex(0, true);
+  }, [filteredIds]);
+
+  useEffect(() => {
+    if (bookmarkViewMode !== 'list') {
+      return;
+    }
+    listRowHeightsRef.current.clear();
+    listRef.current?.resetAfterIndex(0, true);
+  }, [bookmarkViewMode]);
 
   useEffect(() => {
     tileRowHeightsRef.current.clear();
@@ -2974,6 +3061,7 @@ const DashboardApp: FunctionalComponent = () => {
               <div className={combineClassNames('view-mode-stage', bookmarkViewMode === 'tiles' && 'is-tiles')}>
                 {bookmarkViewMode === 'list' ? (
                   <VirtualList
+                    key="bookmark-list-view"
                     height={listHeight}
                     width="100%"
                     itemCount={filteredIds.length}
@@ -2989,6 +3077,7 @@ const DashboardApp: FunctionalComponent = () => {
                   </VirtualList>
                 ) : (
                   <TileVirtualList
+                    key="bookmark-tile-view"
                     height={listHeight}
                     width="100%"
                     itemCount={tileRows.length}

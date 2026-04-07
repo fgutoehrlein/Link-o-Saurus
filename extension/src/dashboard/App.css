@@ -1127,7 +1127,7 @@ button.danger {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) 140px;
   gap: 1rem;
-  align-items: center;
+  align-items: flex-start;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
   cursor: pointer;
@@ -1186,9 +1186,17 @@ button.danger {
 .bookmark-title {
   font-weight: 600;
   font-size: 1rem;
-  white-space: nowrap;
+  line-height: 1.35;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.bookmark-row .bookmark-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .bookmark-tile .bookmark-title {
@@ -1201,6 +1209,11 @@ button.danger {
   gap: 0.5rem;
   font-size: 0.82rem;
   color: var(--text-muted-light);
+}
+
+.bookmark-url {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 [data-theme='dark'] .bookmark-meta {
