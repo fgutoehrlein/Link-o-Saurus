@@ -878,6 +878,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         const { bookmark, board, category } = entry;
         const isSelected = data.selected.has(id);
         const domain = getBookmarkDomain(bookmark.url);
+        const detailText = bookmark.notes?.trim() || domain;
         const visibleTags = bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS);
         const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
@@ -910,11 +911,11 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
                 <h3 className="bookmark-title" title={bookmark.title || bookmark.url}>
                   {bookmark.title || bookmark.url}
                 </h3>
-                <p className="bookmark-domain" title={bookmark.url}>
-                  {domain}
-                </p>
               </div>
             </div>
+            <p className="bookmark-detail-text" title={bookmark.notes?.trim() ? bookmark.notes : bookmark.url}>
+              {detailText}
+            </p>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
                 {visibleTags.map((tag) => {
