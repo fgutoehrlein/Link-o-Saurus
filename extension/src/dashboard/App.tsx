@@ -881,6 +881,8 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         const isSelected = data.selected.has(id);
         const domain = getBookmarkDomain(bookmark.url);
         const detailText = bookmark.notes?.trim() || domain;
+        const visibleTags = bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS);
+        const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
         const tileTitleStyle = {
           '--tile-title-line-clamp': String(MAX_VISIBLE_TILE_TITLE_LINES),
         } as CSSProperties;
@@ -928,7 +930,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             </p>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
-                {bookmark.tags.map((tag) => {
+                {visibleTags.map((tag) => {
                   const mode = getTagFilterMode(data.activeTagFilters, tag);
                   return (
                     <li key={`${bookmark.id}-${tag}`}>
@@ -958,6 +960,11 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
                     </li>
                   );
                 })}
+                {hiddenTagCount > 0 ? (
+                  <li className="bookmark-tag-overflow" aria-label={`${hiddenTagCount} weitere Tags`}>
+                    +{hiddenTagCount}
+                  </li>
+                ) : null}
               </ul>
             ) : (
               <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
