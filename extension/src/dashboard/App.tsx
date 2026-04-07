@@ -1,6 +1,6 @@
 import { wrap, releaseProxy } from 'comlink';
 import type { Remote } from 'comlink';
-import type { FunctionalComponent, JSX } from 'preact';
+import type { CSSProperties, FunctionalComponent, JSX } from 'preact';
 import {
   useCallback,
   useEffect,
@@ -158,6 +158,8 @@ const DEFAULT_TILE_ROW_HEIGHT = 248;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
+const MAX_VISIBLE_TILE_TITLE_LINES = 3;
+const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
 
 type ThemeOption = {
   readonly value: ThemeChoice;
@@ -879,8 +881,12 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
         const isSelected = data.selected.has(id);
         const domain = getBookmarkDomain(bookmark.url);
         const detailText = bookmark.notes?.trim() || domain;
-        const visibleTags = bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS);
-        const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
+        const tileTitleStyle = {
+          '--tile-title-line-clamp': String(MAX_VISIBLE_TILE_TITLE_LINES),
+        } as CSSProperties;
+        const tileDetailStyle = {
+          '--tile-detail-line-clamp': String(MAX_VISIBLE_TILE_DETAIL_LINES),
+        } as CSSProperties;
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
         return (
           <article
@@ -908,17 +914,21 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             <div className="bookmark-tile-head">
               <BookmarkAvatar bookmark={bookmark} />
               <div className="bookmark-tile-main">
-                <h3 className="bookmark-title" title={bookmark.title || bookmark.url}>
+                <h3 className="bookmark-title" style={tileTitleStyle} title={bookmark.title || bookmark.url}>
                   {bookmark.title || bookmark.url}
                 </h3>
               </div>
             </div>
-            <p className="bookmark-detail-text" title={bookmark.notes?.trim() ? bookmark.notes : bookmark.url}>
+            <p
+              className="bookmark-detail-text"
+              style={tileDetailStyle}
+              title={bookmark.notes?.trim() ? bookmark.notes : bookmark.url}
+            >
               {detailText}
             </p>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
-                {visibleTags.map((tag) => {
+                {bookmark.tags.map((tag) => {
                   const mode = getTagFilterMode(data.activeTagFilters, tag);
                   return (
                     <li key={`${bookmark.id}-${tag}`}>
@@ -948,11 +958,6 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
                     </li>
                   );
                 })}
-                {hiddenTagCount > 0 ? (
-                  <li className="bookmark-tag-overflow" aria-label={`${hiddenTagCount} weitere Tags`}>
-                    +{hiddenTagCount}
-                  </li>
-                ) : null}
               </ul>
             ) : (
               <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>

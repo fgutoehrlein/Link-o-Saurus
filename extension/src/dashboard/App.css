@@ -1360,8 +1360,8 @@ button.danger {
   color: var(--text-main-light);
   white-space: normal;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  -webkit-line-clamp: var(--tile-title-line-clamp, 4);
+  line-clamp: var(--tile-title-line-clamp, 4);
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1378,11 +1378,15 @@ button.danger {
   min-height: 0;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: var(--tile-detail-line-clamp, 3);
+  line-clamp: var(--tile-detail-line-clamp, 3);
   -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.bookmark-tile .bookmark-tags {
+  overflow: visible;
 }
 
 [data-theme='dark'] .bookmark-detail-text {
