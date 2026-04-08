@@ -225,6 +225,24 @@ const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
     icon: <TileViewIcon />,
   },
 ];
+const EXTENSION_ICON_PATH = 'assets/link-o-saurus-icon.png';
+const resolveRuntimeGetUrl = (): ((path: string) => string) | null => {
+  const webExtensionGlobal = globalThis as typeof globalThis & {
+    readonly browser?: { readonly runtime?: { readonly getURL?: (path: string) => string } };
+    readonly chrome?: { readonly runtime?: { readonly getURL?: (path: string) => string } };
+  };
+  if (webExtensionGlobal.browser?.runtime?.getURL) {
+    return webExtensionGlobal.browser.runtime.getURL.bind(webExtensionGlobal.browser.runtime);
+  }
+  if (webExtensionGlobal.chrome?.runtime?.getURL) {
+    return webExtensionGlobal.chrome.runtime.getURL.bind(webExtensionGlobal.chrome.runtime);
+  }
+  return null;
+};
+const getDashboardBrandIconUrl = (): string => {
+  const runtimeGetUrl = resolveRuntimeGetUrl();
+  return runtimeGetUrl ? runtimeGetUrl(EXTENSION_ICON_PATH) : EXTENSION_ICON_PATH;
+};
 const BOARD_ICON_SET = ['🗂️', '📁', '📌', '📚', '🧭', '🧩', '⭐'] as const;
 const MIN_RESIZE_WIDTH = 320;
 
@@ -2391,6 +2409,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
   const selectedCountLabel =
     selectedIds.length === 0 ? 'Keine Auswahl' : `${selectedIds.length} ausgewählt`;
+  const dashboardBrandIconUrl = getDashboardBrandIconUrl();
 
   useEffect(() => {
     if (hasActiveFilters) {
@@ -2673,17 +2692,32 @@ const DashboardApp: FunctionalComponent = () => {
   return (
     <div className={combineClassNames('dashboard-shell', `layout-${layoutMode}`, sidebarOpen && 'sidebar-open')}>
       <header className="dashboard-header" role="banner">
-        <button
-          type="button"
-          className="sidebar-toggle"
-          aria-label="Navigation umschalten"
-          onClick={() => setSidebarOpen((value) => !value)}
-        >
-          ☰
-        </button>
+        <div className="header-view-modes" role="radiogroup" aria-label="Darstellungsmodus">
+          {VIEW_MODE_OPTIONS.map((option) => {
+            const isActive = bookmarkViewMode === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                className={combineClassNames('header-view-mode', isActive && 'active')}
+                aria-checked={isActive}
+                aria-label={option.label}
+                data-tooltip={option.label}
+                onClick={() => {
+                  void handleViewModeChange(option.value);
+                }}
+              >
+                <span className="view-toggle-icon">{option.icon}</span>
+              </button>
+            );
+          })}
+        </div>
         <div className="header-titles">
-          <h1>Link-o-Saurus Dashboard</h1>
-          <p>Fokussierte Arbeitsfläche für Suche, Auswahl und Bearbeitung.</p>
+          <div className="header-brand">
+            <img src={dashboardBrandIconUrl} alt="" aria-hidden="true" />
+            <h1>Link-O-Saurus</h1>
+          </div>
         </div>
         <div className="header-actions">
           <label className="search-field prominent-search">
@@ -2730,29 +2764,6 @@ const DashboardApp: FunctionalComponent = () => {
                 <option value="newest">Neueste</option>
               </select>
             </label>
-            <div className="view-toggle compact" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
-              {VIEW_MODE_OPTIONS.map((option) => {
-                const isActive = bookmarkViewMode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    className={combineClassNames('view-toggle-option', isActive && 'active')}
-                    aria-checked={isActive}
-                    title={option.description}
-                    onClick={() => {
-                      void handleViewModeChange(option.value);
-                    }}
-                  >
-                    <span className="view-toggle-icon">{option.icon}</span>
-                    <span className="view-toggle-copy">
-                      <strong>{option.label}</strong>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         ) : null}
       </div>
