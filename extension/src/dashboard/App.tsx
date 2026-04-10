@@ -69,6 +69,7 @@ import {
   toGridRows,
   type BookmarkViewMode,
 } from './view-mode';
+import linkOSaurusIcon from '../../assets/link-o-saurus-icon.png';
 
 declare global {
   interface Window {
@@ -2673,17 +2674,11 @@ const DashboardApp: FunctionalComponent = () => {
   return (
     <div className={combineClassNames('dashboard-shell', `layout-${layoutMode}`, sidebarOpen && 'sidebar-open')}>
       <header className="dashboard-header" role="banner">
-        <button
-          type="button"
-          className="sidebar-toggle"
-          aria-label="Navigation umschalten"
-          onClick={() => setSidebarOpen((value) => !value)}
-        >
-          ☰
-        </button>
+        <div className="header-brand" aria-hidden="true">
+          <img src={linkOSaurusIcon} alt="" />
+        </div>
         <div className="header-titles">
-          <h1>Link-o-Saurus Dashboard</h1>
-          <p>Fokussierte Arbeitsfläche für Suche, Auswahl und Bearbeitung.</p>
+          <h1>Link-O-Saurus</h1>
         </div>
         <div className="header-actions">
           <label className="search-field prominent-search">
@@ -2722,37 +2717,6 @@ const DashboardApp: FunctionalComponent = () => {
               <input type="checkbox" checked={showArchived} onChange={handleToggleArchived} />
               Archivierte anzeigen
             </label>
-            <label className="toolbar-select">
-              <span>Sortierung</span>
-              <select value={bookmarkSortMode} onChange={handleSortModeChange}>
-                <option value="relevance">Relevanz</option>
-                <option value="alphabetical">Alphabetisch</option>
-                <option value="newest">Neueste</option>
-              </select>
-            </label>
-            <div className="view-toggle compact" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
-              {VIEW_MODE_OPTIONS.map((option) => {
-                const isActive = bookmarkViewMode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    className={combineClassNames('view-toggle-option', isActive && 'active')}
-                    aria-checked={isActive}
-                    title={option.description}
-                    onClick={() => {
-                      void handleViewModeChange(option.value);
-                    }}
-                  >
-                    <span className="view-toggle-icon">{option.icon}</span>
-                    <span className="view-toggle-copy">
-                      <strong>{option.label}</strong>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         ) : null}
       </div>
@@ -3008,6 +2972,37 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
+              <label className="toolbar-select">
+                <span>Sortierung</span>
+                <select value={bookmarkSortMode} onChange={handleSortModeChange}>
+                  <option value="relevance">Relevanz</option>
+                  <option value="alphabetical">Alphabetisch</option>
+                  <option value="newest">Neueste</option>
+                </select>
+              </label>
+              <div className="view-toggle compact" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
+                {VIEW_MODE_OPTIONS.map((option) => {
+                  const isActive = bookmarkViewMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      className={combineClassNames('view-toggle-option', isActive && 'active')}
+                      aria-checked={isActive}
+                      title={option.description}
+                      onClick={() => {
+                        void handleViewModeChange(option.value);
+                      }}
+                    >
+                      <span className="view-toggle-icon">{option.icon}</span>
+                      <span className="view-toggle-copy">
+                        <strong>{option.label}</strong>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren
               </button>
