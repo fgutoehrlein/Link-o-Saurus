@@ -3007,9 +3007,19 @@ const DashboardApp: FunctionalComponent = () => {
                   );
                 })}
               </fieldset>
-              <button type="button" onClick={clearSelection}>
-                Auswahl leeren
-              </button>
+              <div className={combineClassNames('selection-indicator', selectedIds.length === 0 && 'is-empty')}>
+                <span>{selectedCountLabel}</span>
+                <button
+                  type="button"
+                  className="selection-indicator-clear"
+                  onClick={clearSelection}
+                  disabled={selectedIds.length === 0}
+                  aria-label="Auswahl entfernen"
+                  title="Auswahl entfernen"
+                >
+                  ×
+                </button>
+              </div>
               <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
                 Neu
               </button>
