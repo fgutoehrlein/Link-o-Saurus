@@ -2980,29 +2980,33 @@ const DashboardApp: FunctionalComponent = () => {
                   <option value="newest">Neueste</option>
                 </select>
               </label>
-              <div className="view-toggle compact" role="radiogroup" aria-label="Darstellung der Bookmark-Liste">
+              <fieldset className="view-mode-group compact">
+                <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
                 {VIEW_MODE_OPTIONS.map((option) => {
                   const isActive = bookmarkViewMode === option.value;
                   return (
-                    <button
+                    <label
                       key={option.value}
-                      type="button"
-                      role="radio"
                       className={combineClassNames('view-toggle-option', isActive && 'active')}
-                      aria-checked={isActive}
                       title={option.description}
-                      onClick={() => {
-                        void handleViewModeChange(option.value);
-                      }}
                     >
+                      <input
+                        type="radio"
+                        name="bookmark-view-mode"
+                        value={option.value}
+                        checked={isActive}
+                        onChange={() => {
+                          void handleViewModeChange(option.value);
+                        }}
+                      />
                       <span className="view-toggle-icon">{option.icon}</span>
                       <span className="view-toggle-copy">
                         <strong>{option.label}</strong>
                       </span>
-                    </button>
+                    </label>
                   );
                 })}
-              </div>
+              </fieldset>
               <button type="button" onClick={clearSelection}>
                 Auswahl leeren
               </button>
