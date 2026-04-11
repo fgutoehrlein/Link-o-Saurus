@@ -2385,6 +2385,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
   const selectedCountLabel =
     selectedIds.length === 0 ? 'Keine Auswahl' : `${selectedIds.length} ausgewählt`;
+  const liveStatusMessage = isSearching ? 'Suche…' : statusMessage || searchError || '';
 
   useEffect(() => {
     if (hasActiveFilters) {
@@ -2687,6 +2688,9 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
       </header>
+      <div className="status sr-only" aria-live="polite">
+        {liveStatusMessage}
+      </div>
       <div className="dashboard-main">
         <aside
           className={combineClassNames(
