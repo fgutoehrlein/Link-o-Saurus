@@ -2392,6 +2392,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
   const selectedCountLabel =
     selectedIds.length === 0 ? 'Keine Auswahl' : `${selectedIds.length} ausgewählt`;
+  const toolbarStatusMessage = isSearching ? 'Suche…' : statusMessage || searchError;
 
   useEffect(() => {
     if (hasActiveFilters) {
@@ -2708,9 +2709,11 @@ const DashboardApp: FunctionalComponent = () => {
             {showAdvancedControls ? <span className="toolbar-disclosure-state">Aktiv</span> : null}
           </button>
         </div>
-        <div className="status" aria-live="polite">
-          {isSearching ? 'Suche…' : `${searchResultLabel}${statusMessage || searchError ? ` · ${statusMessage || searchError}` : ''}`}
-        </div>
+        {toolbarStatusMessage ? (
+          <div className="status" aria-live="polite">
+            {toolbarStatusMessage}
+          </div>
+        ) : null}
         {showAdvancedControls ? (
           <div className="toolbar-advanced" role="group" aria-label="Erweiterte Ansichtsoptionen">
             <label className="toggle">
