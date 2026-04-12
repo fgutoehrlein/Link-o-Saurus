@@ -1340,11 +1340,6 @@ button.danger {
   animation: view-mode-enter 180ms ease;
 }
 
-.view-mode-stage.is-tiles {
-  box-sizing: border-box;
-  padding-top: 0.5rem;
-}
-
 @keyframes view-mode-enter {
   from {
     opacity: 0.55;
@@ -1580,7 +1575,7 @@ button.danger {
 }
 
 .bookmark-tiles-list > div {
-  padding-top: 0.5rem;
+  padding-top: 0.75rem;
   box-sizing: border-box;
 }
 
