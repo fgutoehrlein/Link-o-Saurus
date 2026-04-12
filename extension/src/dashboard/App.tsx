@@ -156,6 +156,7 @@ type RouteSnapshot = {
 
 const DEFAULT_ITEM_HEIGHT = 90;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
+const TILE_VIEW_TOP_GAP = 12;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
@@ -3126,22 +3127,24 @@ const DashboardApp: FunctionalComponent = () => {
                     {BookmarkRowRenderer}
                   </VirtualList>
                 ) : (
-                  <TileVirtualList
-                    key="bookmark-tile-view"
-                    height={listHeight}
-                    width="100%"
-                    itemCount={tileRows.length}
-                    itemSize={getTileRowHeight}
-                    estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
-                    overscanCount={4}
-                    itemData={tileListData}
-                    className="bookmark-tiles-list"
-                    ref={(instance) => {
-                      tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
-                    }}
-                  >
-                    {BookmarkTileRowRenderer}
-                  </TileVirtualList>
+                  <div className="tile-mode-offset">
+                    <TileVirtualList
+                      key="bookmark-tile-view"
+                      height={Math.max(0, listHeight - TILE_VIEW_TOP_GAP)}
+                      width="100%"
+                      itemCount={tileRows.length}
+                      itemSize={getTileRowHeight}
+                      estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
+                      overscanCount={4}
+                      itemData={tileListData}
+                      className="bookmark-tiles-list"
+                      ref={(instance) => {
+                        tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
+                      }}
+                    >
+                      {BookmarkTileRowRenderer}
+                    </TileVirtualList>
+                  </div>
                 )}
               </div>
             ) : null}
