@@ -285,8 +285,19 @@ body {
   background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 82%, var(--accent-dark) 18%);
 }
 
+[data-theme='dark'] .prominent-search:focus-within .search-input-shell,
+[data-theme='dark'] .prominent-search.is-active .search-input-shell,
+[data-theme='dark'] .prominent-search.is-typing .search-input-shell {
+  border-color: color-mix(in srgb, var(--accent-dark) 58%, var(--border-dark));
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.92) 72%, var(--accent-dark) 28%);
+}
+
 [data-theme='dark'] .search-input-icon {
   color: color-mix(in srgb, var(--accent-dark) 70%, var(--text-muted-dark));
+}
+
+[data-theme='dark'] .search-field input {
+  color: var(--text-dark);
 }
 
 [data-theme='dark'] .search-field input::placeholder {
