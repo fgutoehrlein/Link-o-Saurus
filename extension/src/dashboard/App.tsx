@@ -154,7 +154,7 @@ type RouteSnapshot = {
   readonly newTags: string;
 };
 
-const DEFAULT_ITEM_HEIGHT = 90;
+const DEFAULT_ITEM_HEIGHT = 116;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
 const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
