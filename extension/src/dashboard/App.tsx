@@ -156,6 +156,7 @@ type RouteSnapshot = {
 
 const DEFAULT_ITEM_HEIGHT = 90;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
+const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
@@ -707,6 +708,8 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   }
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
+  const domain = getBookmarkDomain(bookmark.url);
+  const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
   };
@@ -752,11 +755,10 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
           {bookmark.title || bookmark.url}
         </div>
         <div className="bookmark-meta">
-          <span className="bookmark-url" title={bookmark.url}>
-            {bookmark.url}
+          <span className="bookmark-domain" title={bookmark.url}>
+            {domain}
           </span>
-          {category ? <span className="bookmark-category">{category.title}</span> : null}
-          {board ? <span className="bookmark-board">{board.title}</span> : null}
+          {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
         </div>
         {bookmark.tags.length > 0 ? (
           <ul className="bookmark-tags" aria-label="Tags">
@@ -802,7 +804,8 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
         ) : null}
       </div>
       <div className="bookmark-updated" title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
-        {formatTimestamp(bookmark.updatedAt)}
+        <span className="bookmark-updated-label">Aktualisiert</span>
+        <span>{formatTimestamp(bookmark.updatedAt)}</span>
       </div>
     </div>
   );
@@ -829,28 +832,19 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
       const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
       let maxTileHeight = 0;
       element.querySelectorAll<HTMLElement>('.bookmark-tile').forEach((tile) => {
-        const tileHeight = Math.max(
-          tile.scrollHeight,
-          tile.offsetHeight,
-          tile.getBoundingClientRect().height,
-        );
+        const tileHeight = Math.max(tile.scrollHeight, tile.offsetHeight);
         maxTileHeight = Math.max(maxTileHeight, tileHeight);
       });
       return Math.ceil(maxTileHeight + paddingTop + paddingBottom);
     };
     const measureHeight = (entry?: ResizeObserverEntry): number => {
-      const natural = Math.max(
-        measureTilesHeight(),
-        element.scrollHeight,
-        element.offsetHeight,
-        element.getBoundingClientRect().height,
-      );
+      const natural = measureTilesHeight();
       if (entry?.borderBoxSize) {
         const borderBox = Array.isArray(entry.borderBoxSize)
           ? entry.borderBoxSize[0]
           : entry.borderBoxSize;
         if (borderBox) {
-          return Math.max(borderBox.blockSize, natural);
+          return natural;
         }
       }
       return natural;
@@ -898,6 +892,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
           '--tile-detail-line-clamp': String(MAX_VISIBLE_TILE_DETAIL_LINES),
         } as CSSProperties;
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
+        const updatedLabel = formatTimestamp(bookmark.updatedAt);
         return (
           <article
             key={id}
@@ -936,6 +931,15 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             >
               {detailText}
             </p>
+            <div className="bookmark-tile-meta">
+              <span className="bookmark-domain" title={bookmark.url}>
+                {domain}
+              </span>
+              {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
+              <span className="bookmark-updated" title={`Zuletzt aktualisiert ${updatedLabel}`}>
+                {updatedLabel}
+              </span>
+            </div>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
                 {visibleTags.map((tag) => {
@@ -3123,22 +3127,24 @@ const DashboardApp: FunctionalComponent = () => {
                     {BookmarkRowRenderer}
                   </VirtualList>
                 ) : (
-                  <TileVirtualList
-                    key="bookmark-tile-view"
-                    height={listHeight}
-                    width="100%"
-                    itemCount={tileRows.length}
-                    itemSize={getTileRowHeight}
-                    estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
-                    overscanCount={4}
-                    itemData={tileListData}
-                    className="bookmark-tiles-list"
-                    ref={(instance) => {
-                      tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
-                    }}
-                  >
-                    {BookmarkTileRowRenderer}
-                  </TileVirtualList>
+                  <div className="tile-mode-offset">
+                    <TileVirtualList
+                      key="bookmark-tile-view"
+                      height={Math.max(0, listHeight - TILE_VIEW_TOP_GAP)}
+                      width="100%"
+                      itemCount={tileRows.length}
+                      itemSize={getTileRowHeight}
+                      estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
+                      overscanCount={4}
+                      itemData={tileListData}
+                      className="bookmark-tiles-list"
+                      ref={(instance) => {
+                        tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
+                      }}
+                    >
+                      {BookmarkTileRowRenderer}
+                    </TileVirtualList>
+                  </div>
                 )}
               </div>
             ) : null}
