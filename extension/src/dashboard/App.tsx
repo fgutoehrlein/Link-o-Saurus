@@ -2719,6 +2719,7 @@ const DashboardApp: FunctionalComponent = () => {
               isSearchActive && 'is-active',
             )}
           >
+            <br></br>
             <span className="search-field-label">Dashboard durchsuchen</span>
             <span className="search-input-shell">
               <span className="search-input-icon" aria-hidden="true">
@@ -2741,6 +2742,7 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
       </header>
+      <br></br>
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
