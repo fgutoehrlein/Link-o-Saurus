@@ -1571,6 +1571,7 @@ button.danger {
 
 .bookmark-tiles-list {
   padding: 0.75rem;
+  margin-top: 0.5rem;
   box-sizing: border-box;
 }
 
