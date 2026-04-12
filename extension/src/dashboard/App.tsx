@@ -707,6 +707,8 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   }
   const { bookmark, board, category } = entry;
   const isSelected = data.selected.has(id);
+  const domain = getBookmarkDomain(bookmark.url);
+  const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
   };
@@ -752,11 +754,10 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
           {bookmark.title || bookmark.url}
         </div>
         <div className="bookmark-meta">
-          <span className="bookmark-url" title={bookmark.url}>
-            {bookmark.url}
+          <span className="bookmark-domain" title={bookmark.url}>
+            {domain}
           </span>
-          {category ? <span className="bookmark-category">{category.title}</span> : null}
-          {board ? <span className="bookmark-board">{board.title}</span> : null}
+          {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
         </div>
         {bookmark.tags.length > 0 ? (
           <ul className="bookmark-tags" aria-label="Tags">
@@ -802,7 +803,8 @@ const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
         ) : null}
       </div>
       <div className="bookmark-updated" title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
-        {formatTimestamp(bookmark.updatedAt)}
+        <span className="bookmark-updated-label">Aktualisiert</span>
+        <span>{formatTimestamp(bookmark.updatedAt)}</span>
       </div>
     </div>
   );
@@ -898,6 +900,7 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
           '--tile-detail-line-clamp': String(MAX_VISIBLE_TILE_DETAIL_LINES),
         } as CSSProperties;
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
+        const updatedLabel = formatTimestamp(bookmark.updatedAt);
         return (
           <article
             key={id}
@@ -936,6 +939,15 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
             >
               {detailText}
             </p>
+            <div className="bookmark-tile-meta">
+              <span className="bookmark-domain" title={bookmark.url}>
+                {domain}
+              </span>
+              {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
+              <span className="bookmark-updated" title={`Zuletzt aktualisiert ${updatedLabel}`}>
+                {updatedLabel}
+              </span>
+            </div>
             {bookmark.tags.length > 0 ? (
               <ul className="bookmark-tags" aria-label="Tags">
                 {visibleTags.map((tag) => {
