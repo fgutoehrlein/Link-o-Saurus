@@ -191,6 +191,13 @@ const TileViewIcon: FunctionalComponent = () => (
   </svg>
 );
 
+const SearchIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m16 16 4 4" />
+  </svg>
+);
+
 const THEME_OPTIONS: readonly ThemeOption[] = [
   {
     value: 'system',
@@ -1009,6 +1016,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [bookmarkSortMode, setBookmarkSortMode] = useState<BookmarkSortMode>('relevance');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
   const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
   const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
   const [isSidebarCompact, setSidebarCompact] = useState<boolean>(false);
@@ -1061,6 +1069,17 @@ const DashboardApp: FunctionalComponent = () => {
 
   const layoutMode = viewportWidth >= 1200 ? 'triple' : viewportWidth >= 900 ? 'double' : 'single';
   const canUseCompactSidebar = layoutMode !== 'single';
+  const isSearchActive = isSearchFocused || searchQuery.trim().length > 0;
+  const shortcutHint = useMemo(() => {
+    if (typeof navigator !== 'undefined') {
+      const navigatorWithUAData = navigator as Navigator & { userAgentData?: { platform?: string } };
+      const platform = navigatorWithUAData.userAgentData?.platform ?? navigator.platform;
+      if (/\b(mac|iphone|ipad)\b/i.test(platform)) {
+        return '⌘K';
+      }
+    }
+    return 'Ctrl + K';
+  }, []);
 
   useEffect(() => {
     if (layoutMode === 'triple') {
@@ -1070,6 +1089,22 @@ const DashboardApp: FunctionalComponent = () => {
       setSidebarCompact(false);
     }
   }, [layoutMode]);
+
+  useEffect(() => {
+    const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+      const pressedK = event.key.toLowerCase() === 'k';
+      if (!pressedK || !(event.ctrlKey || event.metaKey) || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+    window.addEventListener('keydown', handleGlobalSearchShortcut);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalSearchShortcut);
+    };
+  }, []);
 
   useEffect(() => {
     const element = listContainerRef.current;
@@ -2675,19 +2710,39 @@ const DashboardApp: FunctionalComponent = () => {
           <h1>Link-O-Saurus</h1>
         </div>
         <div className="header-actions">
-          <label className="search-field prominent-search">
+          <label
+            className={combineClassNames(
+              'search-field',
+              'prominent-search',
+              isSearchFocused && 'is-focused',
+              searchQuery.trim().length > 0 && 'is-typing',
+              isSearchActive && 'is-active',
+            )}
+          >
+            <br></br>
             <span className="search-field-label">Dashboard durchsuchen</span>
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={searchQuery}
-              onInput={handleSearchChange}
-              placeholder="Suche…"
-              aria-label="Dashboard durchsuchen"
-            />
+            <span className="search-input-shell">
+              <span className="search-input-icon" aria-hidden="true">
+                <SearchIcon />
+              </span>
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchQuery}
+                onInput={handleSearchChange}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                placeholder="Suche nach Titeln, URLs, Tags oder Notizen…"
+                aria-label="Dashboard durchsuchen"
+              />
+              <kbd className="search-shortcut-hint" aria-hidden="true">
+                {shortcutHint}
+              </kbd>
+            </span>
           </label>
         </div>
       </header>
+      <br></br>
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
