@@ -1372,7 +1372,7 @@ button.danger {
   grid-template-columns: 52px minmax(0, 1fr) 132px;
   gap: 1rem;
   align-items: flex-start;
-  padding: 1rem;
+  padding: 1rem 1rem 1.3rem;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.58));
@@ -1512,7 +1512,7 @@ button.danger {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0.15rem;
   list-style: none;
   min-height: 0;
   overflow: visible;
