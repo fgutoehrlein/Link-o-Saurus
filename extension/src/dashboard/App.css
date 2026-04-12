@@ -1333,7 +1333,6 @@ button.danger {
   flex: 1;
   min-height: 0;
   position: relative;
-  padding: 0.5rem;
 }
 
 .view-mode-stage {
@@ -1379,11 +1378,6 @@ button.danger {
     box-shadow 160ms ease,
     transform 160ms ease,
     background-color 160ms ease;
-  margin: 0 0.5rem 0.5rem;
-}
-
-.bookmark-row:last-of-type {
-  margin-bottom: 0.2rem;
 }
 
 .bookmark-row.selected {
