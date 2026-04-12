@@ -831,28 +831,19 @@ const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Elem
       const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
       let maxTileHeight = 0;
       element.querySelectorAll<HTMLElement>('.bookmark-tile').forEach((tile) => {
-        const tileHeight = Math.max(
-          tile.scrollHeight,
-          tile.offsetHeight,
-          tile.getBoundingClientRect().height,
-        );
+        const tileHeight = Math.max(tile.scrollHeight, tile.offsetHeight);
         maxTileHeight = Math.max(maxTileHeight, tileHeight);
       });
       return Math.ceil(maxTileHeight + paddingTop + paddingBottom);
     };
     const measureHeight = (entry?: ResizeObserverEntry): number => {
-      const natural = Math.max(
-        measureTilesHeight(),
-        element.scrollHeight,
-        element.offsetHeight,
-        element.getBoundingClientRect().height,
-      );
+      const natural = measureTilesHeight();
       if (entry?.borderBoxSize) {
         const borderBox = Array.isArray(entry.borderBoxSize)
           ? entry.borderBoxSize[0]
           : entry.borderBoxSize;
         if (borderBox) {
-          return Math.max(borderBox.blockSize, natural);
+          return natural;
         }
       }
       return natural;
