@@ -995,7 +995,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchGeneration, setSearchGeneration] = useState<number>(0);
-  const [showArchived, setShowArchived] = useState<boolean>(false);
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
   const [isImportDialogOpen, setImportDialogOpen] = useState<boolean>(false);
@@ -1017,7 +1016,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
   const [isDetailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(true);
-  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
   const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
 
@@ -1446,7 +1444,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   const filteredIds = useMemo(() => {
     const matchesFilters = (entry: BookmarkListEntry): boolean => {
-      if (!showArchived && entry.bookmark.archived) {
+      if (entry.bookmark.archived) {
         return false;
       }
       if (activeBoardId) {
@@ -1509,7 +1507,7 @@ const DashboardApp: FunctionalComponent = () => {
         .map((entry) => entry.bookmark),
       bookmarkSortMode,
     ).map((bookmark) => bookmark.id);
-  }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeBoardId, activeCategoryId, activeTagFilterState, showArchived]);
+  }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeBoardId, activeCategoryId, activeTagFilterState]);
 
   const totalBookmarkCount = bookmarks.length;
   const visibleBookmarkCount = filteredIds.length;
@@ -1886,11 +1884,6 @@ const DashboardApp: FunctionalComponent = () => {
     const input = event.currentTarget as HTMLInputElement;
     setSearchQuery(input.value);
     setSearchError(null);
-  }, []);
-
-  const handleToggleArchived = useCallback((event: Event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    setShowArchived(input.checked);
   }, []);
 
   const handleSelectBoard = useCallback((boardId: string) => {
@@ -2392,6 +2385,7 @@ const DashboardApp: FunctionalComponent = () => {
   const searchResultLabel = `${visibleBookmarkCount} ${visibleBookmarkCount === 1 ? 'Ergebnis' : 'Ergebnisse'}`;
   const selectedCountLabel =
     selectedIds.length === 0 ? 'Keine Auswahl' : `${selectedIds.length} ausgewählt`;
+  const liveStatusMessage = isSearching ? 'Suche…' : statusMessage || searchError || '';
 
   useEffect(() => {
     if (hasActiveFilters) {
@@ -2694,31 +2688,8 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
       </header>
-      <div className="dashboard-toolbar">
-        <div className="toolbar-primary">
-          <span className="status-chip">{searchResultLabel}</span>
-          <span className="status-chip muted">{selectedCountLabel}</span>
-          <button
-            type="button"
-            className={combineClassNames('toolbar-disclosure', showAdvancedControls && 'active')}
-            aria-expanded={showAdvancedControls}
-            onClick={() => setShowAdvancedControls((value) => !value)}
-          >
-            <span aria-hidden="true">{showAdvancedControls ? '●' : '○'}</span> Mehr Optionen
-            {showAdvancedControls ? <span className="toolbar-disclosure-state">Aktiv</span> : null}
-          </button>
-        </div>
-        <div className="status" aria-live="polite">
-          {isSearching ? 'Suche…' : `${searchResultLabel}${statusMessage || searchError ? ` · ${statusMessage || searchError}` : ''}`}
-        </div>
-        {showAdvancedControls ? (
-          <div className="toolbar-advanced" role="group" aria-label="Erweiterte Ansichtsoptionen">
-            <label className="toggle">
-              <input type="checkbox" checked={showArchived} onChange={handleToggleArchived} />
-              Archivierte anzeigen
-            </label>
-          </div>
-        ) : null}
+      <div className="status sr-only" aria-live="polite">
+        {liveStatusMessage}
       </div>
       <div className="dashboard-main">
         <aside
