@@ -106,12 +106,17 @@ body {
 .search-field {
   display: inline-flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  border-radius: 16px;
+  align-items: stretch;
+  gap: 0.42rem;
+  border-radius: 18px;
   border: 1px solid var(--border-light);
-  padding: 0.35rem 0.8rem;
+  padding: 0.52rem 0.72rem 0.68rem;
   background: var(--panel-light);
+  transition:
+    border-color 140ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    background-color 180ms ease;
 }
 
 .search-field input {
@@ -119,17 +124,22 @@ body {
   background: transparent;
   color: inherit;
   width: 100%;
-  min-width: 240px;
-  font-size: 1rem;
+  min-width: 360px;
+  font-size: 1.03rem;
+  line-height: 1.25;
+  font-weight: 500;
   outline: none;
-  text-align: center;
+  text-align: left;
+  padding: 0;
 }
 
 .search-field-label {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
+  font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted-light);
+  padding-left: 0.15rem;
 }
 
 .search-field-hint {
@@ -138,25 +148,166 @@ body {
 }
 
 .prominent-search {
-  min-width: min(540px, 62vw);
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-light));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--panel-light)) 0%, var(--panel-light) 100%);
-  box-shadow: 0 10px 26px -22px rgba(37, 99, 235, 0.8), 0 0 0 2px rgba(37, 99, 235, 0.16);
+  min-width: min(640px, 70vw);
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-light));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--panel-light)) 0%, color-mix(in srgb, var(--accent) 2%, var(--panel-light)) 100%);
+  box-shadow: 0 14px 36px -30px rgba(37, 99, 235, 0.84), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.prominent-search:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.24);
+.prominent-search:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-light));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--panel-light)) 0%, color-mix(in srgb, var(--accent) 4%, var(--panel-light)) 100%);
+  box-shadow: 0 18px 44px -34px rgba(37, 99, 235, 0.88), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.prominent-search.is-active {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--border-light));
+  box-shadow: 0 20px 52px -38px rgba(37, 99, 235, 0.96), 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.prominent-search:focus-within,
+.prominent-search.is-focused {
+  border-color: color-mix(in srgb, var(--accent) 82%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 24px 50px -36px color-mix(in srgb, var(--accent) 64%, transparent);
+  transform: translateY(-1px) scale(1.008);
+}
+
+.prominent-search.is-typing {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 13%, var(--panel-light)) 0%, color-mix(in srgb, var(--accent) 6%, var(--panel-light)) 100%);
+}
+
+.search-input-shell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 14px;
+  min-height: 2.7rem;
+  padding: 0.45rem 0.66rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-light));
+  background: color-mix(in srgb, var(--panel-light) 90%, var(--accent) 10%);
+  transition:
+    border-color 130ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.prominent-search:hover .search-input-shell {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-light));
+}
+
+.prominent-search:focus-within .search-input-shell,
+.prominent-search.is-active .search-input-shell {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-light));
+  background: color-mix(in srgb, var(--panel-light) 84%, var(--accent) 16%);
+}
+
+.search-input-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  color: color-mix(in srgb, var(--accent) 65%, var(--text-muted-light));
+}
+
+.search-input-icon svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.search-field input::placeholder {
+  color: color-mix(in srgb, var(--text-muted-light) 86%, transparent);
+  font-weight: 450;
+}
+
+.search-shortcut-hint {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-light));
+  padding: 0.18rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--text-muted-light) 88%, var(--accent));
+  background: color-mix(in srgb, var(--panel-light) 82%, var(--accent) 18%);
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 160ms ease;
+}
+
+.prominent-search:focus-within .search-shortcut-hint,
+.prominent-search.is-active .search-shortcut-hint {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-light));
+  color: color-mix(in srgb, var(--accent) 74%, var(--text-light));
 }
 
 [data-theme='dark'] .search-field {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(15, 23, 42, 0.9);
   border-color: var(--border-dark);
 }
 
 [data-theme='dark'] .search-field-label,
 [data-theme='dark'] .search-field-hint {
   color: var(--text-muted-dark);
+}
+
+[data-theme='dark'] .prominent-search {
+  border-color: color-mix(in srgb, var(--accent-dark) 48%, var(--border-dark));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-dark) 12%, rgba(15, 23, 42, 0.92)) 0%, rgba(15, 23, 42, 0.92) 100%);
+  box-shadow: 0 18px 40px -36px rgba(96, 165, 250, 0.9), inset 0 1px 0 rgba(148, 163, 184, 0.2);
+}
+
+[data-theme='dark'] .prominent-search:hover {
+  border-color: color-mix(in srgb, var(--accent-dark) 62%, var(--border-dark));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-dark) 17%, rgba(15, 23, 42, 0.95)) 0%, rgba(15, 23, 42, 0.95) 100%);
+}
+
+[data-theme='dark'] .prominent-search:focus-within,
+[data-theme='dark'] .prominent-search.is-focused {
+  border-color: color-mix(in srgb, var(--accent-dark) 82%, var(--border-dark));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-dark) 58%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent-dark) 28%, transparent),
+    0 26px 48px -34px color-mix(in srgb, var(--accent-dark) 68%, transparent);
+}
+
+[data-theme='dark'] .search-input-shell {
+  border-color: color-mix(in srgb, var(--accent-dark) 36%, var(--border-dark));
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 82%, var(--accent-dark) 18%);
+}
+
+[data-theme='dark'] .prominent-search:focus-within .search-input-shell,
+[data-theme='dark'] .prominent-search.is-active .search-input-shell,
+[data-theme='dark'] .prominent-search.is-typing .search-input-shell {
+  border-color: color-mix(in srgb, var(--accent-dark) 58%, var(--border-dark));
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.92) 72%, var(--accent-dark) 28%);
+}
+
+[data-theme='dark'] .search-input-icon {
+  color: color-mix(in srgb, var(--accent-dark) 70%, var(--text-muted-dark));
+}
+
+[data-theme='dark'] .search-field input {
+  color: var(--text-dark);
+}
+
+[data-theme='dark'] .search-field input::placeholder {
+  color: color-mix(in srgb, var(--text-muted-dark) 80%, transparent);
+}
+
+[data-theme='dark'] .search-shortcut-hint {
+  border-color: color-mix(in srgb, var(--accent-dark) 42%, var(--border-dark));
+  color: color-mix(in srgb, var(--accent-dark) 72%, var(--text-muted-dark));
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.88) 74%, var(--accent-dark) 26%);
 }
 
 .dashboard-toolbar {
@@ -1980,8 +2131,8 @@ button.danger {
     min-width: 0;
   }
   .prominent-search {
-    min-width: min(420px, 100%);
-    width: min(420px, 100%);
+    min-width: min(560px, 100%);
+    width: min(560px, 100%);
   }
   .list-header {
     align-items: center;
@@ -1999,7 +2150,16 @@ button.danger {
 
 @media (max-width: 640px) {
   .search-field input {
-    min-width: 160px;
+    min-width: 0;
+  }
+  .search-shortcut-hint {
+    font-size: 0.66rem;
+    padding-inline: 0.35rem;
+  }
+  .search-input-shell {
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding-inline: 0.5rem;
   }
   .header-actions button {
     display: none;
