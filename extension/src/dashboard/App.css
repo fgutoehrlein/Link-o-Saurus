@@ -1340,6 +1340,11 @@ button.danger {
   animation: view-mode-enter 180ms ease;
 }
 
+.view-mode-stage.is-tiles {
+  box-sizing: border-box;
+  padding-top: 0.5rem;
+}
+
 @keyframes view-mode-enter {
   from {
     opacity: 0.55;
