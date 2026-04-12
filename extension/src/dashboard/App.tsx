@@ -159,7 +159,6 @@ const DEFAULT_TILE_ROW_HEIGHT = 248;
 const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
-const LIST_ROW_HEIGHT_BUFFER = 8;
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const MAX_VISIBLE_TILE_TITLE_LINES = 3;
 const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
@@ -1659,7 +1658,7 @@ const DashboardApp: FunctionalComponent = () => {
   );
 
   const setListRowHeight = useCallback((rowIndex: number, size: number) => {
-    const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size) + LIST_ROW_HEIGHT_BUFFER);
+    const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
     const current = listRowHeightsRef.current.get(rowIndex);
     if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
       return;
