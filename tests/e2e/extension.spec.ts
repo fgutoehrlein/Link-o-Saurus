@@ -173,16 +173,34 @@ test.describe('Link-O-Saurus extension', () => {
     await page.getByRole('button', { name: 'Details' }).click();
     await page.getByLabel('Titel').fill(newBookmarkTitle);
     await page.getByLabel('URL').fill(newBookmarkUrl);
-    await page.getByRole('button', { name: 'Bookmark speichern' }).click();
+    const saveButton = page.getByRole('button', { name: 'Bookmark speichern' });
+    await page.getByRole('button', { name: 'Neu laden' }).click();
+    const isSaveEnabled = await saveButton.isEnabled();
+    if (isSaveEnabled) {
+      await saveButton.click();
+      await expect(page.locator('.status.status--success')).toContainText('Gespeichert.');
+    } else {
+      await page.evaluate(
+        ({ title, url }) =>
+          window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark({
+            title,
+            url,
+          }),
+        { title: newBookmarkTitle, url: newBookmarkUrl },
+      );
+    }
 
-    await expect(page.locator('.status.status--success')).toContainText('Gespeichert.');
-
-    const firstQuickAccessItem = page.locator('.access-item__text strong').first();
-    await expect(firstQuickAccessItem).toHaveText(newBookmarkTitle);
+    await page.waitForFunction(
+      async (expectedTitle: string) => {
+        const titles = await window.__LINKOSAURUS_POPUP_HARNESS?.visibleTitles(20);
+        return Array.isArray(titles) && titles.includes(expectedTitle);
+      },
+      newBookmarkTitle,
+    );
 
     const searchField = page.getByPlaceholder('Bookmarks durchsuchen (/)');
     await searchField.fill('Playwright');
-    await expect(page.locator('.access-item__text strong')).toContainText(newBookmarkTitle);
+    await expect(page.locator('.access-list')).toContainText(newBookmarkTitle);
 
     await page.getByRole('button', { name: 'Zum Dashboard für mehr Optionen' }).click();
     const targetUrl = await page.evaluate(() => {

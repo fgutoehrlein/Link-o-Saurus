@@ -21,17 +21,6 @@
 
 html,
 body,
-<<<<<<< Updated upstream
-=======
-html {
-  height: 100%;
-  width: 100%;
-  min-width: 1760px;
-  min-height: 1580px;
-  margin: 0;
-}
-
->>>>>>> Stashed changes
 #root {
   margin: 0;
   width: 100%;
@@ -260,6 +249,39 @@ select:focus-visible,
 .status--error { color: var(--error); }
 .status--warning,
 .status--info { color: #ffdc92; }
+
+.ai-suggestions {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-suggestions__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ai-suggestions__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-tag {
+  border: 1px solid rgba(79, 124, 255, 0.6);
+  background: rgba(79, 124, 255, 0.15);
+  color: #b7d0ff;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.folder-alternatives {
+  color: var(--muted);
+  font-size: 11px;
+}
 
 .quick-access {
   min-height: 0;
