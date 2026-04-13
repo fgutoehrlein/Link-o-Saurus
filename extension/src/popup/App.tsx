@@ -40,6 +40,12 @@ type StatusMessage = {
   readonly text: string;
 };
 
+type PageSignals = {
+  readonly pageTitle?: string;
+  readonly metaDescription?: string;
+  readonly selectedText?: string;
+};
+
 type SearchEntry = {
   readonly bookmark: Bookmark;
   readonly normalizedUrl: string;
@@ -255,6 +261,9 @@ const App: FunctionalComponent = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionResult | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [pageSignals, setPageSignals] = useState<PageSignals | null>(null);
+  const [manualTagEdits, setManualTagEdits] = useState(false);
+  const [manualFolderEdits, setManualFolderEdits] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -284,6 +293,24 @@ const App: FunctionalComponent = () => {
       }
       if (typeof activeTab.url === 'string' && activeTab.url.trim()) {
         setUrl(activeTab.url.trim());
+      }
+      if (typeof activeTab.id === 'number' && chrome.scripting?.executeScript) {
+        const [injection] = await chrome.scripting.executeScript({
+          target: { tabId: activeTab.id },
+          func: () => {
+            const content = document.body?.innerText?.slice(0, 1800) ?? '';
+            const selected = window.getSelection?.()?.toString().slice(0, 500) ?? '';
+            return {
+              pageTitle: document.title?.trim() ?? '',
+              metaDescription:
+                document.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? '',
+              selectedText: selected || content,
+            };
+          },
+        });
+        if (injection?.result) {
+          setPageSignals(injection.result as PageSignals);
+        }
       }
       setQuickSaveReady(Boolean(activeTab.url));
     } catch {
@@ -456,10 +483,16 @@ const App: FunctionalComponent = () => {
     setSaving(true);
     setStatus(null);
     try {
-      await saveBookmark({ title, url, tags, categoryId: selectedCategoryId || undefined });
+      const suggestedTags = aiSuggestions?.tags.slice(0, 6).map((entry) => entry.tag) ?? [];
+      const effectiveTags = !manualTagEdits && tags.length === 0 ? suggestedTags : tags;
+      const effectiveCategoryId =
+        !manualFolderEdits && !selectedCategoryId ? aiSuggestions?.bestFolder?.category.id : selectedCategoryId;
+      await saveBookmark({ title, url, tags: effectiveTags, categoryId: effectiveCategoryId || undefined });
       setStatus({ tone: 'success', text: 'Gespeichert. Mit Enter kannst du sofort den nächsten Tab sichern.' });
       setTags([]);
       setAiSuggestions(null);
+      setManualTagEdits(false);
+      setManualFolderEdits(false);
       await loadQuickSaveFromTab();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.';
@@ -467,7 +500,18 @@ const App: FunctionalComponent = () => {
     } finally {
       setSaving(false);
     }
-  }, [loadQuickSaveFromTab, saveBookmark, saving, selectedCategoryId, tags, title, url]);
+  }, [
+    aiSuggestions,
+    loadQuickSaveFromTab,
+    manualFolderEdits,
+    manualTagEdits,
+    saveBookmark,
+    saving,
+    selectedCategoryId,
+    tags,
+    title,
+    url,
+  ]);
 
   useEffect(() => {
     if (!showDetails) {
@@ -486,6 +530,9 @@ const App: FunctionalComponent = () => {
       void suggestForBookmark({
         title: normalizedTitle,
         url: normalizedUrl,
+        metaDescription: pageSignals?.metaDescription,
+        pageTitle: pageSignals?.pageTitle,
+        selectedText: pageSignals?.selectedText,
       })
         .then((result) => {
           setAiSuggestions(result);
@@ -500,7 +547,7 @@ const App: FunctionalComponent = () => {
     }, 140);
 
     return () => window.clearTimeout(timer);
-  }, [selectedCategoryId, showDetails, title, url]);
+  }, [pageSignals?.metaDescription, pageSignals?.pageTitle, pageSignals?.selectedText, selectedCategoryId, showDetails, title, url]);
 
   const handleOpenUrl = useCallback(
     async (bookmark: Bookmark) => {
@@ -649,7 +696,14 @@ const App: FunctionalComponent = () => {
               </label>
               <label>
                 <span id="quick-tags-label">Tags</span>
-                <TagInput id="quick-tags" tags={tags} onChange={setTags} />
+                <TagInput
+                  id="quick-tags"
+                  tags={tags}
+                  onChange={(next) => {
+                    setManualTagEdits(true);
+                    setTags(next);
+                  }}
+                />
               </label>
               {showDetails ? (
                 <div className="ai-suggestions" aria-live="polite">
@@ -665,11 +719,12 @@ const App: FunctionalComponent = () => {
                           key={suggestion.tag}
                           className="ai-tag"
                           onClick={() =>
-                            setTags((current) =>
-                              current.some((tag) => tag.toLowerCase() === suggestion.tag.toLowerCase())
+                            setTags((current) => {
+                              setManualTagEdits(true);
+                              return current.some((tag) => tag.toLowerCase() === suggestion.tag.toLowerCase())
                                 ? current
-                                : [...current, suggestion.tag],
-                            )
+                                : [...current, suggestion.tag];
+                            })
                           }
                         >
                           +{suggestion.tag}
@@ -683,7 +738,13 @@ const App: FunctionalComponent = () => {
               ) : null}
               <label>
                 <span>Folder (Vorschlag)</span>
-                <select value={selectedCategoryId} onChange={(event) => setSelectedCategoryId((event.currentTarget as HTMLSelectElement).value)}>
+                <select
+                  value={selectedCategoryId}
+                  onChange={(event) => {
+                    setManualFolderEdits(true);
+                    setSelectedCategoryId((event.currentTarget as HTMLSelectElement).value);
+                  }}
+                >
                   <option value="">Kein Folder</option>
                   {aiSuggestions?.bestFolder ? (
                     <option value={aiSuggestions.bestFolder.category.id}>

@@ -12,7 +12,8 @@ type Inputs = {
 };
 
 const MIN_TAG_SCORE = 0.28;
-const MAX_CANDIDATES = 16;
+const MAX_ANCHORED_TAGS = 3;
+const MAX_EXPLORATORY_TAGS = 3;
 
 const buildBookmarkText = (bookmark: Pick<Bookmark, 'title' | 'url' | 'tags' | 'notes'>): string =>
   [bookmark.title, bookmark.url, bookmark.notes ?? '', bookmark.tags.join(' ')].join(' | ');
@@ -36,7 +37,8 @@ const rankSimilarBookmarks = async (
 };
 
 export const suggestTags = async ({ input, existingTags, bookmarks }: Inputs): Promise<TagSuggestion[]> => {
-  const tokens = tokenize([input.title, input.metaDescription ?? '', input.pageTitle ?? '', input.selectedText ?? ''].join(' '));
+  const contentText = [input.title, input.metaDescription ?? '', input.pageTitle ?? '', input.selectedText ?? ''].join(' ');
+  const tokens = tokenize(contentText);
   const domainRule = detectDomainRule(input.url);
   const keywordTags = deriveKeywordTags(tokens);
   const similarBookmarks = await rankSimilarBookmarks(input, bookmarks);
@@ -107,8 +109,30 @@ export const suggestTags = async ({ input, existingTags, bookmarks }: Inputs): P
     }))
     .sort((a, b) => b.score - a.score);
 
-  const normalized = dedupeTags(ranked.map((entry) => entry.tag));
-  const allowed = new Set(normalized.slice(0, MAX_CANDIDATES));
+  const anchored = ranked
+    .filter((entry) => entry.source === 'history')
+    .slice(0, MAX_ANCHORED_TAGS);
 
-  return ranked.filter((entry) => allowed.has(entry.tag)).slice(0, Math.max(3, Math.min(8, ranked.length)));
+  const contentDerived: TagSuggestion[] = dedupeTags(tokens)
+    .filter((token) => token.length >= 4)
+    .slice(0, 20)
+    .map((token) => ({
+      tag: token,
+      score: 0.36,
+      confidence: 0.4,
+      reasons: ['content token'],
+      source: 'generated' as const,
+    }));
+
+  const exploratoryPool = [...ranked.filter((entry) => entry.source !== 'history'), ...contentDerived];
+  const exploratory = exploratoryPool
+    .filter((entry, index, all) => all.findIndex((candidate) => candidate.tag === entry.tag) === index)
+    .slice(0, MAX_EXPLORATORY_TAGS);
+
+  const merged = [...anchored, ...exploratory];
+  const mergedKeys = new Set(merged.map((entry) => entry.tag));
+  const backfill = ranked
+    .filter((entry) => !mergedKeys.has(entry.tag) && entry.source !== 'history')
+    .slice(0, 2);
+  return [...merged, ...backfill].slice(0, 8);
 };
