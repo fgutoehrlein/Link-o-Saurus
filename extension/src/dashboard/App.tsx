@@ -170,13 +170,6 @@ const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const MAX_VISIBLE_TILE_TITLE_LINES = 3;
 const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
 
-type ThemeOption = {
-  readonly value: ThemeChoice;
-  readonly title: string;
-  readonly description: string;
-  readonly icon: string;
-};
-
 type ViewModeOption = {
   readonly value: BookmarkViewMode;
   readonly label: string;
@@ -206,26 +199,32 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const THEME_OPTIONS: readonly ThemeOption[] = [
-  {
-    value: 'system',
-    title: 'System',
-    description: 'Passt sich automatisch deinem Gerät an.',
-    icon: '🖥️',
-  },
-  {
-    value: 'light',
-    title: 'Light mode',
-    description: 'Helles Interface für maximale Klarheit.',
-    icon: '🌤️',
-  },
-  {
-    value: 'dark',
-    title: 'Default mode',
-    description: 'Unser fokussierter Standard-Look.',
-    icon: '🌙',
-  },
-];
+const SunIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.75v2.5M12 18.75v2.5M5.45 5.45l1.78 1.78M16.77 16.77l1.78 1.78M2.75 12h2.5M18.75 12h2.5M5.45 18.55l1.78-1.78M16.77 7.23l1.78-1.78" />
+  </svg>
+);
+
+const MoonIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M20.25 13.2A8.75 8.75 0 1 1 10.8 3.75 7.25 7.25 0 0 0 20.25 13.2Z" />
+  </svg>
+);
+
+const SettingsIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="12" cy="12" r="2.25" />
+    <path d="m19 12 1.3.75-1.2 2.08-1.5-.28a6.92 6.92 0 0 1-1.22 1.23l.27 1.49-2.08 1.2L13.8 17a7.39 7.39 0 0 1-1.8 0l-.74 1.47-2.08-1.2.27-1.49a6.92 6.92 0 0 1-1.23-1.23l-1.49.28-1.2-2.08L5 12l-1.47-.75 1.2-2.08 1.49.28c.35-.46.77-.88 1.23-1.23l-.27-1.49 2.08-1.2L12 7c.6-.08 1.21-.08 1.8 0l.75-1.47 2.08 1.2-.27 1.49c.46.35.88.77 1.22 1.23l1.5-.28 1.2 2.08Z" />
+  </svg>
+);
+
+const DisplayIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <rect x="3.5" y="4.5" width="17" height="12" rx="2" />
+    <path d="M9 20h6M12 16.5V20" />
+  </svg>
+);
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
@@ -1037,7 +1036,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [isDetailPanelOpen, setDetailPanelOpen] = useState<boolean>(false);
   const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
-  const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
+  const [isDisplayMenuOpen, setIsDisplayMenuOpen] = useState<boolean>(false);
   const [sidebarTooltip, setSidebarTooltip] = useState<SidebarTooltipState>({
     label: '',
     x: 0,
@@ -2383,6 +2382,20 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      void chrome.runtime.openOptionsPage();
+      return;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
+      return;
+    }
+
+    window.open('/options.html', '_blank', 'noopener');
+  }, []);
+
   const handleViewModeChange = useCallback(async (mode: BookmarkViewMode) => {
     setBookmarkViewMode(mode);
     try {
@@ -2819,6 +2832,76 @@ const DashboardApp: FunctionalComponent = () => {
             </span>
           </label>
         </div>
+        <div className="header-utility-actions">
+          <button
+            type="button"
+            className={combineClassNames('icon-only-button', themeChoice === 'light' && 'active')}
+            onClick={() => handleThemeChange('light')}
+            aria-label="Light-Mode aktivieren"
+            title="Light-Mode"
+          >
+            <SunIcon />
+          </button>
+          <button
+            type="button"
+            className={combineClassNames('icon-only-button', themeChoice === 'dark' && 'active')}
+            onClick={() => handleThemeChange('dark')}
+            aria-label="Dark-Mode aktivieren"
+            title="Dark-Mode"
+          >
+            <MoonIcon />
+          </button>
+          <button
+            type="button"
+            className={combineClassNames('icon-only-button', isDisplayMenuOpen && 'active')}
+            onClick={() => setIsDisplayMenuOpen((value) => !value)}
+            aria-label="Darstellungsoptionen öffnen"
+            title="Darstellungsoptionen"
+            aria-expanded={isDisplayMenuOpen}
+          >
+            <DisplayIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-only-button"
+            onClick={handleOpenSettings}
+            aria-label="Einstellungen öffnen"
+            title="Einstellungen"
+          >
+            <SettingsIcon />
+          </button>
+          {isDisplayMenuOpen ? (
+            <div className="header-display-menu" role="dialog" aria-label="Darstellungsoptionen">
+              <fieldset className="view-mode-group compact">
+                <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
+                {VIEW_MODE_OPTIONS.map((option) => {
+                  const isActive = bookmarkViewMode === option.value;
+                  return (
+                    <label
+                      key={option.value}
+                      className={combineClassNames('view-toggle-option', isActive && 'active')}
+                      title={option.description}
+                    >
+                      <input
+                        type="radio"
+                        name="bookmark-view-mode"
+                        value={option.value}
+                        checked={isActive}
+                        onChange={() => {
+                          void handleViewModeChange(option.value);
+                        }}
+                      />
+                      <span className="view-toggle-icon">{option.icon}</span>
+                      <span className="view-toggle-copy">
+                        <strong>{option.label}</strong>
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            </div>
+          ) : null}
+        </div>
       </header>
       <br></br>
       <div className="status sr-only" aria-live="polite">
@@ -3053,44 +3136,6 @@ const DashboardApp: FunctionalComponent = () => {
             <button type="button" onClick={() => setSessionDialogOpen(true)}>
               Sessions
             </button>
-            <button
-              type="button"
-              className="toolbar-disclosure"
-              aria-expanded={areUtilitiesExpanded}
-              onClick={() => setUtilitiesExpanded((value) => !value)}
-            >
-              {areUtilitiesExpanded ? 'Darstellung ausblenden' : 'Darstellung anzeigen'}
-            </button>
-            {areUtilitiesExpanded ? (
-              <div className="theme-card" role="group" aria-label="Theme selection">
-                <div className="theme-card-header">
-                  <p className="theme-card-label">Theme</p>
-                  <p className="theme-card-hint">Wähle den Look, der zu dir passt.</p>
-                </div>
-                <div className="theme-options">
-                  {THEME_OPTIONS.map((option) => {
-                    const isActive = themeChoice === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={combineClassNames('theme-option', isActive && 'selected')}
-                        aria-pressed={isActive}
-                        onClick={() => handleThemeChange(option.value)}
-                      >
-                        <span className="theme-option-icon" aria-hidden="true">
-                          {option.icon}
-                        </span>
-                        <span className="theme-option-copy">
-                          <strong>{option.title}</strong>
-                          <small>{option.description}</small>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
           </section>
           ) : null}
         </aside>
@@ -3106,33 +3151,6 @@ const DashboardApp: FunctionalComponent = () => {
                   <option value="newest">Neueste</option>
                 </select>
               </label>
-              <fieldset className="view-mode-group compact">
-                <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
-                {VIEW_MODE_OPTIONS.map((option) => {
-                  const isActive = bookmarkViewMode === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      className={combineClassNames('view-toggle-option', isActive && 'active')}
-                      title={option.description}
-                    >
-                      <input
-                        type="radio"
-                        name="bookmark-view-mode"
-                        value={option.value}
-                        checked={isActive}
-                        onChange={() => {
-                          void handleViewModeChange(option.value);
-                        }}
-                      />
-                      <span className="view-toggle-icon">{option.icon}</span>
-                      <span className="view-toggle-copy">
-                        <strong>{option.label}</strong>
-                      </span>
-                    </label>
-                  );
-                })}
-              </fieldset>
               <div className={combineClassNames('selection-indicator', selectedIds.length === 0 && 'is-empty')}>
                 <span>{selectedCountLabel}</span>
                 <button
