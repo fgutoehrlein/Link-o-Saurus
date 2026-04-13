@@ -1,3 +1,5 @@
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
 :root {
   color-scheme: light dark;
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
@@ -181,6 +183,11 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.icon-only-button .fa-gear {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .ghost-button {

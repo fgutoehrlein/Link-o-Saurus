@@ -1,3 +1,5 @@
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
 :root {
   color-scheme: light dark;
   --bg-light: #f1f5f9;
@@ -120,6 +122,11 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.header-icon-button .fa-gear {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .header-brand {

@@ -55,13 +55,6 @@ const SEARCH_INDEX_LIMIT = 250;
 const SEARCH_RESULTS_LIMIT = 12;
 const QUICK_ACCESS_LIMIT = 8;
 
-const SettingsIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <circle cx="12" cy="12" r="3.2" />
-    <path d="m19.4 13.5.1-1.5-1.8-.7a6 6 0 0 0-.4-1l1-1.7-1.1-1.1-1.7 1a6 6 0 0 0-1-.4L13.5 4h-1.5l-.7 1.8a6 6 0 0 0-1 .4l-1.7-1-1.1 1.1 1 1.7a6 6 0 0 0-.4 1L4 12v1.5l1.8.7a6 6 0 0 0 .4 1l-1 1.7 1.1 1.1 1.7-1a6 6 0 0 0 1 .4l.7 1.8h1.5l.7-1.8a6 6 0 0 0 1-.4l1.7 1 1.1-1.1-1-1.7a6 6 0 0 0 .4-1l1.8-.7Z" />
-  </svg>
-);
-
 const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const normalizeUrlForComparison = (raw: string): string => {
@@ -557,7 +550,7 @@ const App: FunctionalComponent = () => {
             aria-label="Einstellungen öffnen"
             title="Einstellungen"
           >
-            <SettingsIcon />
+            <i className="fa-solid fa-gear" aria-hidden="true" />
           </button>
         </div>
       </header>
