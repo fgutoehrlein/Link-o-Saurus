@@ -2846,11 +2846,9 @@ const DashboardApp: FunctionalComponent = () => {
                   {isSidebarCompact ? (
                     <>
                       <span aria-hidden="true" className="nav-toggle-icon">☰</span>
-                      <span aria-hidden="true" className="collapse-direction is-compact">→</span>
                     </>
                   ) : (
                     <>
-                      <span aria-hidden="true" className="collapse-direction">←</span>
                       <span aria-hidden="true" className="nav-toggle-icon">☰</span>
                       <span className="nav-toggle-label">Navigation</span>
                     </>
