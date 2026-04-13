@@ -3,14 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import {
   createBookmark,
   getUserSettings,
+  listCategories,
   listBookmarks,
   recordBookmarkVisit,
   saveUserSettings,
 } from '../shared/db';
-import type { Bookmark, BookmarkSortMode } from '../shared/types';
+import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
 import { openDashboard } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
+import { suggestForBookmark } from '../shared/ai/bookmark-ai-service';
+import type { AiSuggestionResult } from '../shared/ai/types';
 import './App.css';
 
 type PopupHarness = {
@@ -248,6 +251,10 @@ const App: FunctionalComponent = () => {
   const [bookmarkSortMode, setBookmarkSortMode] = useState<BookmarkSortMode>('relevance');
   const [quickSaveReady, setQuickSaveReady] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionResult | null>(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -295,10 +302,12 @@ const App: FunctionalComponent = () => {
         listBookmarks({ includeArchived: false, limit: SEARCH_INDEX_LIMIT }),
         getUserSettings(),
       ]);
+      const loadedCategories = await listCategories();
       if (cancelled) {
         return;
       }
       setBookmarkSortMode(settings.bookmarkSortMode);
+      setCategories(loadedCategories);
       setSearchEntries(sortBookmarks(bookmarks, settings.bookmarkSortMode).map((bookmark) => buildSearchEntry(bookmark)));
       window.setTimeout(() => searchInputRef.current?.focus(), 50);
     };
@@ -395,7 +404,17 @@ const App: FunctionalComponent = () => {
   }, []);
 
   const saveBookmark = useCallback(
-    async ({ title: rawTitle, url: rawUrl, tags: rawTags }: { title: string; url: string; tags?: string[] }) => {
+    async ({
+      title: rawTitle,
+      url: rawUrl,
+      tags: rawTags,
+      categoryId,
+    }: {
+      title: string;
+      url: string;
+      tags?: string[];
+      categoryId?: string;
+    }) => {
       const normalizedUrl = normalizeUrlForSaving(rawUrl);
       const normalizedTitle = normalizeWhitespace(rawTitle) || extractDomain(normalizedUrl) || normalizedUrl;
       const uniqueTags = (rawTags ?? []).filter(
@@ -409,6 +428,7 @@ const App: FunctionalComponent = () => {
         title: normalizedTitle,
         faviconUrl: getFaviconUrl(normalizedUrl) ?? undefined,
         tags: uniqueTags,
+        categoryId: categoryId || undefined,
         createdAt: now,
         updatedAt: now,
       });
@@ -436,9 +456,10 @@ const App: FunctionalComponent = () => {
     setSaving(true);
     setStatus(null);
     try {
-      await saveBookmark({ title, url, tags });
+      await saveBookmark({ title, url, tags, categoryId: selectedCategoryId || undefined });
       setStatus({ tone: 'success', text: 'Gespeichert. Mit Enter kannst du sofort den nächsten Tab sichern.' });
       setTags([]);
+      setAiSuggestions(null);
       await loadQuickSaveFromTab();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.';
@@ -446,7 +467,40 @@ const App: FunctionalComponent = () => {
     } finally {
       setSaving(false);
     }
-  }, [loadQuickSaveFromTab, saveBookmark, saving, tags, title, url]);
+  }, [loadQuickSaveFromTab, saveBookmark, saving, selectedCategoryId, tags, title, url]);
+
+  useEffect(() => {
+    if (!showDetails) {
+      return;
+    }
+
+    const normalizedTitle = normalizeWhitespace(title);
+    const normalizedUrl = normalizeWhitespace(url);
+    if (!normalizedTitle && !normalizedUrl) {
+      setAiSuggestions(null);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setLoadingSuggestions(true);
+      void suggestForBookmark({
+        title: normalizedTitle,
+        url: normalizedUrl,
+      })
+        .then((result) => {
+          setAiSuggestions(result);
+          if (!selectedCategoryId && result.bestFolder) {
+            setSelectedCategoryId(result.bestFolder.category.id);
+          }
+        })
+        .catch(() => {
+          setAiSuggestions(null);
+        })
+        .finally(() => setLoadingSuggestions(false));
+    }, 140);
+
+    return () => window.clearTimeout(timer);
+  }, [selectedCategoryId, showDetails, title, url]);
 
   const handleOpenUrl = useCallback(
     async (bookmark: Bookmark) => {
@@ -597,6 +651,57 @@ const App: FunctionalComponent = () => {
                 <span id="quick-tags-label">Tags</span>
                 <TagInput id="quick-tags" tags={tags} onChange={setTags} />
               </label>
+              {showDetails ? (
+                <div className="ai-suggestions" aria-live="polite">
+                  <div className="ai-suggestions__head">
+                    <span>KI-Vorschläge</span>
+                    {loadingSuggestions ? <small>berechne…</small> : null}
+                  </div>
+                  {aiSuggestions?.tags?.length ? (
+                    <div className="ai-suggestions__tags">
+                      {aiSuggestions.tags.map((suggestion) => (
+                        <button
+                          type="button"
+                          key={suggestion.tag}
+                          className="ai-tag"
+                          onClick={() =>
+                            setTags((current) =>
+                              current.some((tag) => tag.toLowerCase() === suggestion.tag.toLowerCase())
+                                ? current
+                                : [...current, suggestion.tag],
+                            )
+                          }
+                        >
+                          +{suggestion.tag}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <small>Keine sicheren Tag-Vorschläge.</small>
+                  )}
+                </div>
+              ) : null}
+              <label>
+                <span>Folder (Vorschlag)</span>
+                <select value={selectedCategoryId} onChange={(event) => setSelectedCategoryId((event.currentTarget as HTMLSelectElement).value)}>
+                  <option value="">Kein Folder</option>
+                  {aiSuggestions?.bestFolder ? (
+                    <option value={aiSuggestions.bestFolder.category.id}>
+                      🤖 {aiSuggestions.bestFolder.category.title}
+                    </option>
+                  ) : null}
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {aiSuggestions?.alternativeFolders.length ? (
+                <small className="folder-alternatives">
+                  Alternativen: {aiSuggestions.alternativeFolders.map((item) => item.category.title).join(', ')}
+                </small>
+              ) : null}
               <button type="button" className="inline-link" onClick={() => void openDashboard({ new: '1', url, title, tags })}>
                 Im Dashboard weiter bearbeiten
               </button>
