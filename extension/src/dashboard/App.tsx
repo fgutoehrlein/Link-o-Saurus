@@ -3209,7 +3209,15 @@ const DashboardApp: FunctionalComponent = () => {
           title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
           onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
         >
-          <span aria-hidden="true">{isDetailPanelOpen ? '←' : '→'}</span> Details
+          {isDetailPanelOpen ? (
+            <>
+              Details <span aria-hidden="true">→</span>
+            </>
+          ) : (
+            <>
+              <span aria-hidden="true">←</span> Details
+            </>
+          )}
         </button>
       </div>
 
