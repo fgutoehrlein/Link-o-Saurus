@@ -80,6 +80,48 @@ body {
   justify-content: center;
 }
 
+.header-utility-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.header-icon-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--panel-light);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.header-icon-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-light));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-light));
+}
+
+.header-icon-button.active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-light));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-light));
+}
+
+.header-icon-button svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .header-brand {
   width: 2.2rem;
   height: 2.2rem;
@@ -101,6 +143,21 @@ body {
 [data-theme='dark'] .header-brand {
   border-color: var(--border-dark);
   background: rgba(15, 23, 42, 0.8);
+}
+
+[data-theme='dark'] .header-icon-button {
+  border-color: var(--border-dark);
+  background: rgba(15, 23, 42, 0.82);
+}
+
+[data-theme='dark'] .header-icon-button:hover {
+  border-color: color-mix(in srgb, var(--accent-dark) 56%, var(--border-dark));
+  background: color-mix(in srgb, var(--accent-dark) 20%, rgba(15, 23, 42, 0.82));
+}
+
+[data-theme='dark'] .header-icon-button.active {
+  border-color: color-mix(in srgb, var(--accent-dark) 68%, var(--border-dark));
+  background: color-mix(in srgb, var(--accent-dark) 26%, rgba(15, 23, 42, 0.82));
 }
 
 .search-field {
