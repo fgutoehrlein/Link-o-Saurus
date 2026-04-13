@@ -176,6 +176,7 @@ test.describe('Link-O-Saurus extension', () => {
     await page.getByRole('button', { name: 'Bookmark speichern' }).click();
 
     await expect(page.locator('.status.status--success')).toContainText('Gespeichert.');
+    await page.getByRole('button', { name: 'Weniger' }).click();
 
     const firstQuickAccessItem = page.locator('.access-item__text strong').first();
     await expect(firstQuickAccessItem).toHaveText(newBookmarkTitle);
@@ -184,7 +185,7 @@ test.describe('Link-O-Saurus extension', () => {
     await searchField.fill('Playwright');
     await expect(page.locator('.access-item__text strong')).toContainText(newBookmarkTitle);
 
-    await page.getByRole('button', { name: 'Zum Dashboard für mehr Optionen' }).click();
+    await page.getByRole('button', { name: 'Dashboard' }).click();
     const targetUrl = await page.evaluate(() => {
       const opened = window.__LINKOSAURUS_OPENED_TABS ?? [];
       return opened[opened.length - 1];
