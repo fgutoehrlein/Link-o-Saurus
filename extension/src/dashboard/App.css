@@ -460,7 +460,7 @@ body {
 }
 
 .sidebar-compact-mode .dashboard-main {
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
 }
 
 .layout-triple .dashboard-main.detail-panel-open {
@@ -984,8 +984,8 @@ body {
 }
 
 .dashboard-sidebar.compact {
-  width: 104px;
-  padding: 0.75rem 0.55rem;
+  width: 96px;
+  padding: 0.75rem 0.45rem;
   align-items: stretch;
 }
 
