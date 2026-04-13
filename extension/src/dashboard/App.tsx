@@ -1027,7 +1027,8 @@ const DashboardApp: FunctionalComponent = () => {
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
   const [isUploadingIcon, setUploadingIcon] = useState<boolean>(false);
-  const [isDetailPanelCollapsed, setDetailPanelCollapsed] = useState<boolean>(true);
+  const [isDetailPanelOpen, setDetailPanelOpen] = useState<boolean>(false);
+  const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
   const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
 
@@ -2360,12 +2361,42 @@ const DashboardApp: FunctionalComponent = () => {
   const hasActiveDetailContext = draft !== null || selectedIds.length > 0;
 
   useEffect(() => {
-    if (hasActiveDetailContext) {
-      setDetailPanelCollapsed(false);
+    if (!isDetailAutoOpenEnabled) {
       return;
     }
-    setDetailPanelCollapsed(true);
-  }, [hasActiveDetailContext]);
+    if (hasActiveDetailContext) {
+      setDetailPanelOpen(true);
+      return;
+    }
+    setDetailPanelOpen(false);
+  }, [hasActiveDetailContext, isDetailAutoOpenEnabled]);
+
+  const handleManualCloseDetailPanel = useCallback(() => {
+    setDetailPanelOpen(false);
+    setDetailAutoOpenEnabled(false);
+  }, []);
+
+  const handleManualOpenDetailPanel = useCallback(() => {
+    setDetailAutoOpenEnabled(true);
+    setDetailPanelOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDetailPanelOpen) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      event.preventDefault();
+      handleManualCloseDetailPanel();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isDetailPanelOpen, handleManualCloseDetailPanel]);
 
   const selectedEntries = useMemo(() => selectedIds.map((id) => bookmarkEntries.get(id)).filter(Boolean) as BookmarkListEntry[], [selectedIds, bookmarkEntries]);
 
@@ -2750,7 +2781,7 @@ const DashboardApp: FunctionalComponent = () => {
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
-      <div className="dashboard-main">
+      <div className={combineClassNames('dashboard-main', isDetailPanelOpen && 'detail-panel-open')}>
         <aside
           className={combineClassNames(
             'dashboard-sidebar',
@@ -3150,34 +3181,44 @@ const DashboardApp: FunctionalComponent = () => {
             ) : null}
           </div>
         </section>
-        <aside
-          className={combineClassNames(
-            'detail-column',
-            !hasActiveDetailContext && 'is-muted',
-            isDetailPanelCollapsed && 'is-collapsed',
-          )}
+        {isDetailPanelOpen ? (
+          <aside
+            className={combineClassNames(
+              'detail-column',
+              'is-open',
+              !hasActiveDetailContext && 'is-muted',
+            )}
+            aria-label="Detailbereich"
+          >
+            <div className="detail-column-header">
+              <div className="detail-column-heading">
+                <p className="detail-column-title">Detailbereich</p>
+                <span className="detail-column-mode">
+                  {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
+                </span>
+              </div>
+            </div>
+            {detailPanel()}
+          </aside>
+        ) : null}
+        <button
+          type="button"
+          className={combineClassNames('detail-toggle-button', isDetailPanelOpen && 'is-open')}
+          aria-expanded={isDetailPanelOpen}
+          aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+          title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+          onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
         >
-          <div className="detail-column-header">
-            <p className="detail-column-title">Detailbereich</p>
-            <button
-              type="button"
-              className="detail-collapse-toggle"
-              aria-expanded={!isDetailPanelCollapsed}
-              onClick={() => setDetailPanelCollapsed((value) => !value)}
-            >
-              {isDetailPanelCollapsed ? 'Einblenden' : 'Einklappen'}
-            </button>
-          </div>
-          {isDetailPanelCollapsed ? (
-            <p className="detail-column-placeholder">
-              {hasActiveDetailContext
-                ? 'Ein Lesezeichen ist ausgewählt. Öffne den Bereich für Bearbeitungen.'
-                : 'Wähle ein Lesezeichen aus, um Details und Aktionen anzuzeigen.'}
-            </p>
+          {isDetailPanelOpen ? (
+            <>
+              Details <span aria-hidden="true">→</span>
+            </>
           ) : (
-            detailPanel()
+            <>
+              <span aria-hidden="true">←</span> Details
+            </>
           )}
-        </aside>
+        </button>
       </div>
 
       {isImportDialogOpen ? (
