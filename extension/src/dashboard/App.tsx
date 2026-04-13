@@ -3197,28 +3197,20 @@ const DashboardApp: FunctionalComponent = () => {
                   {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
                 </span>
               </div>
-              <button
-                type="button"
-                className="detail-collapse-toggle"
-                aria-expanded={isDetailPanelOpen}
-                onClick={handleManualCloseDetailPanel}
-              >
-                Einklappen
-              </button>
             </div>
             {detailPanel()}
           </aside>
-        ) : (
-          <button
-            type="button"
-            className="detail-open-trigger"
-            onClick={handleManualOpenDetailPanel}
-            aria-label="Detailbereich öffnen"
-            title={hasActiveDetailContext ? 'Detailbereich öffnen' : 'Detailbereich öffnen (keine aktive Auswahl)'}
-          >
-            <span aria-hidden="true">⟵</span> Details
-          </button>
-        )}
+        ) : null}
+        <button
+          type="button"
+          className={combineClassNames('detail-toggle-button', isDetailPanelOpen && 'is-open')}
+          aria-expanded={isDetailPanelOpen}
+          aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+          title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+          onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
+        >
+          <span aria-hidden="true">{isDetailPanelOpen ? '←' : '→'}</span> Details
+        </button>
       </div>
 
       {isImportDialogOpen ? (
