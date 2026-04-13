@@ -135,6 +135,13 @@ type SessionDialogState = {
   error: string | null;
 };
 
+type SidebarTooltipState = {
+  readonly label: string;
+  readonly x: number;
+  readonly y: number;
+  readonly visible: boolean;
+};
+
 type ThemeChoice = UserSettings['theme'];
 
 type SelectionChange = {
@@ -1031,6 +1038,12 @@ const DashboardApp: FunctionalComponent = () => {
   const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
   const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
+  const [sidebarTooltip, setSidebarTooltip] = useState<SidebarTooltipState>({
+    label: '',
+    x: 0,
+    y: 0,
+    visible: false,
+  });
 
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState<number>(320);
@@ -1075,6 +1088,7 @@ const DashboardApp: FunctionalComponent = () => {
   const layoutMode = viewportWidth >= 1200 ? 'triple' : viewportWidth >= 900 ? 'double' : 'single';
   const canUseCompactSidebar = layoutMode !== 'single';
   const isSearchActive = isSearchFocused || searchQuery.trim().length > 0;
+  const showCompactTooltip = canUseCompactSidebar && isSidebarCompact;
   const shortcutHint = useMemo(() => {
     if (typeof navigator !== 'undefined') {
       const navigatorWithUAData = navigator as Navigator & { userAgentData?: { platform?: string } };
@@ -1094,6 +1108,37 @@ const DashboardApp: FunctionalComponent = () => {
       setSidebarCompact(false);
     }
   }, [layoutMode]);
+
+  const showSidebarTooltip = useCallback((target: EventTarget | null, label: string) => {
+    if (!(target instanceof HTMLElement) || !showCompactTooltip) {
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    setSidebarTooltip({
+      label,
+      x: rect.right + 12,
+      y: rect.top + rect.height / 2,
+      visible: true,
+    });
+  }, [showCompactTooltip]);
+
+  const hideSidebarTooltip = useCallback(() => {
+    setSidebarTooltip((current) => (current.visible ? { ...current, visible: false } : current));
+  }, []);
+
+  useEffect(() => {
+    if (!showCompactTooltip) {
+      hideSidebarTooltip();
+      return;
+    }
+    const dismiss = () => hideSidebarTooltip();
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
+    return () => {
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
+    };
+  }, [hideSidebarTooltip, showCompactTooltip]);
 
   useEffect(() => {
     const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
@@ -2855,6 +2900,14 @@ const DashboardApp: FunctionalComponent = () => {
                           : undefined
                       }
                       onClick={() => handleSelectBoard(board.id)}
+                      onMouseEnter={(event) => {
+                        showSidebarTooltip(event.currentTarget, `${board.title} (${boardCategories.length})`);
+                      }}
+                      onFocus={(event) => {
+                        showSidebarTooltip(event.currentTarget, `${board.title} (${boardCategories.length})`);
+                      }}
+                      onMouseLeave={hideSidebarTooltip}
+                      onBlur={hideSidebarTooltip}
                       onDragOver={(event) => {
                         event.preventDefault();
                         event.dataTransfer!.dropEffect = 'move';
@@ -2879,9 +2932,6 @@ const DashboardApp: FunctionalComponent = () => {
                         <span className="sidebar-item-text">{board.title}</span>
                       </span>
                       <span className="usage">{boardCategories.length}</span>
-                      <span className="sidebar-tooltip" role="tooltip">
-                        {board.title} ({boardCategories.length})
-                      </span>
                     </button>
                     <ul className="sidebar-sublist">
                       {boardCategories.map((category) => (
@@ -3239,6 +3289,19 @@ const DashboardApp: FunctionalComponent = () => {
             </>
           )}
         </button>
+      </div>
+      <div
+        className={combineClassNames('sidebar-floating-tooltip', sidebarTooltip.visible && 'visible')}
+        style={
+          {
+            '--tooltip-x': `${Math.round(sidebarTooltip.x)}px`,
+            '--tooltip-y': `${Math.round(sidebarTooltip.y)}px`,
+          } as CSSProperties
+        }
+        role="tooltip"
+        aria-hidden={!sidebarTooltip.visible}
+      >
+        {sidebarTooltip.label}
       </div>
 
       {isImportDialogOpen ? (
