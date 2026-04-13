@@ -170,20 +170,21 @@ test.describe('Link-O-Saurus extension', () => {
     const newBookmarkTitle = `Playwright Handbook ${uniqueSuffix}`;
     const newBookmarkUrl = `https://playwright.dev/${uniqueSuffix}`;
 
-    await page.fill('#quick-add-title', newBookmarkTitle);
-    await page.fill('#quick-add-url', newBookmarkUrl);
+    await page.getByRole('button', { name: 'Details' }).click();
+    await page.getByLabel('Titel').fill(newBookmarkTitle);
+    await page.getByLabel('URL').fill(newBookmarkUrl);
     await page.getByRole('button', { name: 'Bookmark speichern' }).click();
 
-    await expect(page.locator('.status-success')).toContainText('Bookmark gespeichert.');
+    await expect(page.locator('.status.status--success')).toContainText('Bookmark gespeichert.');
 
-    const firstRecentItem = page.locator('.recent-item__title').first();
-    await expect(firstRecentItem).toHaveText(newBookmarkTitle);
+    const firstQuickAccessItem = page.locator('.access-item__text strong').first();
+    await expect(firstQuickAccessItem).toHaveText(newBookmarkTitle);
 
-    const searchField = page.getByPlaceholder('Suchen (/)');
+    const searchField = page.getByPlaceholder('Bookmarks durchsuchen (/)');
     await searchField.fill('Playwright');
-    await expect(page.locator('.search-result__title')).toContainText(newBookmarkTitle);
+    await expect(page.locator('.access-item__text strong')).toContainText(newBookmarkTitle);
 
-    await page.getByRole('button', { name: 'Zum Dashboard' }).click();
+    await page.getByRole('button', { name: 'Zum Dashboard für mehr Optionen' }).click();
     const targetUrl = await page.evaluate(() => {
       const opened = window.__LINKOSAURUS_OPENED_TABS ?? [];
       return opened[opened.length - 1];
