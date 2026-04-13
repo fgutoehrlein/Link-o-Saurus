@@ -55,6 +55,13 @@ const SEARCH_INDEX_LIMIT = 250;
 const SEARCH_RESULTS_LIMIT = 12;
 const QUICK_ACCESS_LIMIT = 8;
 
+const SettingsIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="12" cy="12" r="3.1" />
+    <path d="M19.4 15.2a1 1 0 0 0 .2 1.1l.1.1a1.3 1.3 0 0 1 0 1.8l-1.1 1.1a1.3 1.3 0 0 1-1.8 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9v.3a1.3 1.3 0 0 1-1.3 1.3h-1.6a1.3 1.3 0 0 1-1.3-1.3V20a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.3 1.3 0 0 1-1.8 0l-1.1-1.1a1.3 1.3 0 0 1 0-1.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H3.8A1.3 1.3 0 0 1 2.5 13v-1.6a1.3 1.3 0 0 1 1.3-1.3h.3a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.3 1.3 0 0 1 0-1.8l1.1-1.1a1.3 1.3 0 0 1 1.8 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9v-.3A1.3 1.3 0 0 1 11 2.5h1.6a1.3 1.3 0 0 1 1.3 1.3v.3a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.3 1.3 0 0 1 1.8 0l1.1 1.1a1.3 1.3 0 0 1 0 1.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6h.3a1.3 1.3 0 0 1 1.3 1.3V13a1.3 1.3 0 0 1-1.3 1.3h-.3a1 1 0 0 0-.9.9Z" />
+  </svg>
+);
+
 const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const normalizeUrlForComparison = (raw: string): string => {
@@ -524,13 +531,35 @@ const App: FunctionalComponent = () => {
     };
   }, [saveBookmark]);
 
+  const handleOpenSettings = useCallback(() => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
+      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
   return (
     <div className="popup-app" role="application" aria-label="Link-O-Saurus Popup">
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
-        <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
-          Dashboard
-        </button>
+        <div className="popup-header-actions">
+          <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className="ghost-button icon-only-button"
+            onClick={handleOpenSettings}
+            aria-label="Einstellungen öffnen"
+            title="Einstellungen"
+          >
+            <SettingsIcon />
+          </button>
+        </div>
       </header>
 
       <main className="popup-main">
