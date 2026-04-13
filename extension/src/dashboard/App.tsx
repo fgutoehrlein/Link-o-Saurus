@@ -1982,15 +1982,6 @@ const DashboardApp: FunctionalComponent = () => {
     setActiveCategoryId((previous) => (previous === categoryId ? '' : categoryId));
     clearSelection();
   }, [clearSelection]);
-
-
-  const handleClearFilters = useCallback(() => {
-    setActiveBoardId('');
-    setActiveCategoryId('');
-    setActiveTagFilters(EMPTY_TAG_FILTER_STATE);
-    clearSelection();
-  }, [clearSelection]);
-
   const handleResetAllFilters = useCallback(() => {
     setSearchQuery('');
     setActiveBoardId('');
@@ -2843,21 +2834,27 @@ const DashboardApp: FunctionalComponent = () => {
         >
           <section>
             <div className="filter-reset">
-              <button type="button" onClick={handleClearFilters}>
-                Filter zurücksetzen
-              </button>
               {canUseCompactSidebar ? (
                 <button
                   type="button"
-                  className="sidebar-compact-toggle"
+                  className={combineClassNames('sidebar-compact-toggle', 'sidebar-nav-toggle', isSidebarCompact && 'is-compact')}
                   aria-pressed={isSidebarCompact}
                   aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
                   title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
                   onClick={() => setSidebarCompact((value) => !value)}
                 >
-                  <span aria-hidden="true" className={combineClassNames('collapse-direction', isSidebarCompact && 'is-compact')}>
-                    {isSidebarCompact ? '⟩' : '⟨'}
-                  </span>
+                  {isSidebarCompact ? (
+                    <>
+                      <span aria-hidden="true" className="nav-toggle-icon">☰</span>
+                      <span aria-hidden="true" className="collapse-direction is-compact">→</span>
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true" className="collapse-direction">←</span>
+                      <span aria-hidden="true" className="nav-toggle-icon">☰</span>
+                      <span className="nav-toggle-label">Navigation</span>
+                    </>
+                  )}
                   <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
                 </button>
               ) : null}
