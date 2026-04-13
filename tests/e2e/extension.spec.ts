@@ -175,7 +175,7 @@ test.describe('Link-O-Saurus extension', () => {
     await page.getByLabel('URL').fill(newBookmarkUrl);
     await page.getByRole('button', { name: 'Bookmark speichern' }).click();
 
-    await expect(page.locator('.status.status--success')).toContainText('Bookmark gespeichert.');
+    await expect(page.locator('.status.status--success')).toContainText('Gespeichert.');
 
     const firstQuickAccessItem = page.locator('.access-item__text strong').first();
     await expect(firstQuickAccessItem).toHaveText(newBookmarkTitle);
