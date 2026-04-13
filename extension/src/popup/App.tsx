@@ -625,13 +625,35 @@ const App: FunctionalComponent = () => {
     };
   }, [saveBookmark]);
 
+  const handleOpenSettings = useCallback(() => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
+      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
   return (
     <div className="popup-app" role="application" aria-label="Link-O-Saurus Popup">
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
-        <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
-          Dashboard
-        </button>
+        <div className="popup-header-actions">
+          <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className="ghost-button icon-only-button"
+            onClick={handleOpenSettings}
+            aria-label="Einstellungen öffnen"
+            title="Einstellungen"
+          >
+            <i className="fa-solid fa-gear" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <main className="popup-main">
@@ -750,59 +772,56 @@ const App: FunctionalComponent = () => {
           {status ? <p className={`status status--${status.tone}`}>{status.text}</p> : null}
         </section>
 
-        <section className="quick-access" aria-labelledby="quick-access-title">
-          <div className="quick-access__top">
-            <p id="quick-access-title">Suchen & öffnen</p>
-            <select value={bookmarkSortMode} onChange={handleSortModeChange} aria-label="Sortierung">
-              <option value="relevance">Relevanz</option>
-              <option value="newest">Neueste</option>
-              <option value="alphabetical">A–Z</option>
-            </select>
-          </div>
+        {showDetails ? null : (
+          <section className="quick-access" aria-labelledby="quick-access-title">
+            <div className="quick-access__top">
+              <p id="quick-access-title">Suchen & öffnen</p>
+              <select value={bookmarkSortMode} onChange={handleSortModeChange} aria-label="Sortierung">
+                <option value="relevance">Relevanz</option>
+                <option value="newest">Neueste</option>
+                <option value="alphabetical">A–Z</option>
+              </select>
+            </div>
 
-          <label className="search">
-            <span className="sr-only">Bookmarks durchsuchen</span>
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={searchTerm}
-              onInput={(event) => setSearchTerm((event.currentTarget as HTMLInputElement).value)}
-              onKeyDown={(event) => handleSearchKeyDown(event as unknown as KeyboardEvent)}
-              placeholder="Bookmarks durchsuchen (/)"
-            />
-          </label>
+            <label className="search">
+              <span className="sr-only">Bookmarks durchsuchen</span>
+              <input
+                ref={searchInputRef}
+                type="search"
+                value={searchTerm}
+                onInput={(event) => setSearchTerm((event.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(event) => handleSearchKeyDown(event as unknown as KeyboardEvent)}
+                placeholder="Bookmarks durchsuchen (/)"
+              />
+            </label>
 
-          <ul className="access-list" role="listbox" aria-live="polite">
-            {quickAccessEntries.map((entry, index) => (
-              <li key={entry.bookmark.id}>
-                <button
-                  type="button"
-                  className={`access-item${index === searchSelection ? ' is-active' : ''}`}
-                  role="option"
-                  aria-selected={index === searchSelection}
-                  onClick={() => void handleOpenUrl(entry.bookmark)}
-                  onMouseEnter={() => setSearchSelection(index)}
-                >
-                  <BookmarkFavicon bookmark={entry.bookmark} />
-                  <span className="access-item__text">
-                    <strong>{entry.bookmark.title || entry.bookmark.url}</strong>
-                    <small>{entry.domain || entry.bookmark.url}</small>
-                  </span>
-                </button>
-              </li>
-            ))}
-            {quickAccessEntries.length === 0 ? (
-              <li className="empty-state">{hasQuery ? 'Keine Treffer gefunden.' : 'Noch keine Bookmarks gespeichert.'}</li>
-            ) : null}
-          </ul>
-        </section>
+            <ul className="access-list" role="listbox" aria-live="polite">
+              {quickAccessEntries.map((entry, index) => (
+                <li key={entry.bookmark.id}>
+                  <button
+                    type="button"
+                    className={`access-item${index === searchSelection ? ' is-active' : ''}`}
+                    role="option"
+                    aria-selected={index === searchSelection}
+                    onClick={() => void handleOpenUrl(entry.bookmark)}
+                    onMouseEnter={() => setSearchSelection(index)}
+                  >
+                    <BookmarkFavicon bookmark={entry.bookmark} />
+                    <span className="access-item__text">
+                      <strong>{entry.bookmark.title || entry.bookmark.url}</strong>
+                      <small>{entry.domain || entry.bookmark.url}</small>
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {quickAccessEntries.length === 0 ? (
+                <li className="empty-state">{hasQuery ? 'Keine Treffer gefunden.' : 'Noch keine Bookmarks gespeichert.'}</li>
+              ) : null}
+            </ul>
+          </section>
+        )}
       </main>
 
-      <footer className="popup-footer">
-        <button type="button" className="inline-link" onClick={() => void openDashboard(searchTerm.trim() ? { q: searchTerm.trim() } : undefined)}>
-          Zum Dashboard für mehr Optionen
-        </button>
-      </footer>
     </div>
   );
 };

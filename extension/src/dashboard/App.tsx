@@ -170,13 +170,6 @@ const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const MAX_VISIBLE_TILE_TITLE_LINES = 3;
 const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
 
-type ThemeOption = {
-  readonly value: ThemeChoice;
-  readonly title: string;
-  readonly description: string;
-  readonly icon: string;
-};
-
 type ViewModeOption = {
   readonly value: BookmarkViewMode;
   readonly label: string;
@@ -206,26 +199,18 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const THEME_OPTIONS: readonly ThemeOption[] = [
-  {
-    value: 'system',
-    title: 'System',
-    description: 'Passt sich automatisch deinem Gerät an.',
-    icon: '🖥️',
-  },
-  {
-    value: 'light',
-    title: 'Light mode',
-    description: 'Helles Interface für maximale Klarheit.',
-    icon: '🌤️',
-  },
-  {
-    value: 'dark',
-    title: 'Default mode',
-    description: 'Unser fokussierter Standard-Look.',
-    icon: '🌙',
-  },
-];
+const SunIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="12" cy="12" r="4.5" />
+    <path d="M12 2.5v2.4M12 19.1v2.4M4.93 4.93l1.7 1.7M17.37 17.37l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.93 19.07l1.7-1.7M17.37 6.63l1.7-1.7" />
+  </svg>
+);
+
+const MoonIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M14.6 2.8a9.3 9.3 0 1 0 6.6 12.8 8.2 8.2 0 0 1-6.6-12.8Z" />
+  </svg>
+);
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
@@ -1037,7 +1022,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [isDetailPanelOpen, setDetailPanelOpen] = useState<boolean>(false);
   const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
-  const [areUtilitiesExpanded, setUtilitiesExpanded] = useState<boolean>(false);
   const [sidebarTooltip, setSidebarTooltip] = useState<SidebarTooltipState>({
     label: '',
     x: 0,
@@ -2383,6 +2367,26 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage(() => {
+        const error = chrome.runtime?.lastError;
+        if (error) {
+          console.error('Failed to open options page', error);
+          setStatusMessage('Einstellungen konnten nicht geöffnet werden.');
+        }
+      });
+      return;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
+      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    setStatusMessage('Einstellungen konnten nicht geöffnet werden.');
+  }, []);
+
   const handleViewModeChange = useCallback(async (mode: BookmarkViewMode) => {
     setBookmarkViewMode(mode);
     try {
@@ -2819,6 +2823,39 @@ const DashboardApp: FunctionalComponent = () => {
             </span>
           </label>
         </div>
+        <div className="header-utility-actions" role="group" aria-label="Darstellung und Einstellungen">
+          <button
+            type="button"
+            className={combineClassNames('header-icon-button', themeChoice === 'light' && 'active')}
+            onClick={() => {
+              void handleThemeChange('light');
+            }}
+            aria-label="Light-Mode aktivieren"
+            title="Light-Mode"
+          >
+            <SunIcon />
+          </button>
+          <button
+            type="button"
+            className={combineClassNames('header-icon-button', themeChoice === 'dark' && 'active')}
+            onClick={() => {
+              void handleThemeChange('dark');
+            }}
+            aria-label="Dark-Mode aktivieren"
+            title="Dark-Mode"
+          >
+            <MoonIcon />
+          </button>
+          <button
+            type="button"
+            className="header-icon-button"
+            onClick={handleOpenSettings}
+            aria-label="Einstellungen öffnen"
+            title="Einstellungen"
+          >
+            <i className="fa-solid fa-gear" aria-hidden="true" />
+          </button>
+        </div>
       </header>
       <br></br>
       <div className="status sr-only" aria-live="polite">
@@ -3053,44 +3090,6 @@ const DashboardApp: FunctionalComponent = () => {
             <button type="button" onClick={() => setSessionDialogOpen(true)}>
               Sessions
             </button>
-            <button
-              type="button"
-              className="toolbar-disclosure"
-              aria-expanded={areUtilitiesExpanded}
-              onClick={() => setUtilitiesExpanded((value) => !value)}
-            >
-              {areUtilitiesExpanded ? 'Darstellung ausblenden' : 'Darstellung anzeigen'}
-            </button>
-            {areUtilitiesExpanded ? (
-              <div className="theme-card" role="group" aria-label="Theme selection">
-                <div className="theme-card-header">
-                  <p className="theme-card-label">Theme</p>
-                  <p className="theme-card-hint">Wähle den Look, der zu dir passt.</p>
-                </div>
-                <div className="theme-options">
-                  {THEME_OPTIONS.map((option) => {
-                    const isActive = themeChoice === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={combineClassNames('theme-option', isActive && 'selected')}
-                        aria-pressed={isActive}
-                        onClick={() => handleThemeChange(option.value)}
-                      >
-                        <span className="theme-option-icon" aria-hidden="true">
-                          {option.icon}
-                        </span>
-                        <span className="theme-option-copy">
-                          <strong>{option.title}</strong>
-                          <small>{option.description}</small>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
           </section>
           ) : null}
         </aside>

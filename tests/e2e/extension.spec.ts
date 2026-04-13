@@ -202,7 +202,7 @@ test.describe('Link-O-Saurus extension', () => {
     await searchField.fill('Playwright');
     await expect(page.locator('.access-list')).toContainText(newBookmarkTitle);
 
-    await page.getByRole('button', { name: 'Zum Dashboard für mehr Optionen' }).click();
+    await page.getByRole('button', { name: 'Dashboard' }).click();
     const targetUrl = await page.evaluate(() => {
       const opened = window.__LINKOSAURUS_OPENED_TABS ?? [];
       return opened[opened.length - 1];
