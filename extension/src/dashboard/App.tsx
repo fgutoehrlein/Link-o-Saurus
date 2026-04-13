@@ -2736,7 +2736,14 @@ const DashboardApp: FunctionalComponent = () => {
   };
 
   return (
-    <div className={combineClassNames('dashboard-shell', `layout-${layoutMode}`, sidebarOpen && 'sidebar-open')}>
+    <div
+      className={combineClassNames(
+        'dashboard-shell',
+        `layout-${layoutMode}`,
+        sidebarOpen && 'sidebar-open',
+        isSidebarCompact && canUseCompactSidebar && 'sidebar-compact-mode',
+      )}
+    >
       <header className="dashboard-header" role="banner">
         <div className="header-brand" aria-hidden="true">
           <img src={linkOSaurusIcon} alt="" />
@@ -2803,7 +2810,9 @@ const DashboardApp: FunctionalComponent = () => {
                   title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
                   onClick={() => setSidebarCompact((value) => !value)}
                 >
-                  <span aria-hidden="true">{isSidebarCompact ? '⟩⟩' : '⟨⟨'}</span>
+                  <span aria-hidden="true" className={combineClassNames('collapse-direction', isSidebarCompact && 'is-compact')}>
+                    {isSidebarCompact ? '⟩' : '⟨'}
+                  </span>
                   <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
                 </button>
               ) : null}
@@ -2840,7 +2849,11 @@ const DashboardApp: FunctionalComponent = () => {
                       type="button"
                       className={combineClassNames('sidebar-item', activeBoardId === board.id && 'active')}
                       aria-current={activeBoardId === board.id ? 'page' : undefined}
-                      title={isSidebarCompact && canUseCompactSidebar ? board.title : undefined}
+                      aria-label={
+                        isSidebarCompact && canUseCompactSidebar
+                          ? `${board.title} (${boardCategories.length})`
+                          : undefined
+                      }
                       onClick={() => handleSelectBoard(board.id)}
                       onDragOver={(event) => {
                         event.preventDefault();
@@ -2866,6 +2879,9 @@ const DashboardApp: FunctionalComponent = () => {
                         <span className="sidebar-item-text">{board.title}</span>
                       </span>
                       <span className="usage">{boardCategories.length}</span>
+                      <span className="sidebar-tooltip" role="tooltip">
+                        {board.title} ({boardCategories.length})
+                      </span>
                     </button>
                     <ul className="sidebar-sublist">
                       {boardCategories.map((category) => (
@@ -2915,6 +2931,7 @@ const DashboardApp: FunctionalComponent = () => {
               </p>
             )}
           </section>
+          {!isSidebarCompact || !canUseCompactSidebar ? (
           <section>
             <header className="sidebar-section-header">
               <h2>Tags</h2>
@@ -2982,6 +2999,8 @@ const DashboardApp: FunctionalComponent = () => {
               </p>
             )}
           </section>
+          ) : null}
+          {!isSidebarCompact || !canUseCompactSidebar ? (
           <section className="sidebar-actions">
             <button type="button" onClick={() => setImportDialogOpen(true)}>
               Import / Export
@@ -3028,6 +3047,7 @@ const DashboardApp: FunctionalComponent = () => {
               </div>
             ) : null}
           </section>
+          ) : null}
         </aside>
         <section className="bookmark-list" role="listbox" aria-multiselectable="true">
           <div className="list-header">
