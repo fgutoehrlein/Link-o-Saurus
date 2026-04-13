@@ -457,7 +457,6 @@ body {
   padding: 1.5rem 2rem 2rem;
   position: relative;
   transition: grid-template-columns 230ms cubic-bezier(0.22, 1, 0.36, 1);
-  align-items: start;
 }
 
 .sidebar-compact-mode .dashboard-main {
@@ -1118,11 +1117,6 @@ body {
   opacity: 1;
   visibility: visible;
   transform: translate3d(0, -50%, 0) scale(1);
-}
-
-.bookmark-list {
-  position: relative;
-  z-index: 1;
 }
 
 .bookmark-list {
