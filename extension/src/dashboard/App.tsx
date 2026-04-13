@@ -3182,40 +3182,32 @@ const DashboardApp: FunctionalComponent = () => {
           </div>
         </section>
         {isDetailPanelOpen ? (
-          <>
-            <button
-              type="button"
-              className="detail-panel-backdrop"
-              aria-label="Detailbereich schließen"
-              onClick={handleManualCloseDetailPanel}
-            />
-            <aside
-              className={combineClassNames(
-                'detail-column',
-                'is-open',
-                !hasActiveDetailContext && 'is-muted',
-              )}
-              aria-label="Detailbereich"
-            >
-              <div className="detail-column-header">
-                <div className="detail-column-heading">
-                  <p className="detail-column-title">Detailbereich</p>
-                  <span className="detail-column-mode">
-                    {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="detail-collapse-toggle"
-                  aria-expanded={isDetailPanelOpen}
-                  onClick={handleManualCloseDetailPanel}
-                >
-                  Einklappen
-                </button>
+          <aside
+            className={combineClassNames(
+              'detail-column',
+              'is-open',
+              !hasActiveDetailContext && 'is-muted',
+            )}
+            aria-label="Detailbereich"
+          >
+            <div className="detail-column-header">
+              <div className="detail-column-heading">
+                <p className="detail-column-title">Detailbereich</p>
+                <span className="detail-column-mode">
+                  {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
+                </span>
               </div>
-              {detailPanel()}
-            </aside>
-          </>
+              <button
+                type="button"
+                className="detail-collapse-toggle"
+                aria-expanded={isDetailPanelOpen}
+                onClick={handleManualCloseDetailPanel}
+              >
+                Einklappen
+              </button>
+            </div>
+            {detailPanel()}
+          </aside>
         ) : (
           <button
             type="button"
