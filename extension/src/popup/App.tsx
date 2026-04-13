@@ -654,11 +654,6 @@ const App: FunctionalComponent = () => {
         </section>
       </main>
 
-      <footer className="popup-footer">
-        <button type="button" className="inline-link" onClick={() => void openDashboard(searchTerm.trim() ? { q: searchTerm.trim() } : undefined)}>
-          Zum Dashboard für mehr Optionen
-        </button>
-      </footer>
     </div>
   );
 };
