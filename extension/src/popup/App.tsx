@@ -524,13 +524,35 @@ const App: FunctionalComponent = () => {
     };
   }, [saveBookmark]);
 
+  const handleOpenSettings = useCallback(() => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
+      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
   return (
     <div className="popup-app" role="application" aria-label="Link-O-Saurus Popup">
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
-        <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
-          Dashboard
-        </button>
+        <div className="popup-header-actions">
+          <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className="ghost-button icon-only-button"
+            onClick={handleOpenSettings}
+            aria-label="Einstellungen öffnen"
+            title="Einstellungen"
+          >
+            <i className="fa-solid fa-gear" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <main className="popup-main">
