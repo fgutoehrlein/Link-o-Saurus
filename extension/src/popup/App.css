@@ -1,3 +1,5 @@
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
 :root {
   color-scheme: light dark;
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
@@ -48,6 +50,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.popup-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .popup-header h1 {
@@ -156,6 +164,30 @@ body {
   padding: 8px 10px;
   background: rgba(148, 163, 184, 0.14);
   border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.icon-only-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-only-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-only-button .fa-gear {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .ghost-button {
