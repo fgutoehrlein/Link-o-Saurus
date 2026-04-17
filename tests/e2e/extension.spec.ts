@@ -198,6 +198,11 @@ test.describe('Link-O-Saurus extension', () => {
       newBookmarkTitle,
     );
 
+    const collapseDetailsButton = page.getByRole('button', { name: 'Weniger' });
+    if (await collapseDetailsButton.isVisible()) {
+      await collapseDetailsButton.click();
+    }
+
     const searchField = page.getByPlaceholder('Bookmarks durchsuchen (/)');
     await searchField.fill('Playwright');
     await expect(page.locator('.access-list')).toContainText(newBookmarkTitle);
