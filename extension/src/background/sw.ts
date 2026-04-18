@@ -30,6 +30,9 @@ console.log('[Link-o-Saurus] background service worker initialized');
 const READ_LATER_ALARM_NAME = 'link-o-saurus:read-later-refresh';
 const READ_LATER_REFRESH_INTERVAL_MINUTES = 1;
 const READ_LATER_BADGE_COLOR = '#DC2626';
+const SIDEBAR_TOGGLE_MESSAGE = { type: 'sidebar.toggle' } as const;
+const SIDEBAR_SET_OPEN_MESSAGE = (open: boolean) => ({ type: 'sidebar.setOpen', open } as const);
+const sidebarStateByTab = new Map<number, boolean>();
 
 const formatBadgeCount = (count: number): string => {
   if (count <= 0) {
@@ -195,6 +198,41 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm?.name === READ_LATER_ALARM_NAME) {
     void updateReadLaterBadge();
   }
+});
+
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    return;
+  }
+
+  const currentOpen = sidebarStateByTab.get(tab.id) ?? false;
+  sidebarStateByTab.set(tab.id, !currentOpen);
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, SIDEBAR_TOGGLE_MESSAGE);
+  } catch (error) {
+    console.debug('[Link-o-Saurus] Sidebar toggle message failed (content script not ready)', error);
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') {
+    return;
+  }
+  const shouldBeOpen = sidebarStateByTab.get(tabId) ?? false;
+  if (!shouldBeOpen) {
+    return;
+  }
+
+  void chrome.tabs
+    .sendMessage(tabId, SIDEBAR_SET_OPEN_MESSAGE(true))
+    .catch((error) =>
+      console.debug('[Link-o-Saurus] Sidebar state sync skipped for tab update', error),
+    );
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  sidebarStateByTab.delete(tabId);
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -969,4 +1007,17 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   })();
 
   return true;
+});
+
+chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+  if (!message || typeof message !== 'object') {
+    return;
+  }
+  const candidate = message as { type?: unknown; open?: unknown };
+  if (candidate.type !== 'sidebar.stateChanged' || typeof candidate.open !== 'boolean') {
+    return;
+  }
+  if (typeof sender.tab?.id === 'number') {
+    sidebarStateByTab.set(sender.tab.id, candidate.open);
+  }
 });

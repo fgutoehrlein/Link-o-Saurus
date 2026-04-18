@@ -1,3 +1,3 @@
-(() => {
-  console.debug('[Link-o-Saurus] content script placeholder loaded');
-})();
+import { initializeSidebar } from './sidebar';
+
+initializeSidebar();
