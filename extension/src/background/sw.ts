@@ -201,17 +201,29 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+  if (!tab.id) {
     return;
   }
 
   const currentOpen = sidebarStateByTab.get(tab.id) ?? false;
-  sidebarStateByTab.set(tab.id, !currentOpen);
+  const nextOpen = !currentOpen;
+  sidebarStateByTab.set(tab.id, nextOpen);
 
   try {
     await chrome.tabs.sendMessage(tab.id, SIDEBAR_TOGGLE_MESSAGE);
   } catch (error) {
-    console.debug('[Link-o-Saurus] Sidebar toggle message failed (content script not ready)', error);
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/inject.js'],
+      });
+      await chrome.tabs.sendMessage(tab.id, SIDEBAR_SET_OPEN_MESSAGE(nextOpen));
+    } catch (reinjectionError) {
+      console.debug(
+        '[Link-o-Saurus] Sidebar toggle failed (restricted page or content script unavailable)',
+        reinjectionError ?? error,
+      );
+    }
   }
 });
 
