@@ -33,6 +33,17 @@ const READ_LATER_BADGE_COLOR = '#DC2626';
 const SIDEBAR_TOGGLE_MESSAGE = { type: 'sidebar.toggle' } as const;
 const SIDEBAR_SET_OPEN_MESSAGE = (open: boolean) => ({ type: 'sidebar.setOpen', open } as const);
 const sidebarStateByTab = new Map<number, boolean>();
+const sidebarFallbackWindowByTab = new Map<number, number>();
+const SIDEBAR_FALLBACK_URL = chrome.runtime.getURL('dashboard.html?mode=sidebar-fallback');
+
+const RESTRICTED_TAB_URL_PREFIXES = [
+  'chrome://',
+  'chrome-extension://',
+  'edge://',
+  'about:',
+  'devtools://',
+  'view-source:',
+];
 
 const formatBadgeCount = (count: number): string => {
   if (count <= 0) {
@@ -65,6 +76,56 @@ const updateReadLaterBadge = async (): Promise<number> => {
     }
     return 0;
   }
+};
+
+const canInjectSidebarIntoUrl = (url: string | undefined): boolean => {
+  if (!url) {
+    return true;
+  }
+  return !RESTRICTED_TAB_URL_PREFIXES.some((prefix) => url.startsWith(prefix));
+};
+
+const ensureWindowsPermission = async (): Promise<boolean> => {
+  const hasPermission = await chrome.permissions.contains({ permissions: ['windows'] });
+  if (hasPermission) {
+    return true;
+  }
+
+  try {
+    return await chrome.permissions.request({ permissions: ['windows'] });
+  } catch {
+    return false;
+  }
+};
+
+const toggleSidebarFallbackWindow = async (tabId: number): Promise<void> => {
+  const existingWindowId = sidebarFallbackWindowByTab.get(tabId);
+  if (typeof existingWindowId === 'number') {
+    try {
+      await chrome.windows.remove(existingWindowId);
+      sidebarFallbackWindowByTab.delete(tabId);
+      return;
+    } catch {
+      sidebarFallbackWindowByTab.delete(tabId);
+    }
+  }
+
+  const windowsPermission = await ensureWindowsPermission();
+  if (windowsPermission) {
+    const fallbackWindow = await chrome.windows.create({
+      url: SIDEBAR_FALLBACK_URL,
+      type: 'popup',
+      width: 380,
+      height: 900,
+      focused: true,
+    });
+    if (typeof fallbackWindow.id === 'number') {
+      sidebarFallbackWindowByTab.set(tabId, fallbackWindow.id);
+    }
+    return;
+  }
+
+  await chrome.tabs.create({ url: SIDEBAR_FALLBACK_URL, active: true });
 };
 
 const ensureReadLaterAlarm = async (): Promise<void> => {
@@ -205,6 +266,11 @@ chrome.action.onClicked.addListener(async (tab) => {
     return;
   }
 
+  if (!canInjectSidebarIntoUrl(tab.url)) {
+    await toggleSidebarFallbackWindow(tab.id);
+    return;
+  }
+
   const currentOpen = sidebarStateByTab.get(tab.id) ?? false;
   const nextOpen = !currentOpen;
   sidebarStateByTab.set(tab.id, nextOpen);
@@ -245,6 +311,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   sidebarStateByTab.delete(tabId);
+  const fallbackWindowId = sidebarFallbackWindowByTab.get(tabId);
+  if (typeof fallbackWindowId === 'number') {
+    sidebarFallbackWindowByTab.delete(tabId);
+    void chrome.windows.remove(fallbackWindowId).catch(() => undefined);
+  }
+});
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  for (const [tabId, trackedWindowId] of sidebarFallbackWindowByTab.entries()) {
+    if (trackedWindowId === windowId) {
+      sidebarFallbackWindowByTab.delete(tabId);
+      break;
+    }
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
