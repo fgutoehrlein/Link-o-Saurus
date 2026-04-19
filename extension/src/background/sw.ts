@@ -17,7 +17,6 @@ import type { SessionPack } from '../shared/types';
 const CONTEXT_MENU_ID = 'link-o-saurus-context-save';
 const CONTEXT_MENU_OPEN_SIDE_PANEL_ID = 'link-o-saurus-context-open-side-panel';
 const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('dashboard.html');
-const SIDE_PANEL_STATE_STORAGE_KEY = 'sidePanel.routeState';
 const CHROME_DEFAULT_NEW_TAB_URLS = new Set([
   'chrome://newtab/',
   'chrome-search://local-ntp/local-ntp.html',
@@ -1024,27 +1023,6 @@ const handleBackgroundRequest = async (
     case 'sidePanel.open': {
       const opened = await openSidePanelForWindow(message.windowId);
       return { type: 'sidePanel.open.result', opened };
-    }
-    case 'sidePanel.state.get': {
-      const result = await chrome.storage.local.get(SIDE_PANEL_STATE_STORAGE_KEY);
-      const state = result[SIDE_PANEL_STATE_STORAGE_KEY];
-      if (!state || typeof state !== 'object') {
-        return { type: 'sidePanel.state.get.result', state: null };
-      }
-
-      const candidate = state as { search?: unknown; boardId?: unknown; hash?: unknown };
-      return {
-        type: 'sidePanel.state.get.result',
-        state: {
-          ...(typeof candidate.search === 'string' ? { search: candidate.search } : {}),
-          ...(typeof candidate.boardId === 'string' ? { boardId: candidate.boardId } : {}),
-          ...(typeof candidate.hash === 'string' ? { hash: candidate.hash } : {}),
-        },
-      };
-    }
-    case 'sidePanel.state.set': {
-      await chrome.storage.local.set({ [SIDE_PANEL_STATE_STORAGE_KEY]: message.state });
-      return { type: 'sidePanel.state.set.result', saved: true };
     }
     default:
       throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);

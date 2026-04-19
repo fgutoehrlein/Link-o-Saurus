@@ -60,6 +60,10 @@ type TagInputProps = {
   readonly onChange: (next: string[]) => void;
 };
 
+type PopupAppProps = {
+  readonly layout?: 'popup' | 'sidepanel';
+};
+
 const SEARCH_INDEX_LIMIT = 250;
 const SEARCH_RESULTS_LIMIT = 12;
 const QUICK_ACCESS_LIMIT = 8;
@@ -244,7 +248,7 @@ const BookmarkFavicon: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({
   </span>
 );
 
-const App: FunctionalComponent = () => {
+const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -637,7 +641,11 @@ const App: FunctionalComponent = () => {
   }, []);
 
   return (
-    <div className="popup-app" role="application" aria-label="Link-O-Saurus Popup">
+    <div
+      className={`popup-app${layout === 'sidepanel' ? ' popup-app--sidepanel' : ''}`}
+      role="application"
+      aria-label="Link-O-Saurus Popup"
+    >
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
         <div className="popup-header-actions">
