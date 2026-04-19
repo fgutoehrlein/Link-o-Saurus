@@ -31,6 +31,20 @@ console.log('[Link-o-Saurus] background service worker initialized');
 const READ_LATER_ALARM_NAME = 'link-o-saurus:read-later-refresh';
 const READ_LATER_REFRESH_INTERVAL_MINUTES = 1;
 const READ_LATER_BADGE_COLOR = '#DC2626';
+const SIDEBAR_TOGGLE_MESSAGE = { type: 'sidebar.toggle' } as const;
+const SIDEBAR_SET_OPEN_MESSAGE = (open: boolean) => ({ type: 'sidebar.setOpen', open } as const);
+const sidebarStateByTab = new Map<number, boolean>();
+const sidebarFallbackWindowByTab = new Map<number, number>();
+const SIDEBAR_FALLBACK_URL = chrome.runtime.getURL('dashboard.html?mode=sidebar-fallback');
+
+const RESTRICTED_TAB_URL_PREFIXES = [
+  'chrome://',
+  'chrome-extension://',
+  'edge://',
+  'about:',
+  'devtools://',
+  'view-source:',
+];
 
 const formatBadgeCount = (count: number): string => {
   if (count <= 0) {
@@ -63,6 +77,56 @@ const updateReadLaterBadge = async (): Promise<number> => {
     }
     return 0;
   }
+};
+
+const canInjectSidebarIntoUrl = (url: string | undefined): boolean => {
+  if (!url) {
+    return true;
+  }
+  return !RESTRICTED_TAB_URL_PREFIXES.some((prefix) => url.startsWith(prefix));
+};
+
+const ensureWindowsPermission = async (): Promise<boolean> => {
+  const hasPermission = await chrome.permissions.contains({ permissions: ['windows'] });
+  if (hasPermission) {
+    return true;
+  }
+
+  try {
+    return await chrome.permissions.request({ permissions: ['windows'] });
+  } catch {
+    return false;
+  }
+};
+
+const toggleSidebarFallbackWindow = async (tabId: number): Promise<void> => {
+  const existingWindowId = sidebarFallbackWindowByTab.get(tabId);
+  if (typeof existingWindowId === 'number') {
+    try {
+      await chrome.windows.remove(existingWindowId);
+      sidebarFallbackWindowByTab.delete(tabId);
+      return;
+    } catch {
+      sidebarFallbackWindowByTab.delete(tabId);
+    }
+  }
+
+  const windowsPermission = await ensureWindowsPermission();
+  if (windowsPermission) {
+    const fallbackWindow = await chrome.windows.create({
+      url: SIDEBAR_FALLBACK_URL,
+      type: 'popup',
+      width: 380,
+      height: 900,
+      focused: true,
+    });
+    if (typeof fallbackWindow.id === 'number') {
+      sidebarFallbackWindowByTab.set(tabId, fallbackWindow.id);
+    }
+    return;
+  }
+
+  await chrome.tabs.create({ url: SIDEBAR_FALLBACK_URL, active: true });
 };
 
 const ensureReadLaterAlarm = async (): Promise<void> => {
@@ -249,6 +313,72 @@ void updateReadLaterBadge();
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm?.name === READ_LATER_ALARM_NAME) {
     void updateReadLaterBadge();
+  }
+});
+
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id) {
+    return;
+  }
+
+  if (!canInjectSidebarIntoUrl(tab.url)) {
+    await toggleSidebarFallbackWindow(tab.id);
+    return;
+  }
+
+  const currentOpen = sidebarStateByTab.get(tab.id) ?? false;
+  const nextOpen = !currentOpen;
+  sidebarStateByTab.set(tab.id, nextOpen);
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, SIDEBAR_TOGGLE_MESSAGE);
+  } catch (error) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content/inject.js'],
+      });
+      await chrome.tabs.sendMessage(tab.id, SIDEBAR_SET_OPEN_MESSAGE(nextOpen));
+    } catch (reinjectionError) {
+      console.debug(
+        '[Link-o-Saurus] Sidebar toggle failed (restricted page or content script unavailable)',
+        reinjectionError ?? error,
+      );
+    }
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') {
+    return;
+  }
+  const shouldBeOpen = sidebarStateByTab.get(tabId) ?? false;
+  if (!shouldBeOpen) {
+    return;
+  }
+
+  void chrome.tabs
+    .sendMessage(tabId, SIDEBAR_SET_OPEN_MESSAGE(true))
+    .catch((error) =>
+      console.debug('[Link-o-Saurus] Sidebar state sync skipped for tab update', error),
+    );
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  sidebarStateByTab.delete(tabId);
+  const fallbackWindowId = sidebarFallbackWindowByTab.get(tabId);
+  if (typeof fallbackWindowId === 'number') {
+    sidebarFallbackWindowByTab.delete(tabId);
+    void chrome.windows.remove(fallbackWindowId).catch(() => undefined);
+  }
+});
+
+chrome.windows.onRemoved.addListener((windowId) => {
+  for (const [tabId, trackedWindowId] of sidebarFallbackWindowByTab.entries()) {
+    if (trackedWindowId === windowId) {
+      sidebarFallbackWindowByTab.delete(tabId);
+      break;
+    }
   }
 });
 
@@ -1046,4 +1176,17 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   })();
 
   return true;
+});
+
+chrome.runtime.onMessage.addListener((message: unknown, sender) => {
+  if (!message || typeof message !== 'object') {
+    return;
+  }
+  const candidate = message as { type?: unknown; open?: unknown };
+  if (candidate.type !== 'sidebar.stateChanged' || typeof candidate.open !== 'boolean') {
+    return;
+  }
+  if (typeof sender.tab?.id === 'number') {
+    sidebarStateByTab.set(sender.tab.id, candidate.open);
+  }
 });
