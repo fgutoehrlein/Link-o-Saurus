@@ -9,7 +9,7 @@ import {
   saveUserSettings,
 } from '../shared/db';
 import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
-import { openDashboard } from '../shared/utils';
+import { openDashboard, openSidePanel } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
 import { suggestForBookmark } from '../shared/ai/bookmark-ai-service';
@@ -58,6 +58,10 @@ type TagInputProps = {
   readonly id: string;
   readonly tags: readonly string[];
   readonly onChange: (next: string[]) => void;
+};
+
+type PopupAppProps = {
+  readonly layout?: 'popup' | 'sidepanel';
 };
 
 const SEARCH_INDEX_LIMIT = 250;
@@ -244,7 +248,7 @@ const BookmarkFavicon: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({
   </span>
 );
 
-const App: FunctionalComponent = () => {
+const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -637,10 +641,17 @@ const App: FunctionalComponent = () => {
   }, []);
 
   return (
-    <div className="popup-app" role="application" aria-label="Link-O-Saurus Popup">
+    <div
+      className={`popup-app${layout === 'sidepanel' ? ' popup-app--sidepanel' : ''}`}
+      role="application"
+      aria-label="Link-O-Saurus Popup"
+    >
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
         <div className="popup-header-actions">
+          <button type="button" className="ghost-button" onClick={() => void openSidePanel()}>
+            Side Panel
+          </button>
           <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
             Dashboard
           </button>

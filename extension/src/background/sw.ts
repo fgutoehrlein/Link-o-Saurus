@@ -15,6 +15,7 @@ import { isBackgroundRequest } from '../shared/messaging';
 import type { SessionPack } from '../shared/types';
 
 const CONTEXT_MENU_ID = 'link-o-saurus-context-save';
+const CONTEXT_MENU_OPEN_SIDE_PANEL_ID = 'link-o-saurus-context-open-side-panel';
 const EXTENSION_NEW_TAB_URL = chrome.runtime.getURL('dashboard.html');
 const CHROME_DEFAULT_NEW_TAB_URLS = new Set([
   'chrome://newtab/',
@@ -138,6 +139,44 @@ const applyNewTabOverride = async (enabled: boolean): Promise<boolean> => {
   return true;
 };
 
+const setSidePanelActionBehavior = async (): Promise<void> => {
+  if (!chrome.sidePanel?.setPanelBehavior) {
+    return;
+  }
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.warn('[Link-o-Saurus] Side panel behavior could not be applied.', error);
+  }
+};
+
+const openSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
+  const sidePanelApi = chrome.sidePanel as typeof chrome.sidePanel & {
+    open?: (options: { windowId: number }) => Promise<void>;
+  };
+
+  if (!sidePanelApi?.open) {
+    return false;
+  }
+
+  const resolvedWindowId =
+    typeof windowId === 'number'
+      ? windowId
+      : (
+          await chrome.windows.getLastFocused({
+            populate: false,
+            windowTypes: ['normal'],
+          })
+        ).id;
+
+  if (typeof resolvedWindowId !== 'number') {
+    return false;
+  }
+
+  await sidePanelApi.open({ windowId: resolvedWindowId });
+  return true;
+};
+
 void (async () => {
   try {
     const settings = await getUserSettings();
@@ -171,10 +210,24 @@ const registerContextMenu = (): void => {
       }
     },
   );
+  chrome.contextMenus.create(
+    {
+      id: CONTEXT_MENU_OPEN_SIDE_PANEL_ID,
+      title: 'Link-o-Saurus Seitenleiste öffnen',
+      contexts: ['action'],
+    },
+    () => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError && !lastError.message?.includes('duplicate id')) {
+        console.error('[Link-o-Saurus] Sidepanel-Kontextmenü konnte nicht erstellt werden:', lastError);
+      }
+    },
+  );
 };
 
 chrome.runtime.onInstalled.addListener(() => {
   registerContextMenu();
+  void setSidePanelActionBehavior();
   void ensureReadLaterAlarm();
   void updateReadLaterBadge();
   console.log('[Link-o-Saurus] extension installed');
@@ -182,12 +235,14 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup?.addListener(() => {
   registerContextMenu();
+  void setSidePanelActionBehavior();
   void ensureReadLaterAlarm();
   void updateReadLaterBadge();
 });
 
 // Ensure the context menu exists when the service worker starts lazily.
 registerContextMenu();
+void setSidePanelActionBehavior();
 void ensureReadLaterAlarm();
 void updateReadLaterBadge();
 
@@ -198,6 +253,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === CONTEXT_MENU_OPEN_SIDE_PANEL_ID) {
+    try {
+      await openSidePanelForWindow(tab?.windowId);
+    } catch (error) {
+      console.error('[Link-o-Saurus] Side panel konnte nicht geöffnet werden.', error);
+    }
+    return;
+  }
+
   if (info.menuItemId !== CONTEXT_MENU_ID || !tab?.id) {
     return;
   }
@@ -250,6 +314,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);
     }
   });
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== 'open-side-panel') {
+    return;
+  }
+  void openSidePanelForWindow().catch((error) => {
+    console.error('[Link-o-Saurus] Shortcut failed to open side panel.', error);
+  });
+});
 
 function presentLinkOSaurusQuickDialog({
   title,
@@ -946,6 +1019,10 @@ const handleBackgroundRequest = async (
     case 'readLater.refreshBadge': {
       const count = await updateReadLaterBadge();
       return { type: 'readLater.refreshBadge.result', count };
+    }
+    case 'sidePanel.open': {
+      const opened = await openSidePanelForWindow(message.windowId);
+      return { type: 'sidePanel.open.result', opened };
     }
     default:
       throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);

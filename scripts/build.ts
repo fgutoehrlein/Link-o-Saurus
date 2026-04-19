@@ -69,6 +69,14 @@ const entries: EntryDefinition[] = [
     name: 'link-o-saurus-dashboard',
     cssFileName: 'dashboard.css',
     html: { title: 'Link-o-Saurus Dashboard', fileName: 'dashboard.html' }
+  },
+  {
+    entry: path.join(srcDir, 'sidepanel/main.tsx'),
+    outSubDir: '',
+    fileName: 'sidepanel.js',
+    name: 'link-o-saurus-sidepanel',
+    cssFileName: 'sidepanel.css',
+    html: { title: 'Link-o-Saurus Side Panel', fileName: 'sidepanel.html' }
   }
 ];
 

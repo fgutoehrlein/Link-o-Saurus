@@ -9,8 +9,10 @@
     "128": "assets/link-o-saurus-icon.png"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": "assets/link-o-saurus-icon.png"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "background": {
     "service_worker": "sw.js",
@@ -20,7 +22,7 @@
     "page": "options.html",
     "open_in_tab": true
   },
-  "permissions": ["storage", "contextMenus", "alarms", "scripting", "activeTab", "bookmarks"],
+  "permissions": ["storage", "contextMenus", "alarms", "scripting", "activeTab", "bookmarks", "sidePanel"],
   "optional_permissions": ["tabs", "windows"],
   "host_permissions": [],
   "web_accessible_resources": [
@@ -28,6 +30,8 @@
       "resources": [
         "dashboard.html",
         "dashboard.js",
+        "sidepanel.html",
+        "sidepanel.js",
         "options.html",
         "options.js",
         "assets/*"
@@ -39,6 +43,12 @@
     "_execute_action": {
       "suggested_key": {
         "default": "Ctrl+Shift+L"
+      }
+    },
+    "open-side-panel": {
+      "description": "Open Link-o-Saurus side panel",
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y"
       }
     }
   }
