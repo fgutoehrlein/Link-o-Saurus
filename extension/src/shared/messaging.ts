@@ -19,7 +19,10 @@ type SessionMessageType =
   | 'session.openSelected'
   | 'session.delete'
   | 'settings.applyNewTab'
-  | 'readLater.refreshBadge';
+  | 'readLater.refreshBadge'
+  | 'sidePanel.open'
+  | 'sidePanel.state.get'
+  | 'sidePanel.state.set';
 
 type SessionResponseType =
   | 'session.saveCurrentWindow.result'
@@ -28,7 +31,16 @@ type SessionResponseType =
   | 'session.delete.result'
   | 'settings.applyNewTab.result'
   | 'readLater.refreshBadge.result'
+  | 'sidePanel.open.result'
+  | 'sidePanel.state.get.result'
+  | 'sidePanel.state.set.result'
   | 'session.error';
+
+export type SidePanelState = {
+  readonly search?: string;
+  readonly boardId?: string;
+  readonly hash?: string;
+};
 
 export type BackgroundRequest =
   | { type: 'session.saveCurrentWindow'; title?: string }
@@ -36,7 +48,10 @@ export type BackgroundRequest =
   | { type: 'session.openSelected'; sessionId: string; tabIndexes: number[] }
   | { type: 'session.delete'; sessionId: string }
   | { type: 'settings.applyNewTab'; enabled: boolean }
-  | { type: 'readLater.refreshBadge' };
+  | { type: 'readLater.refreshBadge' }
+  | { type: 'sidePanel.open'; windowId?: number }
+  | { type: 'sidePanel.state.get' }
+  | { type: 'sidePanel.state.set'; state: SidePanelState };
 
 export type BackgroundResponse =
   | { type: 'session.saveCurrentWindow.result'; session: SessionPack }
@@ -45,6 +60,9 @@ export type BackgroundResponse =
   | { type: 'session.delete.result'; sessionId: string }
   | { type: 'settings.applyNewTab.result'; enabled: boolean }
   | { type: 'readLater.refreshBadge.result'; count: number }
+  | { type: 'sidePanel.open.result'; opened: boolean }
+  | { type: 'sidePanel.state.get.result'; state: SidePanelState | null }
+  | { type: 'sidePanel.state.set.result'; saved: true }
   | { type: 'session.error'; error: string };
 
 export type BackgroundResponseSuccess = Exclude<BackgroundResponse, { type: 'session.error' }>;
@@ -60,6 +78,9 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'session.delete',
   'settings.applyNewTab',
   'readLater.refreshBadge',
+  'sidePanel.open',
+  'sidePanel.state.get',
+  'sidePanel.state.set',
 ]);
 
 const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
@@ -70,6 +91,9 @@ const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
   'session.error',
   'settings.applyNewTab.result',
   'readLater.refreshBadge.result',
+  'sidePanel.open.result',
+  'sidePanel.state.get.result',
+  'sidePanel.state.set.result',
 ]);
 
 export const isBackgroundRequest = (value: unknown): value is BackgroundRequest => {

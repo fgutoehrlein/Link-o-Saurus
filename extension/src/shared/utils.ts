@@ -1,4 +1,5 @@
 import type { Message } from './messaging';
+import { sendBackgroundMessage } from './messaging';
 import { normalizeUrl } from './url';
 
 export const noop = () => {
@@ -322,5 +323,19 @@ export async function openDashboard(params?: DashboardOpenParams): Promise<chrom
     const tab = await createDashboardTab(targetUrl);
     await sendMessageToTab(tab.id, message);
     return tab;
+  }
+}
+
+export async function openSidePanel(windowId?: number): Promise<boolean> {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+    return false;
+  }
+
+  try {
+    const response = await sendBackgroundMessage({ type: 'sidePanel.open', ...(typeof windowId === 'number' ? { windowId } : {}) });
+    return response.type === 'sidePanel.open.result' ? response.opened : false;
+  } catch (error) {
+    console.warn('[Link-o-Saurus] Side panel konnte nicht geöffnet werden.', error);
+    return false;
   }
 }

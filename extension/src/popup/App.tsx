@@ -9,7 +9,7 @@ import {
   saveUserSettings,
 } from '../shared/db';
 import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
-import { openDashboard } from '../shared/utils';
+import { openDashboard, openSidePanel } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
 import { suggestForBookmark } from '../shared/ai/bookmark-ai-service';
@@ -641,6 +641,9 @@ const App: FunctionalComponent = () => {
       <header className="popup-header">
         <h1>Link-O-Saurus</h1>
         <div className="popup-header-actions">
+          <button type="button" className="ghost-button" onClick={() => void openSidePanel()}>
+            Side Panel
+          </button>
           <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
             Dashboard
           </button>
