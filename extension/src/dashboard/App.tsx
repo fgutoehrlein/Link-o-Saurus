@@ -212,6 +212,15 @@ const MoonIcon: FunctionalComponent = () => (
   </svg>
 );
 
+const ViewModeIcon: FunctionalComponent = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <rect x="3.5" y="4.5" width="7" height="7" rx="1.2" />
+    <rect x="13.5" y="4.5" width="7" height="7" rx="1.2" />
+    <rect x="3.5" y="14.5" width="7" height="5" rx="1.2" />
+    <path d="M13.5 15.5h7M13.5 19.5h5.2" />
+  </svg>
+);
+
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
     value: 'list',
@@ -1022,6 +1031,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [isDetailPanelOpen, setDetailPanelOpen] = useState<boolean>(false);
   const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
+  const [isViewModeMenuOpen, setViewModeMenuOpen] = useState<boolean>(false);
   const [sidebarTooltip, setSidebarTooltip] = useState<SidebarTooltipState>({
     label: '',
     x: 0,
@@ -1042,6 +1052,7 @@ const DashboardApp: FunctionalComponent = () => {
   const pendingTileResetFrameRef = useRef<number | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const viewModePopoverRef = useRef<HTMLDivElement | null>(null);
   const manualIconInputRef = useRef<HTMLInputElement | null>(null);
   const lastSelectionRef = useRef<SelectionChange>({ ids: [], anchorIndex: null });
   const hashSyncRef = useRef<boolean>(false);
@@ -1058,6 +1069,32 @@ const DashboardApp: FunctionalComponent = () => {
       delete window.__LINKOSAURUS_DASHBOARD_READY_TIME;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isViewModeMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const root = viewModePopoverRef.current;
+      if (root && event.target instanceof Node && !root.contains(event.target)) {
+        setViewModeMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setViewModeMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isViewModeMenuOpen]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -2824,6 +2861,51 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
         <div className="header-utility-actions" role="group" aria-label="Darstellung und Einstellungen">
+          <div className="header-viewmode-popover" ref={viewModePopoverRef}>
+            <button
+              type="button"
+              className={combineClassNames('header-icon-button', isViewModeMenuOpen && 'active')}
+              onClick={() => setViewModeMenuOpen((value) => !value)}
+              aria-label="Darstellungsoptionen öffnen"
+              title="Darstellungsoptionen"
+              aria-expanded={isViewModeMenuOpen}
+              aria-controls="dashboard-viewmode-menu"
+            >
+              <ViewModeIcon />
+            </button>
+            {isViewModeMenuOpen ? (
+              <div className="header-viewmode-menu" id="dashboard-viewmode-menu" role="menu" aria-label="Darstellungsoptionen">
+                <fieldset className="view-mode-group compact">
+                  <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
+                  {VIEW_MODE_OPTIONS.map((option) => {
+                    const isActive = bookmarkViewMode === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className={combineClassNames('view-toggle-option', isActive && 'active')}
+                        title={option.description}
+                      >
+                        <input
+                          type="radio"
+                          name="bookmark-view-mode"
+                          value={option.value}
+                          checked={isActive}
+                          onChange={() => {
+                            void handleViewModeChange(option.value);
+                            setViewModeMenuOpen(false);
+                          }}
+                        />
+                        <span className="view-toggle-icon">{option.icon}</span>
+                        <span className="view-toggle-copy">
+                          <strong>{option.label}</strong>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </fieldset>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className={combineClassNames('header-icon-button', themeChoice === 'light' && 'active')}
@@ -3105,33 +3187,6 @@ const DashboardApp: FunctionalComponent = () => {
                   <option value="newest">Neueste</option>
                 </select>
               </label>
-              <fieldset className="view-mode-group compact">
-                <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
-                {VIEW_MODE_OPTIONS.map((option) => {
-                  const isActive = bookmarkViewMode === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      className={combineClassNames('view-toggle-option', isActive && 'active')}
-                      title={option.description}
-                    >
-                      <input
-                        type="radio"
-                        name="bookmark-view-mode"
-                        value={option.value}
-                        checked={isActive}
-                        onChange={() => {
-                          void handleViewModeChange(option.value);
-                        }}
-                      />
-                      <span className="view-toggle-icon">{option.icon}</span>
-                      <span className="view-toggle-copy">
-                        <strong>{option.label}</strong>
-                      </span>
-                    </label>
-                  );
-                })}
-              </fieldset>
               <div className={combineClassNames('selection-indicator', selectedIds.length === 0 && 'is-empty')}>
                 <span>{selectedCountLabel}</span>
                 <button
