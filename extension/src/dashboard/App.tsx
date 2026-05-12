@@ -2798,7 +2798,7 @@ const DashboardApp: FunctionalComponent = () => {
 
     return (
       <div className="detail-panel" aria-live="polite">
-        <h2>Aktionen</h2>
+        <div className="header-utility-actions" role="group" aria-label="Theme und Einstellungen">
         <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
         <div className="detail-actions">
           <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
