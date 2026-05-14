@@ -117,26 +117,6 @@ type BatchMoveState = {
   categoryId: string;
 };
 
-type EmptyDetailPanelProps = {
-  readonly onCreateBookmark: () => void;
-  readonly onClearSelection: () => void;
-};
-
-const EmptyDetailPanel: FunctionalComponent<EmptyDetailPanelProps> = ({ onCreateBookmark, onClearSelection }) => (
-  <div className="detail-panel" aria-live="polite">
-    <h2>Aktionen</h2>
-    <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
-    <div className="detail-actions">
-      <button type="button" onClick={onCreateBookmark}>
-        Neues Lesezeichen
-      </button>
-      <button type="button" onClick={onClearSelection}>
-        Auswahl löschen
-      </button>
-    </div>
-  </div>
-);
-
 type ActiveFilterChip = {
   readonly id: string;
   readonly label: string;
@@ -2755,10 +2735,18 @@ const DashboardApp: FunctionalComponent = () => {
                 type="text"
                 value={detailState?.tags ?? ''}
                 onInput={handleDetailChange('tags')}
-      <EmptyDetailPanel
-        onCreateBookmark={() => setDraft({ title: '', url: '', tags: '', notes: '' })}
-        onClearSelection={clearSelection}
-      />
+      <div className="detail-panel" aria-live="polite">
+        <h2>Aktionen</h2>
+        <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
+        <div className="detail-actions">
+          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
+            Neues Lesezeichen
+          </button>
+          <button type="button" onClick={clearSelection}>
+            Auswahl löschen
+          </button>
+        </div>
+      </div>
           <details className="detail-section detail-section-collapsible">
             <summary>Mehr Aktionen</summary>
             <form className="batch-move" onSubmit={handleBatchMove}>
