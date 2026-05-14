@@ -1,5 +1,6 @@
 import { wrap, releaseProxy } from 'comlink';
 import type { Remote } from 'comlink';
+import { h } from 'preact';
 import type { CSSProperties, FunctionalComponent, JSX } from 'preact';
 import {
   useCallback,
@@ -116,6 +117,31 @@ type BatchMoveState = {
   boardId: string;
   categoryId: string;
 };
+
+const renderEmptyDetailPanel = (
+  onCreateBookmark: () => void,
+  onClearSelection: () => void,
+): JSX.Element =>
+  h(
+    'div',
+    { className: 'detail-panel', 'aria-live': 'polite' },
+    h('h2', null, 'Aktionen'),
+    h('p', null, 'Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.'),
+    h(
+      'div',
+      { className: 'detail-actions' },
+      h(
+        'button',
+        { type: 'button', onClick: onCreateBookmark },
+        'Neues Lesezeichen',
+      ),
+      h(
+        'button',
+        { type: 'button', onClick: onClearSelection },
+        'Auswahl löschen',
+      ),
+    ),
+  );
 
 type ActiveFilterChip = {
   readonly id: string;
@@ -2734,19 +2760,9 @@ const DashboardApp: FunctionalComponent = () => {
               <input
                 type="text"
                 value={detailState?.tags ?? ''}
-                onInput={handleDetailChange('tags')}
-      <div className="detail-panel" aria-live="polite">
-        <h2>Aktionen</h2>
-        <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
-        <div className="detail-actions">
-          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
-            Neues Lesezeichen
-          </button>
-          <button type="button" onClick={clearSelection}>
-            Auswahl löschen
-          </button>
-        </div>
-      </div>
+    return renderEmptyDetailPanel(
+      () => setDraft({ title: '', url: '', tags: '', notes: '' }),
+      clearSelection,
           <details className="detail-section detail-section-collapsible">
             <summary>Mehr Aktionen</summary>
             <form className="batch-move" onSubmit={handleBatchMove}>
