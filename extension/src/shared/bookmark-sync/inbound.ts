@@ -2,6 +2,7 @@ import {
   createBoard,
   createBookmark,
   createCategory,
+  getBookmark,
   deleteBoard,
   deleteBookmark,
   deleteCategory,
@@ -172,7 +173,8 @@ const lookupParentPath = async (parentId: string | undefined): Promise<ParentLoo
   const path: string[] = [];
   let depth = 0;
   while (currentId) {
-    const [node] = await api.get(currentId);
+    const nodes: BookmarkTreeNode[] = await api.get(currentId);
+    const node = nodes[0];
     if (!node) {
       break;
     }
