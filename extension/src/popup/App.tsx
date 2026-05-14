@@ -173,14 +173,21 @@ const queryTabs = async (queryInfo: chrome.tabs.QueryInfo): Promise<chrome.tabs.
   });
 };
 
+const hasReadableTabMetadata = (tab: chrome.tabs.Tab | undefined): boolean =>
+  Boolean(tab?.url || tab?.pendingUrl || tab?.title);
+
 const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
   const [currentWindowTab] = await queryTabs({ active: true, currentWindow: true });
-  if (currentWindowTab?.url || currentWindowTab?.title || typeof currentWindowTab?.id === 'number') {
+  if (hasReadableTabMetadata(currentWindowTab)) {
     return currentWindowTab;
   }
 
   const [lastFocusedWindowTab] = await queryTabs({ active: true, lastFocusedWindow: true });
-  return lastFocusedWindowTab;
+  if (hasReadableTabMetadata(lastFocusedWindowTab)) {
+    return lastFocusedWindowTab;
+  }
+
+  return currentWindowTab ?? lastFocusedWindowTab;
 };
 
 const openUrlInNewTab = async (url: string): Promise<void> => {
@@ -304,36 +311,13 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
       if (!activeTab) {
         return;
       }
-      let resolvedUrl = typeof activeTab.url === 'string' ? activeTab.url.trim() : '';
-      let resolvedTitle = typeof activeTab.title === 'string' ? activeTab.title.trim() : '';
+      const resolvedUrl = (activeTab.url ?? activeTab.pendingUrl ?? '').trim();
+      const resolvedTitle = activeTab.title?.trim() ?? '';
 
-      if (typeof activeTab.id === 'number' && chrome.scripting?.executeScript) {
-        try {
-          const [injection] = await chrome.scripting.executeScript({
-            target: { tabId: activeTab.id },
-            func: () => {
-              const content = document.body?.innerText?.slice(0, 1800) ?? '';
-              const selected = window.getSelection?.()?.toString().slice(0, 500) ?? '';
-              return {
-                pageTitle: document.title?.trim() ?? '',
-                pageUrl: window.location.href,
-                metaDescription:
-                  document.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? '',
-                selectedText: selected || content,
-              };
-            },
-          });
-          if (injection?.result) {
-            const signals = injection.result as PageSignals;
-            resolvedTitle = resolvedTitle || signals.pageTitle?.trim() || '';
-            resolvedUrl = resolvedUrl || signals.pageUrl?.trim() || '';
-            setPageSignals(signals);
-          }
-        } catch (error) {
-          console.warn('[Link-o-Saurus] Aktive Seite konnte nicht ausgelesen werden.', error);
-        }
-      }
-
+      setPageSignals({
+        pageTitle: resolvedTitle,
+        pageUrl: resolvedUrl,
+      });
       if (resolvedTitle) {
         setTitle(resolvedTitle);
       }
