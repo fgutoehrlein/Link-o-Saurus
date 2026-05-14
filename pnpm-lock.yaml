@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fluentui/svg-icons':
+        specifier: ^1.1.326
+        version: 1.1.326
       '@fortawesome/fontawesome-free':
         specifier: ^7.2.0
         version: 7.2.0
@@ -480,6 +483,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fluentui/svg-icons@1.1.326':
+    resolution: {integrity: sha512-jjT8THbBQdL+NGyaE31HJ5yDeOKc9WEk+3r1JQnAsb20+02eoOlX0/ImNIf5j8HjLDPZet/3FzYmwuE9bnsWDg==}
 
   '@fortawesome/fontawesome-free@7.2.0':
     resolution: {integrity: sha512-3DguDv/oUE+7vjMeTSOjCSG+KeawgVQOHrKRnvUuqYh1mfArrh7s+s8hXW3e4RerBA1+Wh+hBqf8sJNpqNrBWg==}
@@ -1563,6 +1569,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.12':
     optional: true
+
+  '@fluentui/svg-icons@1.1.326': {}
 
   '@fortawesome/fontawesome-free@7.2.0': {}
 

@@ -1,3 +1,4 @@
+import brightnessHighFilledIcon from '@fluentui/svg-icons/icons/brightness_high_24_filled.svg';
 import { wrap, releaseProxy } from 'comlink';
 import type { Remote } from 'comlink';
 import type { CSSProperties, FunctionalComponent, JSX } from 'preact';
@@ -199,10 +200,17 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly style?: 'regular' | 'solid' }> = ({
-  name,
-  style = 'solid',
-}) => <i className={`fa-${style} ${name}`} aria-hidden="true" />;
+const FontAwesomeIcon: FunctionalComponent<{ readonly name: string }> = ({ name }) => (
+  <i className={`fa-solid ${name}`} aria-hidden="true" />
+);
+
+const LibraryMaskIcon: FunctionalComponent<{ readonly iconUrl: string }> = ({ iconUrl }) => (
+  <span
+    className="library-mask-icon"
+    style={{ '--icon-url': `url(${iconUrl})` } as CSSProperties}
+    aria-hidden="true"
+  />
+);
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
@@ -2825,7 +2833,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Light-Mode aktivieren"
             title="Light-Mode"
           >
-            <FontAwesomeIcon name="fa-sun" style="regular" />
+            <LibraryMaskIcon iconUrl={brightnessHighFilledIcon} />
           </button>
           <button
             type="button"
