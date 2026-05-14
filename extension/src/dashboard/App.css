@@ -124,7 +124,8 @@ body {
   stroke-linejoin: round;
 }
 
-.header-icon-button .fa-solid {
+.header-icon-button .fa-solid,
+.header-icon-button .fa-regular {
   font-size: 1rem;
   line-height: 1;
 }

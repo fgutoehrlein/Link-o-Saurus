@@ -199,9 +199,10 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const FontAwesomeIcon: FunctionalComponent<{ readonly name: string }> = ({ name }) => (
-  <i className={`fa-solid ${name}`} aria-hidden="true" />
-);
+const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly style?: 'regular' | 'solid' }> = ({
+  name,
+  style = 'solid',
+}) => <i className={`fa-${style} ${name}`} aria-hidden="true" />;
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
@@ -2824,7 +2825,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Light-Mode aktivieren"
             title="Light-Mode"
           >
-            <FontAwesomeIcon name="fa-sun" />
+            <FontAwesomeIcon name="fa-sun" style="regular" />
           </button>
           <button
             type="button"
