@@ -9,6 +9,7 @@ import {
   saveUserSettings,
 } from '../shared/db';
 import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
+import { sendBackgroundMessage } from '../shared/messaging';
 import { openDashboard, openSidePanel } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
@@ -190,6 +191,41 @@ const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
   return currentWindowTab ?? lastFocusedWindowTab;
 };
 
+type QuickSaveTabMetadata = {
+  readonly title?: string;
+  readonly url?: string;
+};
+
+const queryQuickSaveTabFromBackground = async (): Promise<QuickSaveTabMetadata | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+    return undefined;
+  }
+
+  try {
+    const response = await sendBackgroundMessage({ type: 'quickSave.getActiveTab' });
+    return response.type === 'quickSave.getActiveTab.result' ? response.tab : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveQuickSaveMetadata = async (): Promise<QuickSaveTabMetadata | undefined> => {
+  const backgroundTab = await queryQuickSaveTabFromBackground();
+  if (backgroundTab?.url || backgroundTab?.title) {
+    return backgroundTab;
+  }
+
+  const activeTab = await queryActiveTab();
+  if (!activeTab) {
+    return undefined;
+  }
+
+  return {
+    title: activeTab.title?.trim() ?? '',
+    url: (activeTab.url ?? activeTab.pendingUrl ?? '').trim(),
+  };
+};
+
 const openUrlInNewTab = async (url: string): Promise<void> => {
   if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
     await new Promise<void>((resolve, reject) => {
@@ -307,11 +343,11 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
 
   const loadQuickSaveFromTab = useCallback(async () => {
     try {
-      const activeTab = await queryActiveTab();
+      const activeTab = await resolveQuickSaveMetadata();
       if (!activeTab) {
         return;
       }
-      const resolvedUrl = (activeTab.url ?? activeTab.pendingUrl ?? '').trim();
+      const resolvedUrl = activeTab.url?.trim() ?? '';
       const resolvedTitle = activeTab.title?.trim() ?? '';
 
       setPageSignals({

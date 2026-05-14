@@ -26,6 +26,21 @@ const FIREFOX_DEFAULT_NEW_TAB_URLS = new Set(['about:newtab', 'about:home']);
 let newTabOverrideActive = false;
 let newTabListenerRegistered = false;
 
+type QuickSaveTabMetadata = {
+  readonly title?: string;
+  readonly url?: string;
+  readonly favIconUrl?: string;
+};
+
+const QUICK_SAVE_TAB_CACHE_TTL_MS = 60_000;
+
+let lastQuickSaveTab:
+  | {
+      readonly capturedAt: number;
+      readonly tab: QuickSaveTabMetadata;
+    }
+  | undefined;
+
 console.log('[Link-o-Saurus] background service worker initialized');
 
 const READ_LATER_ALARM_NAME = 'link-o-saurus:read-later-refresh';
@@ -90,6 +105,73 @@ const isSystemNewTabUrl = (url: string | undefined): boolean => {
   return CHROME_DEFAULT_NEW_TAB_URLS.has(url);
 };
 
+const toQuickSaveTabMetadata = (tab: chrome.tabs.Tab | undefined): QuickSaveTabMetadata | undefined => {
+  const url = (tab?.url ?? tab?.pendingUrl ?? '').trim();
+  const title = tab?.title?.trim() ?? '';
+  const favIconUrl = tab?.favIconUrl?.trim() ?? '';
+
+  if (!url && !title) {
+    return undefined;
+  }
+
+  return {
+    ...(title ? { title } : {}),
+    ...(url ? { url } : {}),
+    ...(favIconUrl ? { favIconUrl } : {}),
+  };
+};
+
+const rememberQuickSaveTab = (tab: chrome.tabs.Tab | undefined): QuickSaveTabMetadata | undefined => {
+  const metadata = toQuickSaveTabMetadata(tab);
+  if (!metadata) {
+    return undefined;
+  }
+
+  lastQuickSaveTab = {
+    capturedAt: Date.now(),
+    tab: metadata,
+  };
+  return metadata;
+};
+
+const getCachedQuickSaveTab = (): QuickSaveTabMetadata | undefined => {
+  if (!lastQuickSaveTab) {
+    return undefined;
+  }
+  if (Date.now() - lastQuickSaveTab.capturedAt > QUICK_SAVE_TAB_CACHE_TTL_MS) {
+    lastQuickSaveTab = undefined;
+    return undefined;
+  }
+  return lastQuickSaveTab.tab;
+};
+
+const queryTabsForQuickSave = async (queryInfo: chrome.tabs.QueryInfo): Promise<chrome.tabs.Tab[]> => {
+  if (!chrome.tabs?.query) {
+    return [];
+  }
+  try {
+    return await chrome.tabs.query(queryInfo);
+  } catch {
+    return [];
+  }
+};
+
+const resolveQuickSaveTab = async (): Promise<QuickSaveTabMetadata | undefined> => {
+  const cached = getCachedQuickSaveTab();
+  if (cached) {
+    return cached;
+  }
+
+  const [currentWindowTab] = await queryTabsForQuickSave({ active: true, currentWindow: true });
+  const currentWindowMetadata = rememberQuickSaveTab(currentWindowTab);
+  if (currentWindowMetadata?.url || currentWindowMetadata?.title) {
+    return currentWindowMetadata;
+  }
+
+  const [lastFocusedWindowTab] = await queryTabsForQuickSave({ active: true, lastFocusedWindow: true });
+  return rememberQuickSaveTab(lastFocusedWindowTab);
+};
+
 const handleTabCreatedForOverride = (tab: chrome.tabs.Tab): void => {
   if (!newTabOverrideActive || !tab.id) {
     return;
@@ -144,7 +226,7 @@ const setSidePanelActionBehavior = async (): Promise<void> => {
     return;
   }
   try {
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
   } catch (error) {
     console.warn('[Link-o-Saurus] Side panel behavior could not be applied.', error);
   }
@@ -254,6 +336,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_OPEN_SIDE_PANEL_ID) {
+    rememberQuickSaveTab(tab);
     try {
       await openSidePanelForWindow(tab?.windowId);
     } catch (error) {
@@ -314,6 +397,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);
     }
   });
+
+chrome.action?.onClicked?.addListener((tab) => {
+  rememberQuickSaveTab(tab);
+  void openSidePanelForWindow(tab.windowId).catch((error) => {
+    console.error('[Link-o-Saurus] Extension action failed to open side panel.', error);
+  });
+});
 
 chrome.commands.onCommand.addListener((command) => {
   if (command !== 'open-side-panel') {
@@ -973,6 +1063,10 @@ const handleBackgroundRequest = async (
   message: BackgroundRequest,
 ): Promise<BackgroundResponse> => {
   switch (message.type) {
+    case 'quickSave.getActiveTab': {
+      const tab = await resolveQuickSaveTab();
+      return { type: 'quickSave.getActiveTab.result', ...(tab ? { tab } : {}) };
+    }
     case 'session.saveCurrentWindow': {
       const session = await saveCurrentWindowAsSession(message.title);
       return { type: 'session.saveCurrentWindow.result', session };
