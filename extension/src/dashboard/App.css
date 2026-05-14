@@ -89,6 +89,17 @@ body {
   gap: 0.45rem;
 }
 
+.header-theme-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.22rem;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-light) 82%, var(--accent) 6%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
 .header-icon-button {
   width: 2.5rem;
   height: 2.5rem;
@@ -124,7 +135,8 @@ body {
   stroke-linejoin: round;
 }
 
-.header-icon-button .fa-gear {
+.header-icon-button .fa-solid,
+.header-icon-button .fa-regular {
   font-size: 1rem;
   line-height: 1;
 }
@@ -150,6 +162,12 @@ body {
 [data-theme='dark'] .header-brand {
   border-color: var(--border-dark);
   background: rgba(15, 23, 42, 0.8);
+}
+
+[data-theme='dark'] .header-theme-toggle-group {
+  border-color: var(--border-dark);
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.86) 88%, var(--accent-dark) 12%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 [data-theme='dark'] .header-icon-button {

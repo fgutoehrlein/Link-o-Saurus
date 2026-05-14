@@ -199,18 +199,10 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const SunIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <circle cx="12" cy="12" r="4.5" />
-    <path d="M12 2.5v2.4M12 19.1v2.4M4.93 4.93l1.7 1.7M17.37 17.37l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.93 19.07l1.7-1.7M17.37 6.63l1.7-1.7" />
-  </svg>
-);
-
-const MoonIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M14.6 2.8a9.3 9.3 0 1 0 6.6 12.8 8.2 8.2 0 0 1-6.6-12.8Z" />
-  </svg>
-);
+const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly style?: 'regular' | 'solid' }> = ({
+  name,
+  style = 'solid',
+}) => <i className={`fa-${style} ${name}`} aria-hidden="true" />;
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
   {
@@ -2824,28 +2816,30 @@ const DashboardApp: FunctionalComponent = () => {
           </label>
         </div>
         <div className="header-utility-actions" role="group" aria-label="Darstellung und Einstellungen">
-          <button
-            type="button"
-            className={combineClassNames('header-icon-button', themeChoice === 'light' && 'active')}
-            onClick={() => {
-              void handleThemeChange('light');
-            }}
-            aria-label="Light-Mode aktivieren"
-            title="Light-Mode"
-          >
-            <SunIcon />
-          </button>
-          <button
-            type="button"
-            className={combineClassNames('header-icon-button', themeChoice === 'dark' && 'active')}
-            onClick={() => {
-              void handleThemeChange('dark');
-            }}
-            aria-label="Dark-Mode aktivieren"
-            title="Dark-Mode"
-          >
-            <MoonIcon />
-          </button>
+          <div className="header-theme-toggle-group" role="group" aria-label="Theme auswählen">
+            <button
+              type="button"
+              className={combineClassNames('header-icon-button', themeChoice === 'light' && 'active')}
+              onClick={() => {
+                void handleThemeChange('light');
+              }}
+              aria-label="Light-Mode aktivieren"
+              title="Light-Mode"
+            >
+              <FontAwesomeIcon name="fa-sun" style="regular" />
+            </button>
+            <button
+              type="button"
+              className={combineClassNames('header-icon-button', themeChoice === 'dark' && 'active')}
+              onClick={() => {
+                void handleThemeChange('dark');
+              }}
+              aria-label="Dark-Mode aktivieren"
+              title="Dark-Mode"
+            >
+              <FontAwesomeIcon name="fa-moon" />
+            </button>
+          </div>
           <button
             type="button"
             className="header-icon-button"
@@ -2853,7 +2847,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Einstellungen öffnen"
             title="Einstellungen"
           >
-            <i className="fa-solid fa-gear" aria-hidden="true" />
+            <FontAwesomeIcon name="fa-gear" />
           </button>
         </div>
       </header>
