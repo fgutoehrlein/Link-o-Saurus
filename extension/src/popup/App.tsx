@@ -9,6 +9,7 @@ import {
   saveUserSettings,
 } from '../shared/db';
 import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
+import { sendBackgroundMessage } from '../shared/messaging';
 import { openDashboard, openSidePanel } from '../shared/utils';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
@@ -42,6 +43,7 @@ type StatusMessage = {
 
 type PageSignals = {
   readonly pageTitle?: string;
+  readonly pageUrl?: string;
   readonly metaDescription?: string;
   readonly selectedText?: string;
 };
@@ -155,20 +157,73 @@ const buildSearchEntry = (bookmark: Bookmark): SearchEntry => {
   };
 };
 
-const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
+const queryTabs = async (queryInfo: chrome.tabs.QueryInfo): Promise<chrome.tabs.Tab[]> => {
   if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
-    return undefined;
+    return [];
   }
-  return new Promise<chrome.tabs.Tab | undefined>((resolve, reject) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+
+  return new Promise<chrome.tabs.Tab[]>((resolve, reject) => {
+    chrome.tabs.query(queryInfo, (tabs) => {
       const error = chrome.runtime?.lastError;
       if (error) {
         reject(new Error(error.message));
         return;
       }
-      resolve(tabs[0]);
+      resolve(tabs ?? []);
     });
   });
+};
+
+const hasReadableTabMetadata = (tab: chrome.tabs.Tab | undefined): boolean =>
+  Boolean(tab?.url || tab?.pendingUrl || tab?.title);
+
+const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
+  const [currentWindowTab] = await queryTabs({ active: true, currentWindow: true });
+  if (hasReadableTabMetadata(currentWindowTab)) {
+    return currentWindowTab;
+  }
+
+  const [lastFocusedWindowTab] = await queryTabs({ active: true, lastFocusedWindow: true });
+  if (hasReadableTabMetadata(lastFocusedWindowTab)) {
+    return lastFocusedWindowTab;
+  }
+
+  return currentWindowTab ?? lastFocusedWindowTab;
+};
+
+type QuickSaveTabMetadata = {
+  readonly title?: string;
+  readonly url?: string;
+};
+
+const queryQuickSaveTabFromBackground = async (): Promise<QuickSaveTabMetadata | undefined> => {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+    return undefined;
+  }
+
+  try {
+    const response = await sendBackgroundMessage({ type: 'quickSave.getActiveTab' });
+    return response.type === 'quickSave.getActiveTab.result' ? response.tab : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveQuickSaveMetadata = async (): Promise<QuickSaveTabMetadata | undefined> => {
+  const backgroundTab = await queryQuickSaveTabFromBackground();
+  if (backgroundTab?.url || backgroundTab?.title) {
+    return backgroundTab;
+  }
+
+  const activeTab = await queryActiveTab();
+  if (!activeTab) {
+    return undefined;
+  }
+
+  return {
+    title: activeTab.title?.trim() ?? '',
+    url: (activeTab.url ?? activeTab.pendingUrl ?? '').trim(),
+  };
 };
 
 const openUrlInNewTab = async (url: string): Promise<void> => {
@@ -288,35 +343,24 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
 
   const loadQuickSaveFromTab = useCallback(async () => {
     try {
-      const activeTab = await queryActiveTab();
+      const activeTab = await resolveQuickSaveMetadata();
       if (!activeTab) {
         return;
       }
-      if (typeof activeTab.title === 'string' && activeTab.title.trim()) {
-        setTitle(activeTab.title.trim());
+      const resolvedUrl = activeTab.url?.trim() ?? '';
+      const resolvedTitle = activeTab.title?.trim() ?? '';
+
+      setPageSignals({
+        pageTitle: resolvedTitle,
+        pageUrl: resolvedUrl,
+      });
+      if (resolvedTitle) {
+        setTitle(resolvedTitle);
       }
-      if (typeof activeTab.url === 'string' && activeTab.url.trim()) {
-        setUrl(activeTab.url.trim());
+      if (resolvedUrl) {
+        setUrl(resolvedUrl);
       }
-      if (typeof activeTab.id === 'number' && chrome.scripting?.executeScript) {
-        const [injection] = await chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          func: () => {
-            const content = document.body?.innerText?.slice(0, 1800) ?? '';
-            const selected = window.getSelection?.()?.toString().slice(0, 500) ?? '';
-            return {
-              pageTitle: document.title?.trim() ?? '',
-              metaDescription:
-                document.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? '',
-              selectedText: selected || content,
-            };
-          },
-        });
-        if (injection?.result) {
-          setPageSignals(injection.result as PageSignals);
-        }
-      }
-      setQuickSaveReady(Boolean(activeTab.url));
+      setQuickSaveReady(Boolean(resolvedUrl));
     } catch {
       setQuickSaveReady(false);
     }

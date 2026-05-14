@@ -151,19 +151,19 @@ test.describe('Link-O-Saurus extension', () => {
   });
 
   test.afterAll(async () => {
-    await context.close();
+    await context?.close();
   });
 
   test('supports quick add, recent list, and mini search workflows', async () => {
     const page = await context.newPage();
     page.on('console', (message: ConsoleMessage) => {
-      console.log(`[popup console] ${message.type()}: ${message.text()}`);
+      console.log(`[sidepanel console] ${message.type()}: ${message.text()}`);
     });
     page.on('pageerror', (error: Error) => {
-      console.error('[popup error]', error);
+      console.error('[sidepanel error]', error);
     });
 
-    await openPopup(page, extensionId);
+    await openSidePanel(page, extensionId);
     await page.waitForFunction(() => window.__LINKOSAURUS_POPUP_READY === true);
 
     const uniqueSuffix = Date.now();
@@ -174,7 +174,6 @@ test.describe('Link-O-Saurus extension', () => {
     await page.getByLabel('Titel').fill(newBookmarkTitle);
     await page.getByLabel('URL').fill(newBookmarkUrl);
     const saveButton = page.getByRole('button', { name: 'Bookmark speichern' });
-    await page.getByRole('button', { name: 'Neu laden' }).click();
     const isSaveEnabled = await saveButton.isEnabled();
     if (isSaveEnabled) {
       await saveButton.click();
@@ -218,12 +217,12 @@ test.describe('Link-O-Saurus extension', () => {
     await page.close();
   });
 
-  test('meets popup and dashboard performance budgets', async () => {
-    const popupPage = await context.newPage();
-    await openPopup(popupPage, extensionId);
-    await popupPage.waitForLoadState('load');
+  test('meets side panel and dashboard performance budgets', async () => {
+    const sidePanelPage = await context.newPage();
+    await openSidePanel(sidePanelPage, extensionId);
+    await sidePanelPage.waitForLoadState('load');
 
-    const popupMetrics = await popupPage.evaluate(() => {
+    const sidePanelMetrics = await sidePanelPage.evaluate(() => {
       const nav = performance.getEntriesByType('navigation')[0] as
         | PerformanceNavigationTiming
         | undefined;
@@ -234,8 +233,8 @@ test.describe('Link-O-Saurus extension', () => {
       };
     });
 
-    expect(popupMetrics.domInteractive).toBeLessThanOrEqual(100);
-    expect(popupMetrics.readyTime).toBeLessThanOrEqual(100);
+    expect(sidePanelMetrics.domInteractive).toBeLessThanOrEqual(100);
+    expect(sidePanelMetrics.readyTime).toBeLessThanOrEqual(100);
 
     const newTabPage = await context.newPage();
     await newTabPage.goto(`chrome-extension://${extensionId}/dashboard.html?e2e=1`);
@@ -255,21 +254,21 @@ test.describe('Link-O-Saurus extension', () => {
     expect(newTabMetrics.domInteractive).toBeLessThanOrEqual(300);
     expect(newTabMetrics.readyTime).toBeLessThanOrEqual(300);
 
-    await popupPage.close();
+    await sidePanelPage.close();
     await newTabPage.close();
   });
 
   test('toggles the tag sidebar between expanded and collapsed states', async () => {
-    const popupHarnessPage = await context.newPage();
-    await openPopup(popupHarnessPage, extensionId);
-    await popupHarnessPage.waitForFunction(
+    const sidePanelHarnessPage = await context.newPage();
+    await openSidePanel(sidePanelHarnessPage, extensionId);
+    await sidePanelHarnessPage.waitForFunction(
       () =>
         window.__LINKOSAURUS_POPUP_READY === true &&
         typeof window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark === 'function',
     );
 
     const tagNames = Array.from({ length: 5 }, (_value, index) => `tag-toggle-${index + 1}`);
-    await popupHarnessPage.evaluate((tags) => {
+    await sidePanelHarnessPage.evaluate((tags) => {
       return Promise.all(
         tags.map((tag, index) =>
           window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark({
@@ -280,7 +279,7 @@ test.describe('Link-O-Saurus extension', () => {
         ),
       );
     }, tagNames);
-    await popupHarnessPage.close();
+    await sidePanelHarnessPage.close();
 
     const dashboardPage = await context.newPage();
     await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html?e2e=1`);
@@ -308,19 +307,19 @@ test.describe('Link-O-Saurus extension', () => {
   });
 
   test('supports dashboard deep links, bulk import, and session workflows', async () => {
-    const popupHarnessPage = await context.newPage();
-    await openPopup(popupHarnessPage, extensionId);
-    await popupHarnessPage.waitForFunction(
+    const sidePanelHarnessPage = await context.newPage();
+    await openSidePanel(sidePanelHarnessPage, extensionId);
+    await sidePanelHarnessPage.waitForFunction(
       () => window.__LINKOSAURUS_POPUP_READY === true && typeof window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark === 'function',
     );
 
     const deepLinkTitle = `Deep Link ${Date.now()}`;
     const deepLinkUrl = `https://deeplink.example/${Date.now()}`;
-    await popupHarnessPage.evaluate(
+    await sidePanelHarnessPage.evaluate(
       ([title, url]) => window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark({ title, url }),
       [deepLinkTitle, deepLinkUrl],
     );
-    await popupHarnessPage.close();
+    await sidePanelHarnessPage.close();
 
     const dashboardPage = await context.newPage();
     await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html#/?q=${encodeURIComponent('Deep Link')}`);
@@ -378,8 +377,8 @@ test.describe('Link-O-Saurus extension', () => {
   });
 });
 
-async function openPopup(page: Page, extensionId: string): Promise<void> {
-  await page.goto(`chrome-extension://${extensionId}/popup.html?e2e=1`);
+async function openSidePanel(page: Page, extensionId: string): Promise<void> {
+  await page.goto(`chrome-extension://${extensionId}/sidepanel.html?e2e=1`);
   await page.waitForLoadState('domcontentloaded');
 }
 

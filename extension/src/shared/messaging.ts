@@ -13,7 +13,14 @@ declare global {
   ) => Promise<BackgroundResponseSuccess>) | undefined;
 }
 
+type QuickSaveTabMetadata = {
+  readonly title?: string;
+  readonly url?: string;
+  readonly favIconUrl?: string;
+};
+
 type SessionMessageType =
+  | 'quickSave.getActiveTab'
   | 'session.saveCurrentWindow'
   | 'session.openAll'
   | 'session.openSelected'
@@ -23,6 +30,7 @@ type SessionMessageType =
   | 'sidePanel.open';
 
 type SessionResponseType =
+  | 'quickSave.getActiveTab.result'
   | 'session.saveCurrentWindow.result'
   | 'session.openAll.result'
   | 'session.openSelected.result'
@@ -33,6 +41,7 @@ type SessionResponseType =
   | 'session.error';
 
 export type BackgroundRequest =
+  | { type: 'quickSave.getActiveTab' }
   | { type: 'session.saveCurrentWindow'; title?: string }
   | { type: 'session.openAll'; sessionId: string }
   | { type: 'session.openSelected'; sessionId: string; tabIndexes: number[] }
@@ -42,6 +51,7 @@ export type BackgroundRequest =
   | { type: 'sidePanel.open'; windowId?: number };
 
 export type BackgroundResponse =
+  | { type: 'quickSave.getActiveTab.result'; tab?: QuickSaveTabMetadata }
   | { type: 'session.saveCurrentWindow.result'; session: SessionPack }
   | { type: 'session.openAll.result'; opened: number }
   | { type: 'session.openSelected.result'; opened: number }
@@ -58,6 +68,7 @@ export type Message =
   | { type: 'FOCUS_SEARCH'; payload: { q: string } };
 
 const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
+  'quickSave.getActiveTab',
   'session.saveCurrentWindow',
   'session.openAll',
   'session.openSelected',
@@ -68,6 +79,7 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
 ]);
 
 const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
+  'quickSave.getActiveTab.result',
   'session.saveCurrentWindow.result',
   'session.openAll.result',
   'session.openSelected.result',
