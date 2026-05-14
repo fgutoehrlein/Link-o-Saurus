@@ -42,6 +42,7 @@ type StatusMessage = {
 
 type PageSignals = {
   readonly pageTitle?: string;
+  readonly pageUrl?: string;
   readonly metaDescription?: string;
   readonly selectedText?: string;
 };
@@ -155,20 +156,31 @@ const buildSearchEntry = (bookmark: Bookmark): SearchEntry => {
   };
 };
 
-const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
+const queryTabs = async (queryInfo: chrome.tabs.QueryInfo): Promise<chrome.tabs.Tab[]> => {
   if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
-    return undefined;
+    return [];
   }
-  return new Promise<chrome.tabs.Tab | undefined>((resolve, reject) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+
+  return new Promise<chrome.tabs.Tab[]>((resolve, reject) => {
+    chrome.tabs.query(queryInfo, (tabs) => {
       const error = chrome.runtime?.lastError;
       if (error) {
         reject(new Error(error.message));
         return;
       }
-      resolve(tabs[0]);
+      resolve(tabs ?? []);
     });
   });
+};
+
+const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
+  const [currentWindowTab] = await queryTabs({ active: true, currentWindow: true });
+  if (currentWindowTab?.url || currentWindowTab?.title || typeof currentWindowTab?.id === 'number') {
+    return currentWindowTab;
+  }
+
+  const [lastFocusedWindowTab] = await queryTabs({ active: true, lastFocusedWindow: true });
+  return lastFocusedWindowTab;
 };
 
 const openUrlInNewTab = async (url: string): Promise<void> => {
@@ -292,31 +304,43 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
       if (!activeTab) {
         return;
       }
-      if (typeof activeTab.title === 'string' && activeTab.title.trim()) {
-        setTitle(activeTab.title.trim());
-      }
-      if (typeof activeTab.url === 'string' && activeTab.url.trim()) {
-        setUrl(activeTab.url.trim());
-      }
+      let resolvedUrl = typeof activeTab.url === 'string' ? activeTab.url.trim() : '';
+      let resolvedTitle = typeof activeTab.title === 'string' ? activeTab.title.trim() : '';
+
       if (typeof activeTab.id === 'number' && chrome.scripting?.executeScript) {
-        const [injection] = await chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          func: () => {
-            const content = document.body?.innerText?.slice(0, 1800) ?? '';
-            const selected = window.getSelection?.()?.toString().slice(0, 500) ?? '';
-            return {
-              pageTitle: document.title?.trim() ?? '',
-              metaDescription:
-                document.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? '',
-              selectedText: selected || content,
-            };
-          },
-        });
-        if (injection?.result) {
-          setPageSignals(injection.result as PageSignals);
+        try {
+          const [injection] = await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => {
+              const content = document.body?.innerText?.slice(0, 1800) ?? '';
+              const selected = window.getSelection?.()?.toString().slice(0, 500) ?? '';
+              return {
+                pageTitle: document.title?.trim() ?? '',
+                pageUrl: window.location.href,
+                metaDescription:
+                  document.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() ?? '',
+                selectedText: selected || content,
+              };
+            },
+          });
+          if (injection?.result) {
+            const signals = injection.result as PageSignals;
+            resolvedTitle = resolvedTitle || signals.pageTitle?.trim() || '';
+            resolvedUrl = resolvedUrl || signals.pageUrl?.trim() || '';
+            setPageSignals(signals);
+          }
+        } catch (error) {
+          console.warn('[Link-o-Saurus] Aktive Seite konnte nicht ausgelesen werden.', error);
         }
       }
-      setQuickSaveReady(Boolean(activeTab.url));
+
+      if (resolvedTitle) {
+        setTitle(resolvedTitle);
+      }
+      if (resolvedUrl) {
+        setUrl(resolvedUrl);
+      }
+      setQuickSaveReady(Boolean(resolvedUrl));
     } catch {
       setQuickSaveReady(false);
     }
