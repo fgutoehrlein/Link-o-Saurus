@@ -199,17 +199,8 @@ const SearchIcon: FunctionalComponent = () => (
   </svg>
 );
 
-const SunIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <circle cx="12" cy="12" r="4.5" />
-    <path d="M12 2.5v2.4M12 19.1v2.4M4.93 4.93l1.7 1.7M17.37 17.37l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.93 19.07l1.7-1.7M17.37 6.63l1.7-1.7" />
-  </svg>
-);
-
-const MoonIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M14.6 2.8a9.3 9.3 0 1 0 6.6 12.8 8.2 8.2 0 0 1-6.6-12.8Z" />
-  </svg>
+const FontAwesomeIcon: FunctionalComponent<{ readonly name: string }> = ({ name }) => (
+  <i className={`fa-solid ${name}`} aria-hidden="true" />
 );
 
 const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
@@ -2833,7 +2824,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Light-Mode aktivieren"
             title="Light-Mode"
           >
-            <SunIcon />
+            <FontAwesomeIcon name="fa-sun" />
           </button>
           <button
             type="button"
@@ -2844,7 +2835,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Dark-Mode aktivieren"
             title="Dark-Mode"
           >
-            <MoonIcon />
+            <FontAwesomeIcon name="fa-moon" />
           </button>
           <button
             type="button"
@@ -2853,7 +2844,7 @@ const DashboardApp: FunctionalComponent = () => {
             aria-label="Einstellungen öffnen"
             title="Einstellungen"
           >
-            <i className="fa-solid fa-gear" aria-hidden="true" />
+            <FontAwesomeIcon name="fa-gear" />
           </button>
         </div>
       </header>
