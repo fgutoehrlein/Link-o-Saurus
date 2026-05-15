@@ -1,0 +1,1 @@
+export { clearDatabase } from './index';

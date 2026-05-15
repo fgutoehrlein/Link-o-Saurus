@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDatabase, createBoard, createCategory, createBookmark, LinkOSaurusDB } from './db';
-import { exportToJson, importFromJson, importFromNetscapeHtml } from './import-export';
+import { createDatabase, LinkOSaurusDB } from './db/database';
+import { createBoard } from './db/repositories/boards';
+import { createCategory } from './db/repositories/categories';
+import { createBookmark } from './db/repositories/bookmarks';
+import { exportToJson } from './import-export/export/export-json';
+import { importFromJson } from './import-export/import/import-json';
+import { importFromNetscapeHtml } from './import-export/import/import-html';
 import type { Bookmark } from './types';
 
 const uniqueDbName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;

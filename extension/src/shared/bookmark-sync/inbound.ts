@@ -5,6 +5,7 @@ import {
   deleteBoard,
   deleteBookmark,
   deleteCategory,
+  getBookmark,
   updateBookmark,
   listBoards,
   listCategories,
@@ -172,7 +173,7 @@ const lookupParentPath = async (parentId: string | undefined): Promise<ParentLoo
   const path: string[] = [];
   let depth = 0;
   while (currentId) {
-    const [node] = await api.get(currentId);
+    const [node]: chrome.bookmarks.BookmarkTreeNode[] = await api.get(currentId);
     if (!node) {
       break;
     }

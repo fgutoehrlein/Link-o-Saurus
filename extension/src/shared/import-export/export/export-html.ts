@@ -1,0 +1,1 @@
+export { exportData } from '../index';
