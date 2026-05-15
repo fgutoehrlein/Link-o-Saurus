@@ -7,15 +7,8 @@ import {
   useMemo,
   useRef,
   useState,
-  useLayoutEffect,
 } from 'preact/hooks';
-import {
-  VariableSizeList,
-  type VariableSizeListProps,
-  type ListChildComponentProps,
-} from 'react-window';
 import type { VariableSizeList as VariableSizeListHandle } from 'react-window';
-import type { ComponentType as ReactComponentType } from 'react';
 import ImportExportWorkerFactory from '../shared/import-export-worker?worker&module';
 import SearchWorkerFactory from '../shared/search-worker?worker&module';
 import {
@@ -43,7 +36,7 @@ import type {
   UserSettings,
 } from '../shared/types';
 import type { ImportExportWorkerApi } from '../shared/import-export-worker';
-import type { ExportFormat, ImportProgress } from '../shared/import-export';
+import type { ExportFormat } from '../shared/import-export';
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
@@ -54,11 +47,9 @@ import {
   getTagFilterMode,
   matchesTagFilter,
   normalizeTagFilterState,
-  parseTagFilterFromParams,
   toggleTagFilter,
   type TagFilterMode,
   type TagFilterState,
-  writeTagFilterToParams,
 } from '../shared/tag-filter';
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
@@ -69,6 +60,30 @@ import {
   toGridRows,
   type BookmarkViewMode,
 } from './view-mode';
+import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData } from './types';
+import {
+  BookmarkRowRenderer,
+  BookmarkTileRowRenderer,
+  ImportExportDialog,
+  SessionDialog,
+  TileVirtualList,
+  VirtualList,
+  type ImportDialogState,
+  type SessionDialogState,
+} from './components';
+import {
+  ROUTE_MAX_SEARCH_LENGTH,
+  ROUTE_MAX_TITLE_LENGTH,
+  parseInitialRoute,
+  sanitizeRouteTagsList,
+  sanitizeRouteText,
+  sanitizeRouteUrl,
+  updateRouteHash,
+  type RouteSnapshot,
+} from './utils/dashboard-route';
+import { createDragPayload, parseDragPayload } from './utils/drag';
+import { getFaviconUrl } from './utils/favicon';
+import { combineClassNames, formatTimestamp } from './utils/formatting';
 import linkOSaurusIcon from '../../assets/link-o-saurus-icon.png';
 
 declare global {
@@ -77,32 +92,6 @@ declare global {
     __LINKOSAURUS_DASHBOARD_READY_TIME?: number;
   }
 }
-
-type BookmarkListEntry = {
-  readonly id: string;
-  readonly bookmark: Bookmark;
-  readonly category?: Category;
-  readonly board?: Board;
-};
-
-type BookmarkListData = {
-  readonly ids: readonly string[];
-  readonly bookmarkById: Map<string, BookmarkListEntry>;
-  readonly setRowHeight: (rowIndex: number, height: number) => void;
-  readonly selected: Set<string>;
-  readonly onRowClick: (event: MouseEvent | KeyboardEvent, id: string) => void;
-  readonly onOpenBookmark: (bookmark: Bookmark) => void;
-  readonly onRowContextMenu: (event: MouseEvent, id: string) => void;
-  readonly onDragStart: (event: DragEvent, id: string) => void;
-  readonly activeTagFilters: TagFilterState;
-  readonly onTagFilterAction: (event: MouseEvent | KeyboardEvent, tag: string, mode: TagFilterMode) => void;
-};
-
-type BookmarkTileListData = Omit<BookmarkListData, 'ids' | 'setRowHeight'> & {
-  readonly rows: readonly (readonly string[])[];
-  readonly columnCount: number;
-  readonly setRowHeight: (rowIndex: number, height: number) => void;
-};
 
 type DraftBookmark = {
   title: string;
@@ -124,17 +113,6 @@ type ActiveFilterChip = {
   readonly remove: () => void;
 };
 
-type ImportDialogState = {
-  busy: boolean;
-  progress: ImportProgress | null;
-  error: string | null;
-};
-
-type SessionDialogState = {
-  busy: boolean;
-  error: string | null;
-};
-
 type SidebarTooltipState = {
   readonly label: string;
   readonly x: number;
@@ -147,18 +125,6 @@ type ThemeChoice = UserSettings['theme'];
 type SelectionChange = {
   ids: readonly string[];
   anchorIndex: number | null;
-};
-
-type RouteSnapshot = {
-  readonly search: string;
-  readonly boardId: string;
-  readonly sortMode?: BookmarkSortMode;
-  readonly includeTags: string[];
-  readonly excludeTags: string[];
-  readonly isNew: boolean;
-  readonly newTitle: string;
-  readonly newUrl: string;
-  readonly newTags: string;
 };
 
 const DEFAULT_ITEM_HEIGHT = 116;
@@ -221,73 +187,6 @@ const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
 const BOARD_ICON_SET = ['🗂️', '📁', '📌', '📚', '🧭', '🧩', '⭐'] as const;
 const MIN_RESIZE_WIDTH = 320;
 
-const ROUTE_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/gu;
-const ROUTE_MAX_SEARCH_LENGTH = 512;
-const ROUTE_MAX_TITLE_LENGTH = 256;
-const ROUTE_MAX_TAG_LENGTH = 64;
-const ROUTE_MAX_TAG_COUNT = 32;
-
-const sanitizeRouteText = (value: string, limit: number): string =>
-  value.replace(ROUTE_CONTROL_CHARACTERS, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit);
-
-const sanitizeRouteTagsList = (values: readonly string[]): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const sanitized = sanitizeRouteText(value, ROUTE_MAX_TAG_LENGTH);
-    if (!sanitized) {
-      continue;
-    }
-    const key = sanitized.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(sanitized);
-    if (result.length >= ROUTE_MAX_TAG_COUNT) {
-      break;
-    }
-  }
-  return result;
-};
-
-const sanitizeRouteTagsParam = (values: readonly string[]): string[] => {
-  const flattened: string[] = [];
-  values.forEach((value) => {
-    value
-      .split(',')
-      .map((part) => part)
-      .forEach((part) => flattened.push(part));
-  });
-  return sanitizeRouteTagsList(flattened);
-};
-
-const sanitizeRouteUrl = (value: string): string => {
-  const trimmed = value.replace(ROUTE_CONTROL_CHARACTERS, '').trim();
-  if (!trimmed) {
-    return '';
-  }
-  const normalized =
-    normalizeUrl(trimmed, { removeHash: false, sortQueryParameters: false }) ??
-    normalizeUrl(`https://${trimmed}`, { removeHash: false, sortQueryParameters: false });
-  return normalized ?? '';
-};
-
-const formatTimestamp = (timestamp: number | undefined): string => {
-  if (!timestamp) {
-    return '';
-  }
-  try {
-    const formatter = new Intl.DateTimeFormat(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-    return formatter.format(timestamp);
-  } catch {
-    return new Date(timestamp).toLocaleString();
-  }
-};
-
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -302,18 +201,6 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
     reader.onerror = () => reject(reader.error ?? new Error('File konnte nicht gelesen werden.'));
     reader.readAsDataURL(file);
   });
-
-const getFaviconUrl = (url: string): string | null => {
-  if (!url) {
-    return null;
-  }
-  try {
-    const parsed = new URL(url);
-    return new URL('/favicon.ico', parsed.origin).toString();
-  } catch {
-    return null;
-  }
-};
 
 const waitForTabFavicon = async (tabId: number, timeoutMs = 10_000): Promise<string | undefined> => {
   if (typeof chrome === 'undefined' || !chrome.tabs?.onUpdated) {
@@ -351,121 +238,11 @@ const waitForTabFavicon = async (tabId: number, timeoutMs = 10_000): Promise<str
   });
 };
 
-const createDragPayload = (ids: readonly string[]): string => {
-  return JSON.stringify({ ids: Array.from(new Set(ids)) });
-};
-
-const parseDragPayload = (event: DragEvent): string[] => {
-  const payload = event.dataTransfer?.getData('application/x-linkosaurus-bookmark');
-  if (!payload) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(payload) as { ids?: unknown };
-    if (Array.isArray(parsed.ids)) {
-      return parsed.ids.map((id) => String(id));
-    }
-  } catch (error) {
-    console.warn('Failed to parse drag payload', error);
-  }
-  return [];
-};
-
 const generateId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return `bookmark-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-};
-
-const combineClassNames = (...parts: Array<string | false | null | undefined>): string =>
-  parts.filter(Boolean).join(' ');
-
-const parseInitialRoute = (): RouteSnapshot => {
-  const params = new URLSearchParams(window.location.search);
-
-  const hash = window.location.hash;
-  if (hash.includes('?')) {
-    const hashParams = new URLSearchParams(hash.replace(/^#\/?/, ''));
-    hashParams.forEach((value, key) => {
-      params.set(key, value);
-    });
-  }
-
-  const search = sanitizeRouteText(params.get('q') ?? '', ROUTE_MAX_SEARCH_LENGTH);
-  const boardId = params.get('board')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
-  const sortParam = (params.get('sort') ?? '').toLowerCase();
-  const sortMode: BookmarkSortMode | undefined =
-    sortParam === 'relevance' || sortParam === 'alphabetical' || sortParam === 'newest'
-      ? sortParam
-      : undefined;
-  const parsedTagFilters = parseTagFilterFromParams(params);
-  const includeTags = sanitizeRouteTagsParam(parsedTagFilters.include);
-  const excludeTags = sanitizeRouteTagsParam(parsedTagFilters.exclude);
-  const isNew = params.get('new') === '1';
-  const newTitle = sanitizeRouteText(params.get('title') ?? '', ROUTE_MAX_TITLE_LENGTH);
-  const newUrl = sanitizeRouteUrl(params.get('url') ?? '');
-  const tags = sanitizeRouteTagsParam(params.getAll('tags'));
-  const newTags = tags.join(', ');
-
-  const normalizedFilters = normalizeTagFilterState({
-    include: includeTags,
-    exclude: excludeTags,
-  });
-
-  return {
-    search,
-    boardId,
-    sortMode,
-    includeTags: normalizedFilters.include,
-    excludeTags: normalizedFilters.exclude,
-    isNew,
-    newTitle,
-    newUrl,
-    newTags,
-  };
-};
-
-const updateRouteHash = (snapshot: RouteSnapshot): void => {
-  const params = new URLSearchParams();
-  if (snapshot.search) {
-    params.set('q', snapshot.search);
-  }
-  if (snapshot.boardId) {
-    params.set('board', snapshot.boardId);
-  }
-  if (snapshot.sortMode) {
-    params.set('sort', snapshot.sortMode);
-  }
-  writeTagFilterToParams(params, {
-    include: snapshot.includeTags,
-    exclude: snapshot.excludeTags,
-  });
-  if (snapshot.isNew) {
-    params.set('new', '1');
-    if (snapshot.newTitle) {
-      params.set('title', snapshot.newTitle);
-    }
-    if (snapshot.newUrl) {
-      params.set('url', snapshot.newUrl);
-    }
-    if (snapshot.newTags) {
-      const serializedTags = sanitizeRouteTagsList(
-        snapshot.newTags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-      );
-      if (serializedTags.length > 0) {
-        params.set('tags', serializedTags.join(','));
-      }
-    }
-  }
-  const serialized = params.toString();
-  const nextHash = serialized ? `#/?${serialized}` : '#/';
-  if (window.location.hash !== nextHash) {
-    window.location.hash = nextHash;
-  }
 };
 
 const containsTabsPermission = async (): Promise<boolean> => {
@@ -603,378 +380,6 @@ const refreshBookmarkFavicon = async (bookmark: Bookmark): Promise<string | unde
     }
   }
 };
-
-const getBookmarkInitial = (bookmark: Bookmark): string => {
-  const source = bookmark.title?.trim() || bookmark.url;
-  return source ? source.charAt(0).toUpperCase() : '🔖';
-};
-
-const getBookmarkDomain = (url: string): string => {
-  try {
-    return new URL(url).hostname.replace(/^www\./u, '');
-  } catch {
-    return url;
-  }
-};
-
-const BookmarkAvatar: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({ bookmark }) => {
-  const [hasImageError, setHasImageError] = useState(false);
-  const favicon = bookmark.faviconUrl?.trim();
-  const showFavicon = Boolean(favicon) && !hasImageError;
-  return (
-    <div className="bookmark-avatar" aria-hidden="true">
-      {showFavicon ? (
-        <img
-          src={favicon}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setHasImageError(true)}
-        />
-      ) : (
-        <span className="bookmark-avatar-fallback">{getBookmarkInitial(bookmark)}</span>
-      )}
-    </div>
-  );
-};
-
-type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
-
-const VirtualList = VariableSizeList as unknown as FunctionalComponent<
-  VariableSizeListProps<BookmarkListData>
->;
-const TileVirtualList = VariableSizeList as unknown as FunctionalComponent<
-  VariableSizeListProps<BookmarkTileListData>
->;
-
-const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
-  const id = data.ids[index];
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const element = rowRef.current;
-    if (!element) {
-      return undefined;
-    }
-    const measureHeight = (entry?: ResizeObserverEntry): number => {
-      const natural = Math.max(
-        element.scrollHeight,
-        element.offsetHeight,
-        element.getBoundingClientRect().height,
-      );
-      if (entry?.borderBoxSize) {
-        const borderBox = Array.isArray(entry.borderBoxSize)
-          ? entry.borderBoxSize[0]
-          : entry.borderBoxSize;
-        if (borderBox) {
-          return Math.max(borderBox.blockSize, natural);
-        }
-      }
-      return natural;
-    };
-    data.setRowHeight(index, measureHeight());
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-    const observer = new ResizeObserver((entries) => {
-      if (!entries.length) {
-        return;
-      }
-      data.setRowHeight(index, measureHeight(entries[0]));
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [data, index, id]);
-
-  const entry = data.bookmarkById.get(id);
-  if (!entry) {
-    return <div style={style as JSX.CSSProperties} className="bookmark-row placeholder" />;
-  }
-  const { bookmark, board, category } = entry;
-  const isSelected = data.selected.has(id);
-  const domain = getBookmarkDomain(bookmark.url);
-  const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
-  const handleClick = (event: MouseEvent) => {
-    data.onRowClick(event, id);
-  };
-
-  const handleDoubleClick = (event: MouseEvent) => {
-    event.preventDefault();
-    data.onOpenBookmark(bookmark);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      data.onRowClick(event, id);
-    }
-  };
-
-  const handleContextMenu = (event: MouseEvent) => {
-    data.onRowContextMenu(event, id);
-  };
-
-  const handleDragStart = (event: DragEvent) => {
-    data.onDragStart(event, id);
-  };
-
-  return (
-    <div
-      role="option"
-      aria-selected={isSelected}
-      tabIndex={0}
-      className={combineClassNames('bookmark-row', isSelected && 'selected')}
-      ref={rowRef}
-      style={style as JSX.CSSProperties}
-      onClick={handleClick}
-      onDblClick={handleDoubleClick}
-      onKeyDown={handleKeyDown}
-      onContextMenu={handleContextMenu}
-      draggable
-      onDragStart={handleDragStart}
-    >
-      <BookmarkAvatar bookmark={bookmark} />
-      <div className="bookmark-content">
-        <div className="bookmark-title" title={bookmark.title || bookmark.url}>
-          {bookmark.title || bookmark.url}
-        </div>
-        <div className="bookmark-meta">
-          <span className="bookmark-domain" title={bookmark.url}>
-            {domain}
-          </span>
-          {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
-        </div>
-        {bookmark.tags.length > 0 ? (
-          <ul className="bookmark-tags" aria-label="Tags">
-            {bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS).map((tag) => {
-              const mode = getTagFilterMode(data.activeTagFilters, tag);
-              return (
-                <li key={`${bookmark.id}-${tag}`}>
-                  <button
-                    type="button"
-                    className={combineClassNames(
-                      'bookmark-tag-chip',
-                      mode === 'include' && 'is-include',
-                      mode === 'exclude' && 'is-exclude',
-                    )}
-                    aria-label={`${tag} ${mode === 'exclude' ? 'ausgeschlossen' : mode === 'include' ? 'eingeschlossen' : 'filtern'}`}
-                    title="Klick: einschließen · Rechtsklick oder Taste N: ausschließen"
-                    onClick={(event) => data.onTagFilterAction(event, tag, 'include')}
-                    onContextMenu={(event) => {
-                      applyNegativeTagContextAction(event, () => {
-                        data.onTagFilterAction(event, tag, 'exclude');
-                      });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key.toLowerCase() === 'n') {
-                        data.onTagFilterAction(event, tag, 'exclude');
-                      }
-                    }}
-                  >
-                    {tag}
-                  </button>
-                </li>
-              );
-            })}
-            {bookmark.tags.length > MAX_VISIBLE_BOOKMARK_TAGS ? (
-              <li
-                className="bookmark-tag-overflow"
-                aria-label={`${bookmark.tags.length - MAX_VISIBLE_BOOKMARK_TAGS} weitere Tags`}
-              >
-                +{bookmark.tags.length - MAX_VISIBLE_BOOKMARK_TAGS}
-              </li>
-            ) : null}
-          </ul>
-        ) : null}
-      </div>
-      <div className="bookmark-updated" title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
-        <span className="bookmark-updated-label">Aktualisiert</span>
-        <span>{formatTimestamp(bookmark.updatedAt)}</span>
-      </div>
-    </div>
-  );
-};
-
-const BookmarkRowRenderer = BookmarkRow as unknown as ReactComponentType<
-  ListChildComponentProps<BookmarkListData>
->;
-
-type BookmarkTileRowProps = ListChildComponentProps<BookmarkTileListData>;
-
-const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Element => {
-  const row = data.rows[index] ?? [];
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const element = rowRef.current;
-    if (!element) {
-      return undefined;
-    }
-    const measureTilesHeight = (): number => {
-      const computed = window.getComputedStyle(element);
-      const paddingTop = Number.parseFloat(computed.paddingTop) || 0;
-      const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
-      let maxTileHeight = 0;
-      element.querySelectorAll<HTMLElement>('.bookmark-tile').forEach((tile) => {
-        const tileHeight = Math.max(tile.scrollHeight, tile.offsetHeight);
-        maxTileHeight = Math.max(maxTileHeight, tileHeight);
-      });
-      return Math.ceil(maxTileHeight + paddingTop + paddingBottom);
-    };
-    const measureHeight = (entry?: ResizeObserverEntry): number => {
-      const natural = measureTilesHeight();
-      if (entry?.borderBoxSize) {
-        const borderBox = Array.isArray(entry.borderBoxSize)
-          ? entry.borderBoxSize[0]
-          : entry.borderBoxSize;
-        if (borderBox) {
-          return natural;
-        }
-      }
-      return natural;
-    };
-    data.setRowHeight(index, measureHeight());
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-    const observer = new ResizeObserver((entries) => {
-      if (!entries.length) {
-        return;
-      }
-      data.setRowHeight(index, measureHeight(entries[0]));
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [data, index, row]);
-
-  return (
-    <div
-      className="bookmark-tile-row"
-      ref={rowRef}
-      style={
-        {
-          ...(style as JSX.CSSProperties),
-          '--tile-columns': String(data.columnCount),
-        } as JSX.CSSProperties
-      }
-    >
-      {row.map((id) => {
-        const entry = data.bookmarkById.get(id);
-        if (!entry) {
-          return null;
-        }
-        const { bookmark, board, category } = entry;
-        const isSelected = data.selected.has(id);
-        const domain = getBookmarkDomain(bookmark.url);
-        const detailText = bookmark.notes?.trim() || domain;
-        const visibleTags = bookmark.tags.slice(0, MAX_VISIBLE_BOOKMARK_TAGS);
-        const hiddenTagCount = Math.max(0, bookmark.tags.length - visibleTags.length);
-        const tileTitleStyle = {
-          '--tile-title-line-clamp': String(MAX_VISIBLE_TILE_TITLE_LINES),
-        } as CSSProperties;
-        const tileDetailStyle = {
-          '--tile-detail-line-clamp': String(MAX_VISIBLE_TILE_DETAIL_LINES),
-        } as CSSProperties;
-        const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
-        const updatedLabel = formatTimestamp(bookmark.updatedAt);
-        return (
-          <article
-            key={id}
-            role="option"
-            aria-selected={isSelected}
-            tabIndex={0}
-            className={combineClassNames('bookmark-tile', isSelected && 'selected')}
-            onClick={(event) => data.onRowClick(event, id)}
-            onDblClick={(event) => {
-              event.preventDefault();
-              data.onOpenBookmark(bookmark);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                data.onRowClick(event, id);
-              }
-            }}
-            onContextMenu={(event) => data.onRowContextMenu(event, id)}
-            draggable
-            onDragStart={(event) => data.onDragStart(event, id)}
-            title={secondaryMeta || undefined}
-          >
-            <div className="bookmark-tile-head">
-              <BookmarkAvatar bookmark={bookmark} />
-              <div className="bookmark-tile-main">
-                <h3 className="bookmark-title" style={tileTitleStyle} title={bookmark.title || bookmark.url}>
-                  {bookmark.title || bookmark.url}
-                </h3>
-              </div>
-            </div>
-            <p
-              className="bookmark-detail-text"
-              style={tileDetailStyle}
-              title={bookmark.notes?.trim() ? bookmark.notes : bookmark.url}
-            >
-              {detailText}
-            </p>
-            <div className="bookmark-tile-meta">
-              <span className="bookmark-domain" title={bookmark.url}>
-                {domain}
-              </span>
-              {secondaryMeta ? <span className="bookmark-secondary-meta">{secondaryMeta}</span> : null}
-              <span className="bookmark-updated" title={`Zuletzt aktualisiert ${updatedLabel}`}>
-                {updatedLabel}
-              </span>
-            </div>
-            {bookmark.tags.length > 0 ? (
-              <ul className="bookmark-tags" aria-label="Tags">
-                {visibleTags.map((tag) => {
-                  const mode = getTagFilterMode(data.activeTagFilters, tag);
-                  return (
-                    <li key={`${bookmark.id}-${tag}`}>
-                      <button
-                        type="button"
-                        className={combineClassNames(
-                          'bookmark-tag-chip',
-                          mode === 'include' && 'is-include',
-                          mode === 'exclude' && 'is-exclude',
-                        )}
-                        aria-label={`${tag} ${mode === 'exclude' ? 'ausgeschlossen' : mode === 'include' ? 'eingeschlossen' : 'filtern'}`}
-                        title="Klick: einschließen · Rechtsklick oder Taste N: ausschließen"
-                        onClick={(event) => data.onTagFilterAction(event, tag, 'include')}
-                        onContextMenu={(event) => {
-                          applyNegativeTagContextAction(event, () => {
-                            data.onTagFilterAction(event, tag, 'exclude');
-                          });
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key.toLowerCase() === 'n') {
-                            data.onTagFilterAction(event, tag, 'exclude');
-                          }
-                        }}
-                      >
-                        {tag}
-                      </button>
-                    </li>
-                  );
-                })}
-                {hiddenTagCount > 0 ? (
-                  <li className="bookmark-tag-overflow" aria-label={`${hiddenTagCount} weitere Tags`}>
-                    +{hiddenTagCount}
-                  </li>
-                ) : null}
-              </ul>
-            ) : (
-              <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
-            )}
-          </article>
-        );
-      })}
-    </div>
-  );
-};
-
-const BookmarkTileRowRenderer = BookmarkTileRow as unknown as ReactComponentType<
-  ListChildComponentProps<BookmarkTileListData>
->;
 
 const DashboardApp: FunctionalComponent = () => {
   const [boards, setBoards] = useState<readonly Board[]>([]);
@@ -3293,102 +2698,25 @@ const DashboardApp: FunctionalComponent = () => {
       </div>
 
       {isImportDialogOpen ? (
-        <div className="modal" role="dialog" aria-modal="true">
-          <div className="modal-content">
-            <header>
-              <h2>Import &amp; Export</h2>
-              <button type="button" aria-label="Schließen" onClick={() => setImportDialogOpen(false)}>
-                ×
-              </button>
-            </header>
-            <div className="modal-body">
-              <p>Importiere HTML- oder JSON-Dateien. Vorgang läuft im Worker ohne UI-Blockade.</p>
-              <div className="modal-actions">
-                <label className="file-button">
-                  HTML importieren
-                  <input
-                    type="file"
-                    accept=".html,.htm,text/html"
-                    disabled={importState.busy}
-                    onChange={(event) => {
-                      const file = (event.currentTarget as HTMLInputElement).files?.[0];
-                      if (file) {
-                        void handleImportFile(file, 'html');
-                      }
-                    }}
-                  />
-                </label>
-                <label className="file-button">
-                  JSON importieren
-                  <input
-                    type="file"
-                    accept="application/json,.json"
-                    disabled={importState.busy}
-                    onChange={(event) => {
-                      const file = (event.currentTarget as HTMLInputElement).files?.[0];
-                      if (file) {
-                        void handleImportFile(file, 'json');
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              <div className="modal-actions">
-                <button type="button" onClick={() => handleExport('html')} disabled={importState.busy}>
-                  Als HTML exportieren
-                </button>
-                <button type="button" onClick={() => handleExport('json')} disabled={importState.busy}>
-                  Als JSON exportieren
-                </button>
-              </div>
-              {importState.busy ? <p>Import/Export läuft…</p> : null}
-              {importState.progress ? (
-                <pre className="progress">{JSON.stringify(importState.progress, null, 2)}</pre>
-              ) : null}
-              {importState.error ? <p className="error">{importState.error}</p> : null}
-            </div>
-          </div>
-        </div>
+        <ImportExportDialog
+          state={importState}
+          onClose={() => setImportDialogOpen(false)}
+          onImportFile={(file, format) => {
+            void handleImportFile(file, format);
+          }}
+          onExport={(format) => handleExport(format)}
+        />
       ) : null}
 
       {isSessionDialogOpen ? (
-        <div className="modal" role="dialog" aria-modal="true">
-          <div className="modal-content">
-            <header>
-              <h2>Sessions</h2>
-              <button type="button" aria-label="Schließen" onClick={() => setSessionDialogOpen(false)}>
-                ×
-              </button>
-            </header>
-            <div className="modal-body">
-              <p>Speichere deine aktuellen Tabs oder öffne gespeicherte Sessions.</p>
-              <div className="modal-actions">
-                <button type="button" onClick={handleSessionSave} disabled={sessionState.busy}>
-                  Aktuelle Tabs speichern
-                </button>
-              </div>
-              {sessionState.error ? <p className="error">{sessionState.error}</p> : null}
-              <ul className="session-list">
-                {sessions.map((session) => (
-                  <li key={session.id}>
-                    <div>
-                      <strong>{session.title}</strong>
-                      <span>{session.tabs.length} Tabs</span>
-                    </div>
-                    <div className="session-actions">
-                      <button type="button" onClick={() => handleSessionOpen(session)} disabled={sessionState.busy}>
-                        Öffnen
-                      </button>
-                      <button type="button" onClick={() => handleSessionDelete(session)} disabled={sessionState.busy}>
-                        Löschen
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
+        <SessionDialog
+          sessions={sessions}
+          state={sessionState}
+          onClose={() => setSessionDialogOpen(false)}
+          onSave={handleSessionSave}
+          onOpen={handleSessionOpen}
+          onDelete={handleSessionDelete}
+        />
       ) : null}
     </div>
   );
