@@ -37,7 +37,7 @@ const FIELD_WEIGHTS: Record<string, number> = {
   notes: 1,
 };
 
-const simpleEncode = (value: string): string => value.trim().toLowerCase();
+const simpleEncode = (value: string): string[] => [value.trim().toLowerCase()].filter(Boolean);
 
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();

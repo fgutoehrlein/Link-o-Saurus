@@ -1,0 +1,1 @@
+export { importFromNetscapeHtml } from '../index';
