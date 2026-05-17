@@ -47,6 +47,20 @@ Link-O-Saurus ist eine Offline-first Browser-Erweiterung für das Sammeln, Struk
 └─ vitest.config.ts        # Testkonfiguration
 ```
 
+
+## Graphify-Codegraph
+
+Link-O-Saurus enthält ein lokales Graphify-Skript, das Importbeziehungen, Top-Level-Symbole und grobe Codebereiche aus TypeScript/TSX-, CSS-, JSON-, Markdown- und Asset-Dateien indexiert. Es ist als Orientierungshilfe für Agenten gedacht, damit Änderungen zuerst über den Codegraphen eingegrenzt werden können, bevor große Dateien wie das Dashboard vollständig gelesen werden müssen.
+
+Nützliche Befehle:
+
+- `pnpm graphify` – generiert `.graphify/graph.json` und `.graphify/graph.md` neu. Der Ausgabeordner ist ignoriert und wird nicht eingecheckt.
+- `pnpm graphify -- summary` – schreibt eine Markdown-Zusammenfassung in stdout, ohne Dateien zu erzeugen.
+- `pnpm graphify -- explain extension/src/shared/db.ts` – zeigt Imports, abhängige Dateien und Top-Level-Deklarationen für eine Datei.
+- `pnpm graphify -- impacted extension/src/shared/db.ts` – listet direkte und transitive Abhängige einer geänderten Datei.
+
+Der Graph normalisiert Vite-Worker-Imports wie `?worker&module`, verfolgt nur relative Repo-Kanten und meldet nicht auflösbare relative Imports. Externe npm-Pakete bleiben bewusst außerhalb des Graphen, weil sie bereits über `package.json` und Lockfiles nachvollziehbar sind.
+
 ## Entwicklung & Setup
 
 1. Repository klonen und Abhängigkeiten installieren:
