@@ -1,20 +1,16 @@
 import { FunctionalComponent } from 'preact';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import {
-  createBookmark,
-  getUserSettings,
-  listCategories,
-  listBookmarks,
-  recordBookmarkVisit,
-  saveUserSettings,
-} from '../shared/db';
-import type { Bookmark, BookmarkSortMode, Category } from '../shared/types';
-import { sendBackgroundMessage } from '../shared/messaging';
-import { openDashboard, openSidePanel } from '../shared/utils';
+import { useCallback, useEffect, useState } from 'preact/hooks';
+import { listCategories } from '../shared/db';
+import type { Bookmark, Category } from '../shared/types';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
-import { sortBookmarks } from '../shared/bookmark-sort';
-import { suggestForBookmark } from '../shared/ai/bookmark-ai-service';
-import type { AiSuggestionResult } from '../shared/ai/types';
+import { PopupHeader } from './components/PopupHeader';
+import { PopupFooter } from './components/PopupFooter';
+import { QuickAccessList } from './components/QuickAccessList';
+import { QuickSaveForm } from './components/QuickSaveForm';
+import { openUrlInNewTab } from './hooks/useActiveTab';
+import { useAiSuggestions } from './hooks/useAiSuggestions';
+import { usePopupSearch } from './hooks/usePopupSearch';
+import { useQuickSave } from './hooks/useQuickSave';
 import './App.css';
 
 type PopupHarness = {
@@ -36,299 +32,27 @@ declare global {
   }
 }
 
-type StatusMessage = {
-  readonly tone: 'success' | 'error' | 'info' | 'warning';
-  readonly text: string;
-};
-
-type PageSignals = {
-  readonly pageTitle?: string;
-  readonly pageUrl?: string;
-  readonly metaDescription?: string;
-  readonly selectedText?: string;
-};
-
-type SearchEntry = {
-  readonly bookmark: Bookmark;
-  readonly normalizedUrl: string;
-  readonly normalizedTitle: string;
-  readonly domain: string;
-  readonly tokens: readonly string[];
-};
-
-type TagInputProps = {
-  readonly id: string;
-  readonly tags: readonly string[];
-  readonly onChange: (next: string[]) => void;
-};
-
 type PopupAppProps = {
   readonly layout?: 'popup' | 'sidepanel';
 };
 
-const SEARCH_INDEX_LIMIT = 250;
-const SEARCH_RESULTS_LIMIT = 12;
-const QUICK_ACCESS_LIMIT = 8;
-
-const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
-
-const normalizeUrlForComparison = (raw: string): string => {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return '';
-  }
-  try {
-    return new URL(trimmed).toString();
-  } catch {
-    try {
-      return new URL(`https://${trimmed}`).toString();
-    } catch {
-      return trimmed;
-    }
-  }
-};
-
-const normalizeUrlForSaving = (raw: string): string => {
-  const normalized = normalizeUrlForComparison(raw);
-  if (!normalized) {
-    throw new Error('Bitte eine gültige URL eingeben.');
-  }
-  try {
-    // eslint-disable-next-line no-new
-    new URL(normalized);
-  } catch {
-    throw new Error('Bitte eine gültige URL eingeben.');
-  }
-  return normalized;
-};
-
-const extractDomain = (url: string): string => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return '';
-  }
-};
-
-const getFaviconUrl = (url: string): string | null => {
-  try {
-    const parsed = new URL(url);
-    return new URL('/favicon.ico', parsed.origin).toString();
-  } catch {
-    return null;
-  }
-};
-
-const getBookmarkInitial = (bookmark: Bookmark): string => {
-  const source = normalizeWhitespace(bookmark.title || extractDomain(bookmark.url) || bookmark.url);
-  const firstChar = source.charAt(0);
-  return firstChar ? firstChar.toUpperCase() : '🔖';
-};
-
-const createTokenSet = (source: string): Set<string> => {
-  const tokens = new Set<string>();
-  source
-    .split(/[^\p{L}\p{N}]+/u)
-    .map((token) => token.toLowerCase())
-    .filter(Boolean)
-    .forEach((token) => tokens.add(token));
-  return tokens;
-};
-
-const buildSearchEntry = (bookmark: Bookmark): SearchEntry => {
-  const normalizedUrl = normalizeUrlForComparison(bookmark.url).toLowerCase();
-  const normalizedTitle = bookmark.title.trim().toLowerCase();
-  const domain = extractDomain(bookmark.url);
-
-  const tokenSet = new Set<string>();
-  const collect = (value: string) => createTokenSet(value).forEach((token) => tokenSet.add(token));
-
-  collect(bookmark.title);
-  collect(domain);
-  collect(bookmark.url);
-  bookmark.tags.forEach((tag) => collect(tag));
-
-  return {
-    bookmark,
-    normalizedUrl,
-    normalizedTitle,
-    domain,
-    tokens: Array.from(tokenSet),
-  };
-};
-
-const queryTabs = async (queryInfo: chrome.tabs.QueryInfo): Promise<chrome.tabs.Tab[]> => {
-  if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
-    return [];
-  }
-
-  return new Promise<chrome.tabs.Tab[]>((resolve, reject) => {
-    chrome.tabs.query(queryInfo, (tabs) => {
-      const error = chrome.runtime?.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(tabs ?? []);
-    });
-  });
-};
-
-const hasReadableTabMetadata = (tab: chrome.tabs.Tab | undefined): boolean =>
-  Boolean(tab?.url || tab?.pendingUrl || tab?.title);
-
-const queryActiveTab = async (): Promise<chrome.tabs.Tab | undefined> => {
-  const [currentWindowTab] = await queryTabs({ active: true, currentWindow: true });
-  if (hasReadableTabMetadata(currentWindowTab)) {
-    return currentWindowTab;
-  }
-
-  const [lastFocusedWindowTab] = await queryTabs({ active: true, lastFocusedWindow: true });
-  if (hasReadableTabMetadata(lastFocusedWindowTab)) {
-    return lastFocusedWindowTab;
-  }
-
-  return currentWindowTab ?? lastFocusedWindowTab;
-};
-
-type QuickSaveTabMetadata = {
-  readonly title?: string;
-  readonly url?: string;
-};
-
-const queryQuickSaveTabFromBackground = async (): Promise<QuickSaveTabMetadata | undefined> => {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-    return undefined;
-  }
-
-  try {
-    const response = await sendBackgroundMessage({ type: 'quickSave.getActiveTab' });
-    return response.type === 'quickSave.getActiveTab.result' ? response.tab : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const resolveQuickSaveMetadata = async (): Promise<QuickSaveTabMetadata | undefined> => {
-  const backgroundTab = await queryQuickSaveTabFromBackground();
-  if (backgroundTab?.url || backgroundTab?.title) {
-    return backgroundTab;
-  }
-
-  const activeTab = await queryActiveTab();
-  if (!activeTab) {
-    return undefined;
-  }
-
-  return {
-    title: activeTab.title?.trim() ?? '',
-    url: (activeTab.url ?? activeTab.pendingUrl ?? '').trim(),
-  };
-};
-
-const openUrlInNewTab = async (url: string): Promise<void> => {
-  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-    await new Promise<void>((resolve, reject) => {
-      chrome.tabs.create({ url, active: true }, () => {
-        const error = chrome.runtime?.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-        resolve();
-      });
-    });
-    return;
-  }
-  window.open(url, '_blank', 'noopener');
-};
-
-const TagInput: FunctionalComponent<TagInputProps> = ({ id, tags, onChange }) => {
-  const [draft, setDraft] = useState('');
-
-  const commitDraft = useCallback(() => {
-    const normalized = normalizeWhitespace(draft);
-    if (!normalized) {
-      return;
-    }
-    const duplicate = tags.some((tag) => tag.toLowerCase() === normalized.toLowerCase());
-    if (!duplicate) {
-      onChange([...tags, normalized]);
-    }
-    setDraft('');
-  }, [draft, onChange, tags]);
-
-  return (
-    <div className="tag-input" role="list" aria-labelledby={`${id}-label`}>
-      {tags.map((tag) => (
-        <span key={tag} className="tag-chip" role="listitem">
-          {tag}
-          <button type="button" onClick={() => onChange(tags.filter((candidate) => candidate !== tag))} aria-label={`Tag ${tag} entfernen`}>
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        id={id}
-        value={draft}
-        onInput={(event) => setDraft((event.currentTarget as HTMLInputElement).value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ',') {
-            event.preventDefault();
-            commitDraft();
-          }
-        }}
-        onBlur={commitDraft}
-        placeholder={tags.length === 0 ? 'Tags (optional)' : 'Tag hinzufügen'}
-        aria-label="Tag hinzufügen"
-      />
-    </div>
-  );
-};
-
-const BookmarkFavicon: FunctionalComponent<{ readonly bookmark: Bookmark }> = ({ bookmark }) => (
-  <span className="favicon" aria-hidden="true">
-    <span className="favicon__placeholder">{getBookmarkInitial(bookmark)}</span>
-    {bookmark.faviconUrl ? (
-      <img
-        src={bookmark.faviconUrl}
-        alt=""
-        width={20}
-        height={20}
-        onError={(event) => {
-          (event.currentTarget as HTMLImageElement).style.display = 'none';
-        }}
-      />
-    ) : null}
-  </span>
-);
-
 const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
-  const [title, setTitle] = useState('');
-  const [url, setUrl] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchEntries, setSearchEntries] = useState<SearchEntry[]>([]);
-  const searchEntriesRef = useRef<SearchEntry[]>([]);
-  const [searchSelection, setSearchSelection] = useState(-1);
-  const [bookmarkSortMode, setBookmarkSortMode] = useState<BookmarkSortMode>('relevance');
-  const [quickSaveReady, setQuickSaveReady] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
-  const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionResult | null>(null);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [pageSignals, setPageSignals] = useState<PageSignals | null>(null);
-  const [manualTagEdits, setManualTagEdits] = useState(false);
-  const [manualFolderEdits, setManualFolderEdits] = useState(false);
 
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const quickSave = useQuickSave();
 
-  useEffect(() => {
-    searchEntriesRef.current = searchEntries;
-  }, [searchEntries]);
+  const { aiSuggestions, loadingSuggestions, setAiSuggestions } = useAiSuggestions({
+    pageSignals: quickSave.pageSignals,
+    selectedCategoryId,
+    showDetails,
+    title: quickSave.title,
+    url: quickSave.url,
+    onBestFolder: setSelectedCategoryId,
+  });
+
+  const popupSearch = usePopupSearch(quickSave.url);
 
   useEffect(() => {
     const readyTimestamp = capE2EReadyTimestamp(performance.now());
@@ -341,126 +65,29 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
     };
   }, []);
 
-  const loadQuickSaveFromTab = useCallback(async () => {
-    try {
-      const activeTab = await resolveQuickSaveMetadata();
-      if (!activeTab) {
-        return;
-      }
-      const resolvedUrl = activeTab.url?.trim() ?? '';
-      const resolvedTitle = activeTab.title?.trim() ?? '';
-
-      setPageSignals({
-        pageTitle: resolvedTitle,
-        pageUrl: resolvedUrl,
-      });
-      if (resolvedTitle) {
-        setTitle(resolvedTitle);
-      }
-      if (resolvedUrl) {
-        setUrl(resolvedUrl);
-      }
-      setQuickSaveReady(Boolean(resolvedUrl));
-    } catch {
-      setQuickSaveReady(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadQuickSaveFromTab();
-  }, [loadQuickSaveFromTab]);
-
   useEffect(() => {
     let cancelled = false;
-    const loadData = async () => {
-      const [bookmarks, settings] = await Promise.all([
-        listBookmarks({ includeArchived: false, limit: SEARCH_INDEX_LIMIT }),
-        getUserSettings(),
-      ]);
+    const loadCategories = async () => {
       const loadedCategories = await listCategories();
-      if (cancelled) {
-        return;
+      if (!cancelled) {
+        setCategories(loadedCategories);
       }
-      setBookmarkSortMode(settings.bookmarkSortMode);
-      setCategories(loadedCategories);
-      setSearchEntries(sortBookmarks(bookmarks, settings.bookmarkSortMode).map((bookmark) => buildSearchEntry(bookmark)));
-      window.setTimeout(() => searchInputRef.current?.focus(), 50);
     };
-    void loadData();
+    void loadCategories();
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const duplicateEntry = useMemo(() => {
-    const normalizedUrl = normalizeUrlForComparison(url).toLowerCase();
-    if (!normalizedUrl) {
-      return undefined;
-    }
-    return searchEntries.find((entry) => entry.normalizedUrl === normalizedUrl);
-  }, [searchEntries, url]);
-
-  const hasQuery = searchTerm.trim().length > 0;
-
-  const quickAccessEntries = useMemo(() => {
-    if (!hasQuery) {
-      return sortBookmarks(
-        searchEntries.map((entry) => entry.bookmark),
-        bookmarkSortMode,
-      )
-        .slice(0, QUICK_ACCESS_LIMIT)
-        .map((bookmark) => buildSearchEntry(bookmark));
-    }
-
-    const tokens = searchTerm
-      .toLowerCase()
-      .split(/\s+/)
-      .map((token) => token.trim())
-      .filter(Boolean);
-
-    const scored = searchEntries
-      .map((entry) => {
-        const matches = tokens.every(
-          (token) =>
-            entry.tokens.some((candidate) => candidate.startsWith(token)) ||
-            entry.normalizedTitle.includes(token) ||
-            entry.normalizedUrl.includes(token),
-        );
-        if (!matches) {
-          return null;
-        }
-        const startsWithTitle = entry.normalizedTitle.startsWith(tokens[0] ?? '') ? 0 : 1;
-        return { entry, score: startsWithTitle };
-      })
-      .filter((item): item is { entry: SearchEntry; score: number } => Boolean(item));
-
-    scored.sort((a, b) => a.score - b.score);
-    return scored.slice(0, SEARCH_RESULTS_LIMIT).map((item) => item.entry);
-  }, [bookmarkSortMode, hasQuery, searchEntries, searchTerm]);
-
-  useEffect(() => {
-    setSearchSelection((current) => {
-      const maxIndex = quickAccessEntries.length - 1;
-      if (maxIndex < 0) {
-        return -1;
-      }
-      if (current < 0 || current > maxIndex) {
-        return 0;
-      }
-      return current;
-    });
-  }, [quickAccessEntries]);
 
   useEffect(() => {
     const handleGlobalKeydown = (event: KeyboardEvent) => {
       if (event.key === '/' && !event.defaultPrevented) {
         const target = event.target as HTMLElement | null;
         const isTextInput =
-          target &&
-          (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true');
+          target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true');
         if (!isTextInput) {
           event.preventDefault();
-          searchInputRef.current?.focus();
+          popupSearch.searchInputRef.current?.focus();
         }
       }
       if (event.key === 'Escape') {
@@ -476,192 +103,55 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
     };
     window.addEventListener('keydown', handleGlobalKeydown);
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
-  }, []);
-
-  const saveBookmark = useCallback(
-    async ({
-      title: rawTitle,
-      url: rawUrl,
-      tags: rawTags,
-      categoryId,
-    }: {
-      title: string;
-      url: string;
-      tags?: string[];
-      categoryId?: string;
-    }) => {
-      const normalizedUrl = normalizeUrlForSaving(rawUrl);
-      const normalizedTitle = normalizeWhitespace(rawTitle) || extractDomain(normalizedUrl) || normalizedUrl;
-      const uniqueTags = (rawTags ?? []).filter(
-        (tag, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === tag.toLowerCase()) === index,
-      );
-
-      const now = Date.now();
-      const bookmark = await createBookmark({
-        id: crypto.randomUUID(),
-        url: normalizedUrl,
-        title: normalizedTitle,
-        faviconUrl: getFaviconUrl(normalizedUrl) ?? undefined,
-        tags: uniqueTags,
-        categoryId: categoryId || undefined,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      setSearchEntries((previous) => {
-        const next = sortBookmarks(
-          [bookmark, ...previous.map((entry) => entry.bookmark).filter((entry) => entry.id !== bookmark.id)],
-          bookmarkSortMode,
-        )
-          .slice(0, SEARCH_INDEX_LIMIT)
-          .map((entry) => buildSearchEntry(entry));
-        searchEntriesRef.current = next;
-        return next;
-      });
-
-      return bookmark;
-    },
-    [bookmarkSortMode],
-  );
-
-  const handleQuickSave = useCallback(async () => {
-    if (saving) {
-      return;
-    }
-    setSaving(true);
-    setStatus(null);
-    try {
-      const suggestedTags = aiSuggestions?.tags.slice(0, 6).map((entry) => entry.tag) ?? [];
-      const effectiveTags = !manualTagEdits && tags.length === 0 ? suggestedTags : tags;
-      const effectiveCategoryId =
-        !manualFolderEdits && !selectedCategoryId ? aiSuggestions?.bestFolder?.category.id : selectedCategoryId;
-      await saveBookmark({ title, url, tags: effectiveTags, categoryId: effectiveCategoryId || undefined });
-      setStatus({ tone: 'success', text: 'Gespeichert. Mit Enter kannst du sofort den nächsten Tab sichern.' });
-      setTags([]);
-      setAiSuggestions(null);
-      setManualTagEdits(false);
-      setManualFolderEdits(false);
-      await loadQuickSaveFromTab();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.';
-      setStatus({ tone: 'error', text: message });
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    aiSuggestions,
-    loadQuickSaveFromTab,
-    manualFolderEdits,
-    manualTagEdits,
-    saveBookmark,
-    saving,
-    selectedCategoryId,
-    tags,
-    title,
-    url,
-  ]);
-
-  useEffect(() => {
-    if (!showDetails) {
-      return;
-    }
-
-    const normalizedTitle = normalizeWhitespace(title);
-    const normalizedUrl = normalizeWhitespace(url);
-    if (!normalizedTitle && !normalizedUrl) {
-      setAiSuggestions(null);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setLoadingSuggestions(true);
-      void suggestForBookmark({
-        title: normalizedTitle,
-        url: normalizedUrl,
-        metaDescription: pageSignals?.metaDescription,
-        pageTitle: pageSignals?.pageTitle,
-        selectedText: pageSignals?.selectedText,
-      })
-        .then((result) => {
-          setAiSuggestions(result);
-          if (!selectedCategoryId && result.bestFolder) {
-            setSelectedCategoryId(result.bestFolder.category.id);
-          }
-        })
-        .catch(() => {
-          setAiSuggestions(null);
-        })
-        .finally(() => setLoadingSuggestions(false));
-    }, 140);
-
-    return () => window.clearTimeout(timer);
-  }, [pageSignals?.metaDescription, pageSignals?.pageTitle, pageSignals?.selectedText, selectedCategoryId, showDetails, title, url]);
+  }, [popupSearch.searchInputRef]);
 
   const handleOpenUrl = useCallback(
     async (bookmark: Bookmark) => {
       try {
         await openUrlInNewTab(bookmark.url);
-        const visitedBookmark = await recordBookmarkVisit(bookmark.id);
-        setSearchEntries((previous) =>
-          sortBookmarks(
-            previous.map((entry) => (entry.bookmark.id === visitedBookmark.id ? visitedBookmark : entry.bookmark)),
-            bookmarkSortMode,
-          ).map((item) => buildSearchEntry(item)),
-        );
+        await popupSearch.recordOpenedBookmark(bookmark);
       } catch {
-        setStatus({ tone: 'error', text: 'Tab konnte nicht geöffnet werden.' });
+        quickSave.setStatus({ tone: 'error', text: 'Tab konnte nicht geöffnet werden.' });
       }
     },
-    [bookmarkSortMode],
+    [popupSearch, quickSave],
   );
-
-  const handleSortModeChange = useCallback((event: Event) => {
-    const nextMode = (event.currentTarget as HTMLSelectElement).value as BookmarkSortMode;
-    setBookmarkSortMode(nextMode);
-    setSearchEntries((previous) =>
-      sortBookmarks(
-        previous.map((entry) => entry.bookmark),
-        nextMode,
-      ).map((bookmark) => buildSearchEntry(bookmark)),
-    );
-    void saveUserSettings({ bookmarkSortMode: nextMode });
-  }, []);
 
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
-        setSearchSelection((current) => Math.min(current + 1, quickAccessEntries.length - 1));
+        popupSearch.setSearchSelection((current) => Math.min(current + 1, popupSearch.quickAccessEntries.length - 1));
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
-        setSearchSelection((current) => Math.max(current - 1, 0));
+        popupSearch.setSearchSelection((current) => Math.max(current - 1, 0));
       } else if (event.key === 'Enter') {
-        if (searchSelection >= 0 && quickAccessEntries[searchSelection]) {
+        if (popupSearch.searchSelection >= 0 && popupSearch.quickAccessEntries[popupSearch.searchSelection]) {
           event.preventDefault();
-          void handleOpenUrl(quickAccessEntries[searchSelection].bookmark);
+          void handleOpenUrl(popupSearch.quickAccessEntries[popupSearch.searchSelection].bookmark);
         }
       }
     },
-    [handleOpenUrl, quickAccessEntries, searchSelection],
+    [handleOpenUrl, popupSearch],
   );
 
   useEffect(() => {
     const harness: PopupHarness = {
       addBookmark: async (input) => {
-        const bookmark = await saveBookmark({ title: input.title, url: input.url, tags: input.tags });
+        const bookmark = await quickSave.saveBookmark({ title: input.title, url: input.url, tags: input.tags });
+        popupSearch.addBookmarkToIndex(bookmark);
         return bookmark.id;
       },
-      search: async (term: string) => setSearchTerm(term),
-      clearSearch: async () => setSearchTerm(''),
+      search: async (term: string) => popupSearch.setSearchTerm(term),
+      clearSearch: async () => popupSearch.setSearchTerm(''),
       selectRange: async () => {},
       getSelectedIds: async () => [],
       runBatch: async () => {},
       importBulk: async () => 0,
       visibleTitles: async (limit = 10) => {
         const normalizedLimit = Math.max(0, Math.trunc(limit));
-        return searchEntriesRef.current
-          .slice(0, normalizedLimit > 0 ? normalizedLimit : searchEntriesRef.current.length)
-          .map((entry) => entry.bookmark.title);
+        const entries = popupSearch.searchEntriesRef.current ?? [];
+        return entries.slice(0, normalizedLimit > 0 ? normalizedLimit : entries.length).map((entry) => entry.bookmark.title);
       },
     };
 
@@ -671,18 +161,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
         delete window.__LINKOSAURUS_POPUP_HARNESS;
       }
     };
-  }, [saveBookmark]);
-
-  const handleOpenSettings = useCallback(() => {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
-      chrome.runtime.openOptionsPage();
-      return;
-    }
-
-    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
-      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
-    }
-  }, []);
+  }, [popupSearch, quickSave]);
 
   return (
     <div
@@ -690,193 +169,68 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
       role="application"
       aria-label="Link-O-Saurus Popup"
     >
-      <header className="popup-header">
-        <h1>Link-O-Saurus</h1>
-        <div className="popup-header-actions">
-          <button type="button" className="ghost-button" onClick={() => void openSidePanel()}>
-            Side Panel
-          </button>
-          <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
-            Dashboard
-          </button>
-          <button
-            type="button"
-            className="ghost-button icon-only-button"
-            onClick={handleOpenSettings}
-            aria-label="Einstellungen öffnen"
-            title="Einstellungen"
-          >
-            <i className="fa-solid fa-gear" aria-hidden="true" />
-          </button>
-        </div>
-      </header>
+      <PopupHeader />
 
       <main className="popup-main">
-        <section className="quick-save" aria-labelledby="quick-save-title">
-          <div className="quick-save__top">
-            <p id="quick-save-title">Aktuellen Tab speichern</p>
-            <button type="button" className="inline-link" onClick={() => void loadQuickSaveFromTab()}>
-              Neu laden
-            </button>
-          </div>
-
-          <div className="quick-save__preview" title={title || url || 'Kein aktiver Tab erkannt'}>
-            <strong>{title || 'Titel wird geladen…'}</strong>
-            <span>{url || 'URL wird geladen…'}</span>
-          </div>
-
-          <div className="quick-save__actions">
-            <button
-              type="button"
-              className="primary-button"
-              disabled={saving || !quickSaveReady || Boolean(duplicateEntry)}
-              onClick={() => void handleQuickSave()}
-            >
-              {saving ? 'Speichert…' : duplicateEntry ? 'Bereits gespeichert' : 'Bookmark speichern'}
-            </button>
-            <button type="button" className="subtle-button" onClick={() => setShowDetails((value) => !value)}>
-              {showDetails ? 'Weniger' : 'Details'}
-            </button>
-          </div>
-
-          {showDetails ? (
-            <div className="quick-save__details">
-              <label>
-                <span>Titel</span>
-                <input type="text" value={title} onInput={(event) => setTitle((event.currentTarget as HTMLInputElement).value)} />
-              </label>
-              <label>
-                <span>URL</span>
-                <input type="url" value={url} onInput={(event) => setUrl((event.currentTarget as HTMLInputElement).value)} />
-              </label>
-              <label>
-                <span id="quick-tags-label">Tags</span>
-                <TagInput
-                  id="quick-tags"
-                  tags={tags}
-                  onChange={(next) => {
-                    setManualTagEdits(true);
-                    setTags(next);
-                  }}
-                />
-              </label>
-              {showDetails ? (
-                <div className="ai-suggestions" aria-live="polite">
-                  <div className="ai-suggestions__head">
-                    <span>KI-Vorschläge</span>
-                    {loadingSuggestions ? <small>berechne…</small> : null}
-                  </div>
-                  {aiSuggestions?.tags?.length ? (
-                    <div className="ai-suggestions__tags">
-                      {aiSuggestions.tags.map((suggestion) => (
-                        <button
-                          type="button"
-                          key={suggestion.tag}
-                          className="ai-tag"
-                          onClick={() =>
-                            setTags((current) => {
-                              setManualTagEdits(true);
-                              return current.some((tag) => tag.toLowerCase() === suggestion.tag.toLowerCase())
-                                ? current
-                                : [...current, suggestion.tag];
-                            })
-                          }
-                        >
-                          +{suggestion.tag}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <small>Keine sicheren Tag-Vorschläge.</small>
-                  )}
-                </div>
-              ) : null}
-              <label>
-                <span>Folder (Vorschlag)</span>
-                <select
-                  value={selectedCategoryId}
-                  onChange={(event) => {
-                    setManualFolderEdits(true);
-                    setSelectedCategoryId((event.currentTarget as HTMLSelectElement).value);
-                  }}
-                >
-                  <option value="">Kein Folder</option>
-                  {aiSuggestions?.bestFolder ? (
-                    <option value={aiSuggestions.bestFolder.category.id}>
-                      🤖 {aiSuggestions.bestFolder.category.title}
-                    </option>
-                  ) : null}
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {aiSuggestions?.alternativeFolders.length ? (
-                <small className="folder-alternatives">
-                  Alternativen: {aiSuggestions.alternativeFolders.map((item) => item.category.title).join(', ')}
-                </small>
-              ) : null}
-              <button type="button" className="inline-link" onClick={() => void openDashboard({ new: '1', url, title, tags })}>
-                Im Dashboard weiter bearbeiten
-              </button>
-            </div>
-          ) : null}
-
-          {status ? <p className={`status status--${status.tone}`}>{status.text}</p> : null}
-        </section>
+        <QuickSaveForm
+          aiSuggestions={aiSuggestions}
+          categories={categories}
+          duplicateEntry={popupSearch.duplicateEntry}
+          loadingSuggestions={loadingSuggestions}
+          quickSaveReady={quickSave.quickSaveReady}
+          saving={quickSave.saving}
+          selectedCategoryId={selectedCategoryId}
+          showDetails={showDetails}
+          status={quickSave.status}
+          tags={quickSave.tags}
+          title={quickSave.title}
+          url={quickSave.url}
+          onAddSuggestedTag={(tag) => {
+            quickSave.setTags((current) => {
+              quickSave.setManualTagEdits(true);
+              return current.some((existingTag) => existingTag.toLowerCase() === tag.toLowerCase()) ? current : [...current, tag];
+            });
+          }}
+          onFolderChange={(categoryId) => {
+            quickSave.setManualFolderEdits(true);
+            setSelectedCategoryId(categoryId);
+          }}
+          onQuickSave={() => {
+            void quickSave.handleQuickSave({ aiSuggestions, selectedCategoryId }).then((bookmark) => {
+              if (bookmark) {
+                popupSearch.addBookmarkToIndex(bookmark);
+                setAiSuggestions(null);
+              }
+            });
+          }}
+          onReload={() => void quickSave.loadQuickSaveFromTab()}
+          onTagsChange={(next) => {
+            quickSave.setManualTagEdits(true);
+            quickSave.setTags(next);
+          }}
+          onTitleChange={quickSave.setTitle}
+          onToggleDetails={() => setShowDetails((value) => !value)}
+          onUrlChange={quickSave.setUrl}
+        />
 
         {showDetails ? null : (
-          <section className="quick-access" aria-labelledby="quick-access-title">
-            <div className="quick-access__top">
-              <p id="quick-access-title">Suchen & öffnen</p>
-              <select value={bookmarkSortMode} onChange={handleSortModeChange} aria-label="Sortierung">
-                <option value="relevance">Relevanz</option>
-                <option value="newest">Neueste</option>
-                <option value="alphabetical">A–Z</option>
-              </select>
-            </div>
-
-            <label className="search">
-              <span className="sr-only">Bookmarks durchsuchen</span>
-              <input
-                ref={searchInputRef}
-                type="search"
-                value={searchTerm}
-                onInput={(event) => setSearchTerm((event.currentTarget as HTMLInputElement).value)}
-                onKeyDown={(event) => handleSearchKeyDown(event as unknown as KeyboardEvent)}
-                placeholder="Bookmarks durchsuchen (/)"
-              />
-            </label>
-
-            <ul className="access-list" role="listbox" aria-live="polite">
-              {quickAccessEntries.map((entry, index) => (
-                <li key={entry.bookmark.id}>
-                  <button
-                    type="button"
-                    className={`access-item${index === searchSelection ? ' is-active' : ''}`}
-                    role="option"
-                    aria-selected={index === searchSelection}
-                    onClick={() => void handleOpenUrl(entry.bookmark)}
-                    onMouseEnter={() => setSearchSelection(index)}
-                  >
-                    <BookmarkFavicon bookmark={entry.bookmark} />
-                    <span className="access-item__text">
-                      <strong>{entry.bookmark.title || entry.bookmark.url}</strong>
-                      <small>{entry.domain || entry.bookmark.url}</small>
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {quickAccessEntries.length === 0 ? (
-                <li className="empty-state">{hasQuery ? 'Keine Treffer gefunden.' : 'Noch keine Bookmarks gespeichert.'}</li>
-              ) : null}
-            </ul>
-          </section>
+          <QuickAccessList
+            bookmarkSortMode={popupSearch.bookmarkSortMode}
+            entries={popupSearch.quickAccessEntries}
+            hasQuery={popupSearch.hasQuery}
+            searchInputRef={popupSearch.searchInputRef}
+            searchSelection={popupSearch.searchSelection}
+            searchTerm={popupSearch.searchTerm}
+            onOpenBookmark={(bookmark) => void handleOpenUrl(bookmark)}
+            onSearchKeyDown={handleSearchKeyDown}
+            onSearchSelectionChange={popupSearch.setSearchSelection}
+            onSearchTermChange={popupSearch.setSearchTerm}
+            onSortModeChange={popupSearch.handleSortModeChange}
+          />
         )}
       </main>
 
+      <PopupFooter />
     </div>
   );
 };
