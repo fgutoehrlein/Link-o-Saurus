@@ -11,7 +11,7 @@ import {
 import { initializeBookmarkSync } from '../shared/bookmark-sync';
 import type { CreateSessionInput } from '../shared/db';
 import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging';
-import { isBackgroundRequest } from '../shared/messaging';
+import { validateBackgroundRequest } from '../shared/messaging';
 import type { SessionPack } from '../shared/types';
 import { presentLinkOSaurusQuickDialog, showLinkOSaurusToast } from './injected/quick-save-dialog';
 
@@ -586,18 +586,25 @@ const handleBackgroundRequest = async (
 };
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!isBackgroundRequest(message)) {
-    return;
+  const validation = validateBackgroundRequest(message);
+  if (!validation.ok) {
+    sendResponse({
+      type: 'session.error',
+      error: validation.error,
+      code: validation.code,
+      details: validation.details,
+    });
+    return false;
   }
 
   (async () => {
     try {
-      const response = await handleBackgroundRequest(message);
+      const response = await handleBackgroundRequest(validation.value);
       sendResponse(response);
     } catch (error) {
       const messageText =
         error instanceof Error ? error.message : 'Unbekannter Fehler beim Session-Handling.';
-      sendResponse({ type: 'session.error', error: messageText });
+      sendResponse({ type: 'session.error', error: messageText, code: 'INTERNAL_ERROR' });
     }
   })();
 
