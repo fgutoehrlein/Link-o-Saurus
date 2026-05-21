@@ -59,7 +59,17 @@ export type BackgroundResponse =
   | { type: 'settings.applyNewTab.result'; enabled: boolean }
   | { type: 'readLater.refreshBadge.result'; count: number }
   | { type: 'sidePanel.open.result'; opened: boolean }
-  | { type: 'session.error'; error: string };
+  | {
+      type: 'session.error';
+      error: string;
+      code?:
+        | 'INVALID_MESSAGE'
+        | 'INVALID_PAYLOAD'
+        | 'UNAUTHORIZED'
+        | 'NOT_FOUND'
+        | 'INTERNAL_ERROR';
+      details?: string;
+    };
 
 export type BackgroundResponseSuccess = Exclude<BackgroundResponse, { type: 'session.error' }>;
 
@@ -94,11 +104,96 @@ export const isBackgroundRequest = (value: unknown): value is BackgroundRequest 
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const candidate = value as { type?: unknown };
-  if (typeof candidate.type !== 'string') {
-    return false;
+  return validateBackgroundRequest(value).ok;
+};
+
+type BackgroundRequestValidationResult =
+  | { ok: true; value: BackgroundRequest }
+  | { ok: false; error: string; code: 'INVALID_MESSAGE' | 'INVALID_PAYLOAD'; details: string };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object';
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+export const validateBackgroundRequest = (value: unknown): BackgroundRequestValidationResult => {
+  if (!isRecord(value)) {
+    return { ok: false, error: 'Ungültige Nachricht.', code: 'INVALID_MESSAGE', details: 'message_not_object' };
   }
-  return MESSAGE_TYPES.has(candidate.type as SessionMessageType);
+
+  const { type } = value;
+  if (typeof type !== 'string' || !MESSAGE_TYPES.has(type as SessionMessageType)) {
+    return { ok: false, error: 'Unbekannter Nachrichtentyp.', code: 'INVALID_MESSAGE', details: 'unknown_type' };
+  }
+
+  switch (type) {
+    case 'quickSave.getActiveTab':
+    case 'readLater.refreshBadge':
+      return { ok: true, value: { type } };
+    case 'session.saveCurrentWindow': {
+      const { title } = value;
+      if (typeof title !== 'undefined' && typeof title !== 'string') {
+        return { ok: false, error: 'Ungültiger Titel für Session.', code: 'INVALID_PAYLOAD', details: 'title' };
+      }
+      return { ok: true, value: typeof title === 'string' ? { type, title } : { type } };
+    }
+    case 'session.openAll':
+    case 'session.delete': {
+      const { sessionId } = value;
+      if (!isNonEmptyString(sessionId)) {
+        return {
+          ok: false,
+          error: 'Ungültige Session-ID.',
+          code: 'INVALID_PAYLOAD',
+          details: 'sessionId',
+        };
+      }
+      return { ok: true, value: { type, sessionId } };
+    }
+    case 'session.openSelected': {
+      const { sessionId, tabIndexes } = value;
+      if (!isNonEmptyString(sessionId)) {
+        return { ok: false, error: 'Ungültige Session-ID.', code: 'INVALID_PAYLOAD', details: 'sessionId' };
+      }
+      if (
+        !Array.isArray(tabIndexes) ||
+        tabIndexes.some((index) => !Number.isInteger(index) || index < 0)
+      ) {
+        return {
+          ok: false,
+          error: 'Ungültige Tab-Auswahl.',
+          code: 'INVALID_PAYLOAD',
+          details: 'tabIndexes',
+        };
+      }
+      return { ok: true, value: { type, sessionId, tabIndexes } };
+    }
+    case 'settings.applyNewTab': {
+      const { enabled } = value;
+      if (typeof enabled !== 'boolean') {
+        return { ok: false, error: 'Ungültiger New-Tab-Wert.', code: 'INVALID_PAYLOAD', details: 'enabled' };
+      }
+      return { ok: true, value: { type, enabled } };
+    }
+    case 'sidePanel.open': {
+      const { windowId } = value;
+      if (
+        typeof windowId !== 'undefined' &&
+        (typeof windowId !== 'number' || !Number.isInteger(windowId) || windowId < 0)
+      ) {
+        return {
+          ok: false,
+          error: 'Ungültige Fenster-ID.',
+          code: 'INVALID_PAYLOAD',
+          details: 'windowId',
+        };
+      }
+      return { ok: true, value: typeof windowId === 'number' ? { type, windowId } : { type } };
+    }
+    default:
+      return { ok: false, error: 'Unbekannter Nachrichtentyp.', code: 'INVALID_MESSAGE', details: 'default' };
+  }
 };
 
 export const isBackgroundResponse = (value: unknown): value is BackgroundResponse => {
