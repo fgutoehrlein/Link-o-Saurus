@@ -410,6 +410,52 @@ export class LinkOSaurusDB extends Dexie {
       readLater: 'bookmarkId, dueAt, snoozedUntil',
       bookmarkMappings: '&nativeId, localId, nodeType',
     });
+
+    this.version(8)
+      .stores({
+        boards: 'id, sortOrder, updatedAt',
+        categories: 'id, boardId, sortOrder',
+        bookmarks:
+          'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+        comments: 'id, bookmarkId, createdAt',
+        sessions: 'id, savedAt',
+        userSettings: 'id',
+        tags: 'id, &path, usageCount, *slugParts, name',
+        rules: 'id, enabled, name',
+        readLater: 'bookmarkId, dueAt, snoozedUntil',
+        bookmarkMappings: '&nativeId, localId, nodeType',
+      })
+      .upgrade(async (tx) => {
+        const tagTable = tx.table('tags') as Table<Tag, string>;
+        const existingTags = ((await tagTable.toArray()) as Tag[]).map((tag) => {
+          const source = tag.path ?? tag.name ?? tag.id;
+          const metadata = deriveTagMetadata(source);
+          return {
+            ...tag,
+            id: metadata.canonicalId,
+            path: metadata.path,
+            name: metadata.leafName,
+            slugParts: metadata.slugParts,
+            usageCount: Number.isFinite(tag.usageCount) ? Math.max(0, tag.usageCount) : 0,
+          } satisfies Tag;
+        });
+
+        const merged = new Map<string, Tag>();
+        for (const tag of existingTags) {
+          const current = merged.get(tag.id);
+          if (!current) {
+            merged.set(tag.id, tag);
+            continue;
+          }
+          merged.set(tag.id, {
+            ...current,
+            usageCount: current.usageCount + tag.usageCount,
+          });
+        }
+
+        await tagTable.clear();
+        await tagTable.bulkPut(Array.from(merged.values()));
+      });
   }
 }
 
