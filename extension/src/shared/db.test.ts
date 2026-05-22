@@ -669,4 +669,51 @@ describe('IndexedDB data layer', () => {
 
     await upgradedDb.delete();
   });
+
+  it('allows hierarchical tags with duplicate leaf names', async () => {
+    await createTag({ path: 'work/dev', usageCount: 1 }, database);
+    await createTag({ path: 'hobby/dev', usageCount: 2 }, database);
+
+    const tags = await listTags(database);
+    expect(tags).toHaveLength(2);
+    expect(tags.find((tag) => tag.path === 'work/dev')?.name).toBe('dev');
+    expect(tags.find((tag) => tag.path === 'hobby/dev')?.name).toBe('dev');
+  });
+
+  it('migrates legacy tags to canonical path identity and merges canonical duplicates safely', async () => {
+    const name = uniqueDbName('legacy-tags');
+    const legacyDb = new Dexie(name);
+    legacyDb.version(7).stores({
+      boards: 'id, sortOrder, updatedAt',
+      categories: 'id, boardId, sortOrder',
+      bookmarks: 'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+      comments: 'id, bookmarkId, createdAt',
+      sessions: 'id, savedAt',
+      userSettings: 'id',
+      tags: 'id, &path, &name, usageCount, *slugParts',
+      rules: 'id, enabled, name',
+      readLater: 'bookmarkId, dueAt, snoozedUntil',
+      bookmarkMappings: '&nativeId, localId, nodeType',
+    });
+
+    await legacyDb.table('tags').bulkAdd([
+      { id: 'legacy-a', path: 'Work/Dev', name: 'Dev', usageCount: 2, slugParts: ['work', 'dev'] },
+      { id: 'legacy-b', path: ' work/dev ', name: 'dev-alt', usageCount: 3, slugParts: ['work', 'dev'] },
+      { id: 'legacy-c', path: 'hobby/dev', name: 'dev-hobby', usageCount: 4, slugParts: ['hobby', 'dev'] },
+    ]);
+
+    await legacyDb.close();
+
+    const upgradedDb = createDatabase(name);
+    const tags = await upgradedDb.tags.toArray();
+    const byId = new Map(tags.map((tag) => [tag.id, tag]));
+
+    expect(tags).toHaveLength(2);
+    expect(byId.get('work/dev')?.usageCount).toBe(5);
+    expect(byId.get('work/dev')?.slugParts).toEqual(['work', 'dev']);
+    expect(byId.get('hobby/dev')?.usageCount).toBe(4);
+    expect(byId.get('hobby/dev')?.name).toBe('dev');
+
+    await upgradedDb.delete();
+  });
 });
