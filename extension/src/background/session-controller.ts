@@ -3,6 +3,23 @@ import type { CreateSessionInput } from '../shared/db';
 import type { SessionPack } from '../shared/types';
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'file:', 'ftp:']);
+const SESSION_RESTORE_BATCH_SIZE = 6;
+
+type SessionRestoreMode = 'new-window' | 'current-window';
+
+type SessionRestoreProgress = {
+  mode: SessionRestoreMode;
+  total: number;
+  opened: number;
+  failed: number;
+};
+
+const emitSessionRestoreProgress = (progress: SessionRestoreProgress): void => {
+  void chrome.runtime.sendMessage({
+    type: 'session.restore.progress',
+    ...progress,
+  });
+};
 
 const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
   const url = tab.url ?? tab.pendingUrl;
@@ -81,12 +98,34 @@ const openTabsInNewWindow = async (tabs: SessionPack['tabs']): Promise<void> => 
   const [first, ...rest] = tabs;
   const createdWindow = await chrome.windows.create({ url: first.url, focused: true });
   const windowId = createdWindow.id;
-  if (!windowId || rest.length === 0) {
+  if (!windowId) {
     return;
   }
 
-  for (const tab of rest) {
-    await chrome.tabs.create({ windowId, url: tab.url, active: false });
+  let opened = 1;
+  let failed = 0;
+  emitSessionRestoreProgress({ mode: 'new-window', total: tabs.length, opened, failed });
+
+  if (rest.length === 0) {
+    return;
+  }
+
+  for (let index = 0; index < rest.length; index += SESSION_RESTORE_BATCH_SIZE) {
+    const batch = rest.slice(index, index + SESSION_RESTORE_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((tab) => chrome.tabs.create({ windowId, url: tab.url, active: false })),
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        opened += 1;
+      } else {
+        failed += 1;
+        console.warn('[Link-o-Saurus] Tab konnte nicht in neuem Fenster wiederhergestellt werden.', result.reason);
+      }
+    }
+
+    emitSessionRestoreProgress({ mode: 'new-window', total: tabs.length, opened, failed });
   }
 };
 
@@ -102,9 +141,32 @@ export const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promis
     return;
   }
 
-  for (let index = 0; index < tabs.length; index += 1) {
-    const tab = tabs[index];
-    await chrome.tabs.create({ windowId, url: tab.url, active: index === 0 });
+  let opened = 0;
+  let failed = 0;
+  emitSessionRestoreProgress({ mode: 'current-window', total: tabs.length, opened, failed });
+
+  for (let index = 0; index < tabs.length; index += SESSION_RESTORE_BATCH_SIZE) {
+    const batch = tabs.slice(index, index + SESSION_RESTORE_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((tab, batchIndex) =>
+        chrome.tabs.create({
+          windowId,
+          url: tab.url,
+          active: index === 0 && batchIndex === 0,
+        }),
+      ),
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        opened += 1;
+      } else {
+        failed += 1;
+        console.warn('[Link-o-Saurus] Tab konnte im aktuellen Fenster nicht wiederhergestellt werden.', result.reason);
+      }
+    }
+
+    emitSessionRestoreProgress({ mode: 'current-window', total: tabs.length, opened, failed });
   }
 };
 
