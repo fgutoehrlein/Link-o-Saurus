@@ -184,7 +184,6 @@ const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
     icon: <TileViewIcon />,
   },
 ];
-const BOARD_ICON_SET = ['🗂️', '📁', '📌', '📚', '🧭', '🧩', '⭐'] as const;
 const MIN_RESIZE_WIDTH = 320;
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
@@ -410,7 +409,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
-  const [areBoardsExpanded, setBoardsExpanded] = useState<boolean>(true);
   const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
   const [isSidebarCompact, setSidebarCompact] = useState<boolean>(false);
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
@@ -1352,17 +1350,6 @@ const DashboardApp: FunctionalComponent = () => {
     setSearchError(null);
   }, []);
 
-  const handleSelectBoard = useCallback((boardId: string) => {
-    setActiveBoardId((previous) => (previous === boardId ? '' : boardId));
-    setActiveCategoryId('');
-    clearSelection();
-  }, [clearSelection]);
-
-  const handleSelectCategory = useCallback((categoryId: string, boardId: string) => {
-    setActiveBoardId(boardId);
-    setActiveCategoryId((previous) => (previous === categoryId ? '' : categoryId));
-    clearSelection();
-  }, [clearSelection]);
   const handleResetAllFilters = useCallback(() => {
     setSearchQuery('');
     setActiveBoardId('');
@@ -1624,15 +1611,6 @@ const DashboardApp: FunctionalComponent = () => {
       }
     },
     [selectedIds, selectedSet, applySearchWorkerUpdate, updateBookmarksState],
-  );
-
-  const handleDropOnBoard = useCallback(
-    async (boardId: string) => {
-      const targetCategories = categories.filter((category) => category.boardId === boardId);
-      const targetCategoryId = targetCategories[0]?.id ?? '';
-      await handleDropOnCategory(targetCategoryId);
-    },
-    [categories, handleDropOnCategory],
   );
 
   const handleImportFile = useCallback(
@@ -2293,124 +2271,6 @@ const DashboardApp: FunctionalComponent = () => {
                 </button>
               ) : null}
             </div>
-            <header className="sidebar-section-header">
-              <h2>Boards</h2>
-              <div className="section-buttons">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-expanded={areBoardsExpanded}
-                  aria-controls="board-list"
-                  aria-label={areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
-                  title={areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
-                  onClick={() => setBoardsExpanded((value) => !value)}
-                >
-                  <span aria-hidden="true" className="chevron">
-                    {areBoardsExpanded ? '▴' : '▾'}
-                  </span>
-                  <span className="sr-only">
-                    {areBoardsExpanded ? 'Boards einklappen' : 'Boards ausklappen'}
-                  </span>
-                </button>
-              </div>
-            </header>
-            {areBoardsExpanded ? (
-              <ul id="board-list" className="sidebar-list">
-                {boards.map((board, boardIndex) => {
-                  const boardCategories = categories.filter((category) => category.boardId === board.id);
-                  const boardIcon = BOARD_ICON_SET[boardIndex % BOARD_ICON_SET.length];
-                  return (
-                  <li key={board.id}>
-                    <button
-                      type="button"
-                      className={combineClassNames('sidebar-item', activeBoardId === board.id && 'active')}
-                      aria-current={activeBoardId === board.id ? 'page' : undefined}
-                      aria-label={
-                        isSidebarCompact && canUseCompactSidebar
-                          ? `${board.title} (${boardCategories.length})`
-                          : undefined
-                      }
-                      onClick={() => handleSelectBoard(board.id)}
-                      onMouseEnter={(event) => {
-                        showSidebarTooltip(event.currentTarget, `${board.title} (${boardCategories.length})`);
-                      }}
-                      onFocus={(event) => {
-                        showSidebarTooltip(event.currentTarget, `${board.title} (${boardCategories.length})`);
-                      }}
-                      onMouseLeave={hideSidebarTooltip}
-                      onBlur={hideSidebarTooltip}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        event.dataTransfer!.dropEffect = 'move';
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        const ids = parseDragPayload(event);
-                        if (ids.length > 0) {
-                          ids.forEach((id) => {
-                            if (!selectedSet.has(id)) {
-                              setSelectedIds([id]);
-                            }
-                          });
-                        }
-                        void handleDropOnBoard(board.id);
-                      }}
-                    >
-                      <span className="sidebar-item-label">
-                        <span className="sidebar-item-icon" aria-hidden="true">
-                          {boardIcon}
-                        </span>
-                        <span className="sidebar-item-text">{board.title}</span>
-                      </span>
-                      <span className="usage">{boardCategories.length}</span>
-                    </button>
-                    <ul className="sidebar-sublist">
-                      {boardCategories.map((category) => (
-                          <li key={category.id}>
-                            <button
-                              type="button"
-                              className={combineClassNames(
-                                'sidebar-subitem',
-                                activeCategoryId === category.id && 'active',
-                              )}
-                              title={isSidebarCompact && canUseCompactSidebar ? category.title : undefined}
-                              onClick={() => handleSelectCategory(category.id, board.id)}
-                              onDragOver={(event) => {
-                                event.preventDefault();
-                                event.dataTransfer!.dropEffect = 'move';
-                              }}
-                              onDrop={(event) => {
-                                event.preventDefault();
-                                const ids = parseDragPayload(event);
-                                if (ids.length > 0) {
-                                  ids.forEach((id) => {
-                                    if (!selectedSet.has(id)) {
-                                      setSelectedIds([id]);
-                                    }
-                                  });
-                                }
-                                void handleDropOnCategory(category.id);
-                              }}
-                            >
-                              <span className="sidebar-item-label">
-                                <span className="sidebar-item-icon" aria-hidden="true">
-                                  •
-                                </span>
-                                <span className="sidebar-item-text">{category.title}</span>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="sidebar-hint" id="board-list" role="status">
-                Boards eingeklappt
-              </p>
-            )}
           </section>
           {!isSidebarCompact || !canUseCompactSidebar ? (
           <section>
