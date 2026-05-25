@@ -39,9 +39,13 @@ export type BookmarkListData = {
   readonly activeTagFilters: TagFilterState;
   readonly onTagFilterAction: (event: MouseEvent | KeyboardEvent, tag: string, mode: TagFilterMode) => void;
   readonly onToggleFolder: (folderId: string) => void;
+  readonly activeRowIndex: number;
+  readonly onRowFocus: (rowIndex: number) => void;
+  readonly onRowKeyDown: (event: KeyboardEvent, rowIndex: number) => void;
+  readonly onRowRef: (rowIndex: number, node: HTMLDivElement | null) => void;
 };
 
-export type BookmarkTileListData = Omit<BookmarkListData, 'rows' | 'setRowHeight' | 'onToggleFolder'> & {
+export type BookmarkTileListData = Omit<BookmarkListData, 'rows' | 'setRowHeight' | 'onToggleFolder' | 'activeRowIndex' | 'onRowFocus' | 'onRowKeyDown' | 'onRowRef'> & {
   readonly rows: readonly (readonly string[])[];
   readonly columnCount: number;
   readonly setRowHeight: (rowIndex: number, height: number) => void;

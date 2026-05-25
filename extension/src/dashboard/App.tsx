@@ -61,6 +61,7 @@ import {
   type BookmarkViewMode,
 } from './view-mode';
 import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData, TreeNode, VisibleRow } from './types';
+import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import {
   BookmarkRowRenderer,
   BookmarkTileRowRenderer,
@@ -400,6 +401,7 @@ const DashboardApp: FunctionalComponent = () => {
   });
   const [activeTagFilters, setActiveTagFilters] = useState<TagFilterState>(EMPTY_TAG_FILTER_STATE);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
+  const [activeRowIndex, setActiveRowIndex] = useState<number>(0);
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchGeneration, setSearchGeneration] = useState<number>(0);
@@ -437,6 +439,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [listHeight, setListHeight] = useState<number>(320);
   const [listWidth, setListWidth] = useState<number>(MIN_RESIZE_WIDTH);
   const listRef = useRef<VariableSizeListHandle<BookmarkListData> | null>(null);
+  const treeItemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const tileListRef = useRef<VariableSizeListHandle<BookmarkTileListData> | null>(null);
   const listRowHeightsRef = useRef<Map<number, number>>(new Map());
   const tileRowHeightsRef = useRef<Map<number, number>>(new Map());
@@ -1275,6 +1278,48 @@ const DashboardApp: FunctionalComponent = () => {
     handleSelectTag(tag, mode);
   }, [handleSelectTag]);
 
+  const focusTreeRow = useCallback((rowIndex: number) => {
+    const bounded = Math.max(0, Math.min(rowIndex, treeRows.length - 1));
+    setActiveRowIndex(bounded);
+    listRef.current?.scrollToItem(bounded, 'smart');
+    window.requestAnimationFrame(() => {
+      const element = treeItemRefs.current.get(bounded);
+      element?.focus();
+    });
+  }, [treeRows.length]);
+
+  const toggleFolder = useCallback((folderId: string) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      localStorage.setItem('dashboard.expandedFolders', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
+  const handleTreeRowKeyDown = useCallback((event: KeyboardEvent, rowIndex: number) => {
+    const row = treeRows[rowIndex];
+    if (!row) return;
+    const action = getTreeKeyAction(event.key, row);
+    if (action === 'none') return;
+    event.preventDefault();
+    if (action === 'focus-prev') focusTreeRow(rowIndex - 1);
+    if (action === 'focus-next') focusTreeRow(rowIndex + 1);
+    if (action === 'expand' && row.kind === 'folder') {
+      if (!row.expanded) toggleFolder(row.id);
+      else focusTreeRow(rowIndex + 1);
+    }
+    if (action === 'collapse' && row.kind === 'folder') {
+      if (row.expanded) toggleFolder(row.id);
+      else focusTreeRow(getParentIndex(treeRows, rowIndex));
+    }
+    if (action === 'activate' && row.kind === 'bookmark') {
+      const entry = bookmarkEntries.get(row.bookmarkId);
+      if (entry) handleOpenBookmark(entry.bookmark);
+    }
+  }, [treeRows, focusTreeRow, toggleFolder, bookmarkEntries, handleOpenBookmark]);
+
   const listData = useMemo<BookmarkListData>(() => ({
     rows: treeRows,
     bookmarkById: bookmarkEntries,
@@ -1286,14 +1331,13 @@ const DashboardApp: FunctionalComponent = () => {
     onDragStart: handleRowDragStart,
     activeTagFilters: activeTagFilterState,
     onTagFilterAction: handleTagFilterAction,
-    onToggleFolder: (folderId: string) => {
-      setExpandedFolderIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(folderId)) next.delete(folderId);
-        else next.add(folderId);
-        localStorage.setItem('dashboard.expandedFolders', JSON.stringify(Array.from(next)));
-        return next;
-      });
+    onToggleFolder: toggleFolder,
+    activeRowIndex,
+    onRowFocus: setActiveRowIndex,
+    onRowKeyDown: handleTreeRowKeyDown,
+    onRowRef: (rowIndex, node) => {
+      if (node) treeItemRefs.current.set(rowIndex, node);
+      else treeItemRefs.current.delete(rowIndex);
     },
   }), [
     treeRows,
@@ -1305,7 +1349,10 @@ const DashboardApp: FunctionalComponent = () => {
     handleRowContextMenu,
     handleRowDragStart,
     activeTagFilterState,
-    handleTagFilterAction
+    handleTagFilterAction,
+    toggleFolder,
+    activeRowIndex,
+    handleTreeRowKeyDown,
   ]);
 
   const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
@@ -2404,7 +2451,7 @@ const DashboardApp: FunctionalComponent = () => {
           </section>
           ) : null}
         </aside>
-        <section className="bookmark-list" role="listbox" aria-multiselectable="true">
+        <section className="bookmark-list" role="tree" aria-multiselectable="true" aria-label="Bookmark-Hierarchie">
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
@@ -2508,6 +2555,7 @@ const DashboardApp: FunctionalComponent = () => {
           <div
             ref={listContainerRef}
             className="list-viewport"
+            role="group"
             aria-busy={isSearching}
           >
             {treeRows.length === 0 ? (
