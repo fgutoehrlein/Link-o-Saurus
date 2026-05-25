@@ -54,13 +54,14 @@ import {
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
+import { buildBookmarkTreeRows } from './bookmark-tree-view-model';
 import {
   getGridColumnCount,
   resolveBookmarkViewMode,
   toGridRows,
   type BookmarkViewMode,
 } from './view-mode';
-import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData, TreeNode, VisibleRow } from './types';
+import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData, VisibleRow } from './types';
 import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import {
   BookmarkRowRenderer,
@@ -976,42 +977,14 @@ const DashboardApp: FunctionalComponent = () => {
   }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeTagFilterState]);
 
   const treeRows = useMemo<readonly VisibleRow[]>(() => {
-    const categoryIds = Array.from(new Set(filteredIds.map((id) => bookmarkEntries.get(id)?.bookmark.categoryId).filter(Boolean) as string[]));
-    const categoryNodeById = new Map<string, TreeNode>();
-    const boardNodeById = new Map<string, TreeNode>();
-    const rootNodes: TreeNode[] = [];
-    const childrenById = new Map<string, TreeNode[]>();
-    const pushChild = (parentId: string, node: TreeNode) => {
-      const arr = childrenById.get(parentId) ?? [];
-      arr.push(node);
-      childrenById.set(parentId, arr);
-    };
-    boards.forEach((board) => {
-      const node: TreeNode = { id: `board:${board.id}`, title: board.title, depth: 0, children: [] } as TreeNode;
-      boardNodeById.set(board.id, node);
-      rootNodes.push(node);
+    const bookmarksById = new Map(filteredIds.map((id) => [id, bookmarkEntries.get(id)?.bookmark] as const).filter((entry): entry is readonly [string, Bookmark] => Boolean(entry[1])));
+    return buildBookmarkTreeRows({
+      bookmarksById,
+      filteredBookmarkIds: filteredIds,
+      boards,
+      categories,
+      expandedFolderIds,
     });
-    categories.filter((c) => categoryIds.includes(c.id)).forEach((category) => {
-      const node: TreeNode = { id: `category:${category.id}`, title: category.title, depth: 1, children: [] } as TreeNode;
-      categoryNodeById.set(category.id, node);
-      pushChild(`board:${category.boardId}`, node);
-    });
-    filteredIds.forEach((id) => {
-      const entry = bookmarkEntries.get(id);
-      if (!entry) return;
-      const categoryId = entry.bookmark.categoryId;
-      if (!categoryId) return;
-      const node: TreeNode = { id: `bookmark:${id}`, bookmarkId: id, depth: 2 } as TreeNode;
-      pushChild(`category:${categoryId}`, node);
-    });
-    const toRows = (nodes: readonly TreeNode[]): VisibleRow[] => nodes.flatMap((node) => {
-      const children = childrenById.get(node.id) ?? [];
-      if ('bookmarkId' in node) return [{ kind: 'bookmark', id: node.id, bookmarkId: node.bookmarkId, depth: node.depth }];
-      const expanded = expandedFolderIds.has(node.id) || node.depth === 0;
-      const folderRow: VisibleRow = { kind: 'folder', id: node.id, title: node.title, depth: node.depth, hasChildren: children.length > 0, expanded };
-      return expanded ? [folderRow, ...toRows(children)] : [folderRow];
-    });
-    return toRows(rootNodes);
   }, [filteredIds, bookmarkEntries, boards, categories, expandedFolderIds]);
 
   const visibleBookmarkIds = useMemo(
