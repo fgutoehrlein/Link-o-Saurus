@@ -325,13 +325,10 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html#/?q=${encodeURIComponent('Deep Link')}`);
     await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
-    const folderToggles = dashboardPage.locator('.bookmark-row .folder-toggle[aria-expanded="false"]');
-    const collapsedCount = await folderToggles.count();
-    for (let index = 0; index < collapsedCount; index += 1) {
-      await folderToggles.nth(index).click();
-    }
-
-    await expect(dashboardPage.locator('.bookmark-row .bookmark-title')).toContainText([/Deep Link/]);
+    await expect
+      .poll(async () => await dashboardPage.locator('.bookmark-list .bookmark-title').count(), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    await expect(dashboardPage.locator('.bookmark-list .bookmark-title')).toContainText([/Deep Link/]);
 
     const importFile = await createImportFixture(2000);
     await dashboardPage.getByRole('button', { name: 'Import / Export' }).click();
