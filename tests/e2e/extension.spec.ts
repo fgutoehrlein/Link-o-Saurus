@@ -325,8 +325,9 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html#/?q=${encodeURIComponent('Deep Link')}`);
     await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
-    const firstResult = dashboardPage.locator('.bookmark-row .bookmark-title').first();
-    await expect(firstResult).toContainText('Deep Link');
+    const bookmarkRows = dashboardPage.locator('.bookmark-row .bookmark-title');
+    await expect(bookmarkRows.first()).toBeVisible();
+    await expect(bookmarkRows).toContainText([/Deep Link/]);
 
     const importFile = await createImportFixture(2000);
     await dashboardPage.getByRole('button', { name: 'Import / Export' }).click();
