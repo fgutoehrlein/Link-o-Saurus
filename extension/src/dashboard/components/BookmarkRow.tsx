@@ -13,7 +13,8 @@ const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
 
 export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
-  const id = data.ids[index];
+  const row = data.rows[index];
+  const id = row?.kind === 'bookmark' ? row.bookmarkId : row?.id;
   const rowRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
@@ -51,7 +52,22 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
     return () => observer.disconnect();
   }, [data, index, id]);
 
-  const entry = data.bookmarkById.get(id);
+  if (!row) {
+    return <div style={style as JSX.CSSProperties} className="bookmark-row placeholder" />;
+  }
+  if (row.kind === 'folder') {
+    return (
+      <div
+        className="bookmark-row bookmark-folder-row"
+        style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
+      >
+        <button type="button" className="folder-toggle" onClick={() => data.onToggleFolder(row.id)} aria-expanded={row.expanded}>
+          <span aria-hidden="true">{row.expanded ? '▾' : '▸'}</span> {row.title}
+        </button>
+      </div>
+    );
+  }
+  const entry = data.bookmarkById.get(row.bookmarkId);
   if (!entry) {
     return <div style={style as JSX.CSSProperties} className="bookmark-row placeholder" />;
   }
@@ -90,7 +106,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
       tabIndex={0}
       className={combineClassNames('bookmark-row', isSelected && 'selected')}
       ref={rowRef}
-      style={style as JSX.CSSProperties}
+      style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
       onClick={handleClick}
       onDblClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
