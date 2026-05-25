@@ -5,6 +5,24 @@ Es dient als „Arbeitsanleitung“ für den automatisierten Code-Generator-Agen
 
 ---
 
+## Pflicht-Workflow vor jeder Analyse/Änderung
+
+Bevor du mit Analyse, QA oder Implementierung beginnst, führe zuerst Graphify aus und nutze die Ergebnisse aktiv für Scope/Impact:
+
+1. `pnpm graphify`
+2. `pnpm graphify -- summary`
+3. Bei konkreter Datei/Feature:
+   - `pnpm graphify -- explain <file>`
+   - `pnpm graphify -- impacted <file>`
+
+### Verbindliche Regeln
+- Starte **keine** Codeänderung, bevor der Graphify-Output geprüft wurde.
+- Nenne in deiner Antwort kurz, welche Graphify-Kommandos du ausgeführt hast und was dadurch als betroffen identifiziert wurde.
+- Begründe Dateiänderungen mit den Graphify-Abhängigkeiten.
+- Wenn Graphify fehlschlägt, stoppe und melde den Fehler inkl. nächstem sinnvollen Schritt.
+
+---
+
 ## Projektziele (für den Agenten)
 - Schreibe **klaren, modularen, dokumentierten** Code in **TypeScript**.
 - Implementiere **offline-first** über IndexedDB, ohne unnötige Serverabhängigkeiten.
