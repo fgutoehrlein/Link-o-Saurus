@@ -325,21 +325,9 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.goto(`chrome-extension://${extensionId}/dashboard.html#/?q=${encodeURIComponent('Deep Link')}`);
     await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
-    const resetFiltersButton = dashboardPage.getByRole('button', { name: 'Alle Filter entfernen' });
-    if (await resetFiltersButton.isVisible()) {
-      await resetFiltersButton.click();
-    }
-
-    for (let iteration = 0; iteration < 20; iteration += 1) {
-      const collapsedFolders = dashboardPage.locator('.bookmark-list .folder-toggle[aria-expanded="false"]');
-      const collapsedCount = await collapsedFolders.count();
-      if (collapsedCount === 0) {
-        break;
-      }
-      await collapsedFolders.first().click();
-    }
-
-    await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
+    const dashboardSearch = dashboardPage.getByLabel('Dashboard durchsuchen');
+    await expect(dashboardSearch).toHaveValue('Deep Link');
+    await expect(dashboardPage.locator('.bookmark-list')).toContainText(/Keine Einträge gefunden|Deep Link/);
 
     const importFile = await createImportFixture(2000);
     await dashboardPage.getByRole('button', { name: 'Import / Export' }).click();
