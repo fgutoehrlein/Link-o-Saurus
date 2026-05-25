@@ -56,12 +56,23 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
     return <div style={style as JSX.CSSProperties} className="bookmark-row placeholder" />;
   }
   if (row.kind === 'folder') {
+    const isActive = data.activeRowIndex === index;
     return (
       <div
+        role="treeitem"
+        aria-level={row.depth + 1}
+        aria-expanded={row.expanded}
+        tabIndex={isActive ? 0 : -1}
         className="bookmark-row bookmark-folder-row"
+        ref={(node) => {
+          rowRef.current = node;
+          data.onRowRef(index, node);
+        }}
         style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
+        onFocus={() => data.onRowFocus(index)}
+        onKeyDown={(event) => data.onRowKeyDown(event as unknown as KeyboardEvent, index)}
       >
-        <button type="button" className="folder-toggle" onClick={() => data.onToggleFolder(row.id)} aria-expanded={row.expanded}>
+        <button type="button" tabIndex={-1} className="folder-toggle" onClick={() => data.onToggleFolder(row.id)} aria-expanded={row.expanded}>
           <span aria-hidden="true">{row.expanded ? '▾' : '▸'}</span> {row.title}
         </button>
       </div>
@@ -101,15 +112,23 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
 
   return (
     <div
-      role="option"
+      role="treeitem"
+      aria-level={row.depth + 1}
       aria-selected={isSelected}
-      tabIndex={0}
+      tabIndex={data.activeRowIndex === index ? 0 : -1}
       className={combineClassNames('bookmark-row', isSelected && 'selected')}
-      ref={rowRef}
+      ref={(node) => {
+        rowRef.current = node;
+        data.onRowRef(index, node);
+      }}
       style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
       onClick={handleClick}
+      onFocus={() => data.onRowFocus(index)}
       onDblClick={handleDoubleClick}
-      onKeyDown={handleKeyDown}
+      onKeyDown={(event) => {
+        data.onRowKeyDown(event as unknown as KeyboardEvent, index);
+        handleKeyDown(event as unknown as KeyboardEvent);
+      }}
       onContextMenu={handleContextMenu}
       draggable
       onDragStart={handleDragStart}
