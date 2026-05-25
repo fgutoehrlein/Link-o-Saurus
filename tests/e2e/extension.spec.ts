@@ -330,17 +330,17 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(dashboardPage.locator('.bookmark-list')).toContainText(/Keine Einträge gefunden|Deep Link/);
 
     const importFile = await createImportFixture(2000);
-    await dashboardPage.getByRole('button', { name: 'Import / Export' }).click();
-    const importModal = dashboardPage.locator('.modal:has-text("Import & Export")');
-    await importModal.waitFor();
-    await importModal.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
-    await expect
-      .poll(
-        async () => (await dashboardPage.locator('.status').textContent())?.trim(),
-        { timeout: 60_000 },
-      )
-      .toContain('Import abgeschlossen (2000 neue Einträge).');
-    await importModal.getByRole('button', { name: 'Schließen' }).click();
+    const settingsPagePromise = context.waitForEvent('page');
+    await dashboardPage.getByRole('button', { name: 'In Einstellungen öffnen' }).click();
+    const settingsPage = await settingsPagePromise;
+    await settingsPage.waitForLoadState('domcontentloaded');
+    await settingsPage.waitForURL(/options\.html/);
+    await settingsPage.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
+    await expect(settingsPage.locator('dd').filter({ hasText: '2,000' })).toBeVisible({ timeout: 60_000 });
+    await settingsPage.close();
+
+    await dashboardPage.reload();
+    await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
 
