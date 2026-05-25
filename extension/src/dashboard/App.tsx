@@ -60,7 +60,7 @@ import {
   toGridRows,
   type BookmarkViewMode,
 } from './view-mode';
-import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData } from './types';
+import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData, TreeNode, VisibleRow } from './types';
 import {
   BookmarkRowRenderer,
   BookmarkTileRowRenderer,
@@ -389,6 +389,15 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('dashboard.expandedFolders');
+      if (!raw) return new Set<string>();
+      return new Set<string>(JSON.parse(raw) as string[]);
+    } catch {
+      return new Set<string>();
+    }
+  });
   const [activeTagFilters, setActiveTagFilters] = useState<TagFilterState>(EMPTY_TAG_FILTER_STATE);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [searchHits, setSearchHits] = useState<readonly SearchHit[]>([]);
@@ -911,16 +920,6 @@ const DashboardApp: FunctionalComponent = () => {
       if (entry.bookmark.archived) {
         return false;
       }
-      if (activeBoardId) {
-        if (!entry.category || entry.category.boardId !== activeBoardId) {
-          return false;
-        }
-      }
-      if (activeCategoryId) {
-        if (entry.bookmark.categoryId !== activeCategoryId) {
-          return false;
-        }
-      }
       if (!matchesTagFilter(entry.bookmark.tags, activeTagFilterState)) {
         return false;
       }
@@ -971,10 +970,54 @@ const DashboardApp: FunctionalComponent = () => {
         .map((entry) => entry.bookmark),
       bookmarkSortMode,
     ).map((bookmark) => bookmark.id);
-  }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeBoardId, activeCategoryId, activeTagFilterState]);
+  }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeTagFilterState]);
+
+  const treeRows = useMemo<readonly VisibleRow[]>(() => {
+    const categoryIds = Array.from(new Set(filteredIds.map((id) => bookmarkEntries.get(id)?.bookmark.categoryId).filter(Boolean) as string[]));
+    const categoryNodeById = new Map<string, TreeNode>();
+    const boardNodeById = new Map<string, TreeNode>();
+    const rootNodes: TreeNode[] = [];
+    const childrenById = new Map<string, TreeNode[]>();
+    const pushChild = (parentId: string, node: TreeNode) => {
+      const arr = childrenById.get(parentId) ?? [];
+      arr.push(node);
+      childrenById.set(parentId, arr);
+    };
+    boards.forEach((board) => {
+      const node: TreeNode = { id: `board:${board.id}`, title: board.title, depth: 0, children: [] } as TreeNode;
+      boardNodeById.set(board.id, node);
+      rootNodes.push(node);
+    });
+    categories.filter((c) => categoryIds.includes(c.id)).forEach((category) => {
+      const node: TreeNode = { id: `category:${category.id}`, title: category.title, depth: 1, children: [] } as TreeNode;
+      categoryNodeById.set(category.id, node);
+      pushChild(`board:${category.boardId}`, node);
+    });
+    filteredIds.forEach((id) => {
+      const entry = bookmarkEntries.get(id);
+      if (!entry) return;
+      const categoryId = entry.bookmark.categoryId;
+      if (!categoryId) return;
+      const node: TreeNode = { id: `bookmark:${id}`, bookmarkId: id, depth: 2 } as TreeNode;
+      pushChild(`category:${categoryId}`, node);
+    });
+    const toRows = (nodes: readonly TreeNode[]): VisibleRow[] => nodes.flatMap((node) => {
+      const children = childrenById.get(node.id) ?? [];
+      if ('bookmarkId' in node) return [{ kind: 'bookmark', id: node.id, bookmarkId: node.bookmarkId, depth: node.depth }];
+      const expanded = expandedFolderIds.has(node.id) || node.depth === 0;
+      const folderRow: VisibleRow = { kind: 'folder', id: node.id, title: node.title, depth: node.depth, hasChildren: children.length > 0, expanded };
+      return expanded ? [folderRow, ...toRows(children)] : [folderRow];
+    });
+    return toRows(rootNodes);
+  }, [filteredIds, bookmarkEntries, boards, categories, expandedFolderIds]);
+
+  const visibleBookmarkIds = useMemo(
+    () => treeRows.filter((row) => row.kind === 'bookmark').map((row) => row.bookmarkId),
+    [treeRows],
+  );
 
   const totalBookmarkCount = bookmarks.length;
-  const visibleBookmarkCount = filteredIds.length;
+  const visibleBookmarkCount = visibleBookmarkIds.length;
   const bookmarkCountLabel =
     visibleBookmarkCount === totalBookmarkCount
       ? `Bookmarks (${totalBookmarkCount})`
@@ -1022,7 +1065,7 @@ const DashboardApp: FunctionalComponent = () => {
   const handleRowSelection = useCallback(
     (event: MouseEvent | KeyboardEvent, id: string) => {
       event.preventDefault();
-      const currentIndex = filteredIds.indexOf(id);
+    const currentIndex = visibleBookmarkIds.indexOf(id);
       if (currentIndex === -1) {
         return;
       }
@@ -1233,7 +1276,7 @@ const DashboardApp: FunctionalComponent = () => {
   }, [handleSelectTag]);
 
   const listData = useMemo<BookmarkListData>(() => ({
-    ids: filteredIds,
+    rows: treeRows,
     bookmarkById: bookmarkEntries,
     setRowHeight: setListRowHeight,
     selected: selectedSet,
@@ -1243,8 +1286,17 @@ const DashboardApp: FunctionalComponent = () => {
     onDragStart: handleRowDragStart,
     activeTagFilters: activeTagFilterState,
     onTagFilterAction: handleTagFilterAction,
+    onToggleFolder: (folderId: string) => {
+      setExpandedFolderIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(folderId)) next.delete(folderId);
+        else next.add(folderId);
+        localStorage.setItem('dashboard.expandedFolders', JSON.stringify(Array.from(next)));
+        return next;
+      });
+    },
   }), [
-    filteredIds,
+    treeRows,
     bookmarkEntries,
     setListRowHeight,
     selectedSet,
@@ -1253,13 +1305,13 @@ const DashboardApp: FunctionalComponent = () => {
     handleRowContextMenu,
     handleRowDragStart,
     activeTagFilterState,
-    handleTagFilterAction,
+    handleTagFilterAction
   ]);
 
   const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
   const tileRows = useMemo(
-    () => toGridRows(filteredIds, tileColumnCount),
-    [filteredIds, tileColumnCount],
+    () => toGridRows(visibleBookmarkIds, tileColumnCount),
+    [visibleBookmarkIds, tileColumnCount],
   );
 
   const getTileRowHeight = useCallback(
@@ -1295,7 +1347,7 @@ const DashboardApp: FunctionalComponent = () => {
   useEffect(() => {
     listRowHeightsRef.current.clear();
     listRef.current?.resetAfterIndex(0, true);
-  }, [filteredIds]);
+  }, [treeRows]);
 
   useEffect(() => {
     if (bookmarkViewMode !== 'list') {
@@ -1308,7 +1360,7 @@ const DashboardApp: FunctionalComponent = () => {
   useEffect(() => {
     tileRowHeightsRef.current.clear();
     tileListRef.current?.resetAfterIndex(0, true);
-  }, [tileColumnCount, filteredIds]);
+  }, [tileColumnCount, visibleBookmarkIds]);
 
   useEffect(() => {
     if (bookmarkViewMode !== 'tiles') {
@@ -2458,7 +2510,7 @@ const DashboardApp: FunctionalComponent = () => {
             className="list-viewport"
             aria-busy={isSearching}
           >
-            {filteredIds.length === 0 ? (
+            {treeRows.length === 0 ? (
               <div className="empty-state">
                 {isSearching ? 'Suche…' : 'Keine Einträge gefunden.'}
               </div>
@@ -2469,7 +2521,7 @@ const DashboardApp: FunctionalComponent = () => {
                     key="bookmark-list-view"
                     height={listHeight}
                     width="100%"
-                    itemCount={filteredIds.length}
+                    itemCount={treeRows.length}
                     itemSize={getRowHeight}
                     estimatedItemSize={DEFAULT_ITEM_HEIGHT}
                     overscanCount={6}
