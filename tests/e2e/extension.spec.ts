@@ -330,9 +330,30 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(dashboardPage.locator('.bookmark-list')).toContainText(/Keine Einträge gefunden|Deep Link/);
 
     const importFile = await createImportFixture(2000);
-    const settingsPagePromise = context.waitForEvent('page');
+    const pagesBeforeOpen = new Set(context.pages());
     await dashboardPage.getByRole('button', { name: 'In Einstellungen öffnen' }).click();
-    const settingsPage = await settingsPagePromise;
+    const settingsPage = await (async () => {
+      const timeoutAt = Date.now() + 15_000;
+      while (Date.now() < timeoutAt) {
+        const existing = context.pages().find((page) => /\/options\.html/.test(page.url()));
+        if (existing) {
+          return existing;
+        }
+
+        const created = context.pages().find((page) => !pagesBeforeOpen.has(page) && page !== dashboardPage);
+        if (created) {
+          await created.waitForLoadState('domcontentloaded');
+          if (/\/options\.html/.test(created.url())) {
+            return created;
+          }
+        }
+
+        await dashboardPage.waitForTimeout(100);
+      }
+
+      throw new Error('Settings page did not open after clicking "In Einstellungen öffnen".');
+    })();
+
     await settingsPage.waitForLoadState('domcontentloaded');
     await settingsPage.waitForURL(/options\.html/);
     await settingsPage.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
