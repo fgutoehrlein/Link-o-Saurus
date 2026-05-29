@@ -1,4 +1,4 @@
-import { wrap, releaseProxy } from 'comlink';
+import { proxy, wrap, releaseProxy } from 'comlink';
 import type { Remote } from 'comlink';
 import type { FunctionalComponent } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -364,7 +364,7 @@ const App: FunctionalComponent = () => {
       setIsImporting(true);
       try {
         const worker = await withWorker();
-        const callbacks = { onProgress: handleProgress };
+        const callbacks = { onProgress: proxy(handleProgress) };
         let result: ImportResult;
         if (format === 'html') {
           result = await worker.importHtml(file, { dedupe: dedupeEnabled }, callbacks);
