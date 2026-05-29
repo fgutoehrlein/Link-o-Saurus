@@ -9,7 +9,6 @@ import {
   useState,
 } from 'preact/hooks';
 import type { VariableSizeList as VariableSizeListHandle } from 'react-window';
-import ImportExportWorkerFactory from '../shared/import-export-worker?worker&module';
 import SearchWorkerFactory from '../shared/search-worker?worker&module';
 import {
   createBookmark,
@@ -35,8 +34,6 @@ import type {
   Tag,
   UserSettings,
 } from '../shared/types';
-import type { ImportExportWorkerApi } from '../shared/import-export-worker';
-import type { ExportFormat } from '../shared/import-export';
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
@@ -66,11 +63,9 @@ import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import {
   BookmarkRowRenderer,
   BookmarkTileRowRenderer,
-  ImportExportDialog,
   SessionDialog,
   TileVirtualList,
   VirtualList,
-  type ImportDialogState,
   type SessionDialogState,
 } from './components';
 import {
@@ -86,6 +81,7 @@ import {
 import { createDragPayload, parseDragPayload } from './utils/drag';
 import { getFaviconUrl } from './utils/favicon';
 import { combineClassNames, formatTimestamp } from './utils/formatting';
+import { DASHBOARD_LIST_HELP_TEXT, SIDEBAR_ACTIONS } from './ui-controls';
 import linkOSaurusIcon from '../../assets/link-o-saurus-icon.png';
 
 declare global {
@@ -408,8 +404,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchGeneration, setSearchGeneration] = useState<number>(0);
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
-  const [isImportDialogOpen, setImportDialogOpen] = useState<boolean>(false);
-  const [importState, setImportState] = useState<ImportDialogState>({ busy: false, progress: null, error: null });
   const [isSessionDialogOpen, setSessionDialogOpen] = useState<boolean>(false);
   const [sessionState, setSessionState] = useState<SessionDialogState>({ busy: false, error: null });
   const [draft, setDraft] = useState<DraftBookmark | null>(null);
@@ -457,7 +451,6 @@ const DashboardApp: FunctionalComponent = () => {
 
   const searchWorkerRef = useRef<Remote<SearchWorker> | null>(null);
   const searchWorkerInstanceRef = useRef<Worker | null>(null);
-  const importWorkerRef = useRef<Remote<ImportExportWorkerApi> | null>(null);
   const importWorkerInstanceRef = useRef<Worker | null>(null);
 
   useEffect(() => {
@@ -606,20 +599,7 @@ const DashboardApp: FunctionalComponent = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const worker = new ImportExportWorkerFactory();
-    const api = wrap<ImportExportWorkerApi>(worker);
-    importWorkerInstanceRef.current = worker;
-    importWorkerRef.current = api;
-    return () => {
-      if (importWorkerRef.current) {
-        void importWorkerRef.current[releaseProxy]();
-        importWorkerRef.current = null;
-      }
-      worker.terminate();
-      importWorkerInstanceRef.current = null;
-    };
-  }, []);
+
 
   useEffect(() => {
     const snapshot = parseInitialRoute();
@@ -1685,68 +1665,7 @@ const DashboardApp: FunctionalComponent = () => {
     [selectedIds, selectedSet, applySearchWorkerUpdate, updateBookmarksState],
   );
 
-  const handleImportFile = useCallback(
-    async (file: File, format: 'html' | 'json') => {
-      if (!importWorkerRef.current) {
-        return;
-      }
-      setImportState({ busy: true, progress: null, error: null });
-        try {
-          const result =
-            format === 'html'
-              ? await importWorkerRef.current.importHtml(file, { dedupe: true })
-              : await importWorkerRef.current.importJson(file, { dedupe: true });
-        setImportState({ busy: false, progress: null, error: null });
-        setStatusMessage(`Import abgeschlossen (${result.stats.createdBookmarks} neue Einträge).`);
-        const [updatedBookmarks, updatedTags] = await Promise.all([
-          listBookmarks({ includeArchived: true }),
-          listTags(),
-        ]);
-        setBookmarks(updatedBookmarks);
-        setTags(updatedTags);
-          if (searchWorkerRef.current) {
-            try {
-              await searchWorkerRef.current.rebuildIndex(updatedBookmarks);
-              setSearchGeneration((value) => value + 1);
-            } catch (error) {
-              console.error('Search index rebuild failed after import', error);
-              setSearchError('Suche eventuell eingeschränkt.');
-            }
-          }
-      } catch (error) {
-        console.error('Import failed', error);
-        setImportState({ busy: false, progress: null, error: 'Import fehlgeschlagen.' });
-      }
-    },
-    [setSearchGeneration],
-  );
 
-  const handleExport = useCallback(
-    async (format: ExportFormat) => {
-      if (!importWorkerRef.current) {
-        return;
-      }
-      setImportState({ busy: true, progress: null, error: null });
-      try {
-        const result = await importWorkerRef.current.export(format);
-        const url = URL.createObjectURL(result.blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = result.fileName;
-        anchor.style.display = 'none';
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(url);
-        setImportState({ busy: false, progress: null, error: null });
-        setStatusMessage('Export vorbereitet.');
-      } catch (error) {
-        console.error('Export failed', error);
-        setImportState({ busy: false, progress: null, error: 'Export fehlgeschlagen.' });
-      }
-    },
-    [],
-  );
 
   const handleSessionSave = useCallback(async () => {
     setSessionState({ busy: true, error: null });
@@ -2415,8 +2334,8 @@ const DashboardApp: FunctionalComponent = () => {
           ) : null}
           {!isSidebarCompact || !canUseCompactSidebar ? (
           <section className="sidebar-actions">
-            <button type="button" onClick={() => setImportDialogOpen(true)}>
-              Import / Export
+            <button type="button" onClick={handleOpenSettings} title={SIDEBAR_ACTIONS.importExport.description}>
+              {SIDEBAR_ACTIONS.importExport.label}
             </button>
             <button type="button" onClick={() => setSessionDialogOpen(true)}>
               Sessions
@@ -2428,6 +2347,7 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
+              <p className="list-help-hint">{DASHBOARD_LIST_HELP_TEXT}</p>
               <label className="toolbar-select">
                 <span>Sortierung</span>
                 <select value={bookmarkSortMode} onChange={handleSortModeChange}>
@@ -2630,16 +2550,6 @@ const DashboardApp: FunctionalComponent = () => {
         {sidebarTooltip.label}
       </div>
 
-      {isImportDialogOpen ? (
-        <ImportExportDialog
-          state={importState}
-          onClose={() => setImportDialogOpen(false)}
-          onImportFile={(file, format) => {
-            void handleImportFile(file, format);
-          }}
-          onExport={(format) => handleExport(format)}
-        />
-      ) : null}
 
       {isSessionDialogOpen ? (
         <SessionDialog

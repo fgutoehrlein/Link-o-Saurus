@@ -329,18 +329,42 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(dashboardSearch).toHaveValue('Deep Link');
     await expect(dashboardPage.locator('.bookmark-list')).toContainText(/Keine Einträge gefunden|Deep Link/);
 
-    const importFile = await createImportFixture(2000);
-    await dashboardPage.getByRole('button', { name: 'Import / Export' }).click();
-    const importModal = dashboardPage.locator('.modal:has-text("Import & Export")');
-    await importModal.waitFor();
-    await importModal.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
+    const importFixture = await createImportFixture(2000);
+    const pagesBeforeOpen = new Set(context.pages());
+    await dashboardPage.getByRole('button', { name: 'In Einstellungen öffnen' }).click();
+    const settingsPage = await (async () => {
+      const timeoutAt = Date.now() + 15_000;
+      while (Date.now() < timeoutAt) {
+        const existing = context.pages().find((page) => /\/options\.html/.test(page.url()));
+        if (existing) {
+          return existing;
+        }
+
+        const created = context.pages().find((page) => !pagesBeforeOpen.has(page) && page !== dashboardPage);
+        if (created) {
+          await created.waitForLoadState('domcontentloaded');
+          if (/\/options\.html/.test(created.url())) {
+            return created;
+          }
+        }
+
+        await dashboardPage.waitForTimeout(100);
+      }
+
+      throw new Error('Settings page did not open after clicking "In Einstellungen öffnen".');
+    })();
+
+    await settingsPage.waitForLoadState('domcontentloaded');
+    await settingsPage.waitForURL(/options\.html/);
+    await expect(settingsPage.getByRole('heading', { name: 'Import' })).toBeVisible();
+    await settingsPage.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFixture.filePath);
     await expect
-      .poll(
-        async () => (await dashboardPage.locator('.status').textContent())?.trim(),
-        { timeout: 60_000 },
-      )
-      .toContain('Import abgeschlossen (2000 neue Einträge).');
-    await importModal.getByRole('button', { name: 'Schließen' }).click();
+      .poll(() => countBookmarksByUrlPrefix(settingsPage, importFixture.urlPrefix), { timeout: 60_000 })
+      .toBe(importFixture.count);
+    await settingsPage.close();
+
+    await dashboardPage.reload();
+    await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
 
@@ -383,10 +407,17 @@ async function openSidePanel(page: Page, extensionId: string): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
 }
 
-async function createImportFixture(count: number): Promise<string> {
+type ImportFixture = {
+  readonly count: number;
+  readonly filePath: string;
+  readonly urlPrefix: string;
+};
+
+async function createImportFixture(count: number): Promise<ImportFixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'linkosaurus-import-'));
   const filePath = path.join(dir, 'bulk-import.json');
   const now = Date.now();
+  const urlPrefix = `https://bulk.example/${now}`;
   const payload = {
     format: 'link-o-saurus' as const,
     version: 1 as const,
@@ -394,8 +425,8 @@ async function createImportFixture(count: number): Promise<string> {
     boards: [] as const,
     categories: [] as const,
     bookmarks: Array.from({ length: count }, (_, index) => ({
-      id: `seed-${index}`,
-      url: `https://bulk.example/${index}`,
+      id: `seed-${now}-${index}`,
+      url: `${urlPrefix}/${index}`,
       title: `Imported Bookmark ${index}`,
       notes: '',
       tags: ['bulk'],
@@ -407,5 +438,42 @@ async function createImportFixture(count: number): Promise<string> {
     })),
   };
   await fs.writeFile(filePath, JSON.stringify(payload), 'utf8');
-  return filePath;
+  return { count, filePath, urlPrefix };
+}
+
+async function countBookmarksByUrlPrefix(page: Page, urlPrefix: string): Promise<number> {
+  return page.evaluate(async (prefix) => {
+    return new Promise<number>((resolve, reject) => {
+      const request = indexedDB.open('link-o-saurus');
+
+      request.onerror = () => reject(request.error ?? new Error('Failed to open Link-O-Saurus IndexedDB.'));
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction('bookmarks', 'readonly');
+        const store = transaction.objectStore('bookmarks');
+        const cursorRequest = store.openCursor();
+        let count = 0;
+
+        cursorRequest.onerror = () => {
+          database.close();
+          reject(cursorRequest.error ?? new Error('Failed to count imported bookmarks.'));
+        };
+
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) {
+            database.close();
+            resolve(count);
+            return;
+          }
+
+          const url = typeof cursor.value?.url === 'string' ? cursor.value.url : '';
+          if (url.startsWith(prefix)) {
+            count += 1;
+          }
+          cursor.continue();
+        };
+      };
+    });
+  }, urlPrefix);
 }
