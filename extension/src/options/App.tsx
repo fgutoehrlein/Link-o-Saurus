@@ -364,7 +364,7 @@ const App: FunctionalComponent = () => {
       setIsImporting(true);
       try {
         const worker = await withWorker();
-        const callbacks = { onProgress: proxy(handleProgress) };
+        const callbacks = proxy({ onProgress: handleProgress });
         let result: ImportResult;
         if (format === 'html') {
           result = await worker.importHtml(file, { dedupe: dedupeEnabled }, callbacks);
