@@ -357,7 +357,20 @@ test.describe('Link-O-Saurus extension', () => {
     await settingsPage.waitForLoadState('domcontentloaded');
     await settingsPage.waitForURL(/options\.html/);
     await settingsPage.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFile);
-    await expect(settingsPage.locator('dd').filter({ hasText: '2,000' })).toBeVisible({ timeout: 60_000 });
+    await expect
+      .poll(
+        async () => {
+          const importedValue = await settingsPage.locator('dt', { hasText: 'Importiert' }).locator('xpath=following-sibling::dd[1]').textContent();
+          if (!importedValue) {
+            return null;
+          }
+
+          const numeric = Number.parseInt(importedValue.replace(/[^\d]/g, ''), 10);
+          return Number.isNaN(numeric) ? null : numeric;
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(2000);
     await settingsPage.close();
 
     await dashboardPage.reload();
