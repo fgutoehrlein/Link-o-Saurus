@@ -972,8 +972,23 @@ const DashboardApp: FunctionalComponent = () => {
     [treeRows],
   );
 
+  const tileBookmarkIds = useMemo(
+    () =>
+      sortBookmarks(
+        bookmarks.filter(
+          (bookmark) =>
+            !bookmark.archived && matchesTagFilter(bookmark.tags, activeTagFilterState),
+        ),
+        bookmarkSortMode,
+      ).map((bookmark) => bookmark.id),
+    [bookmarks, activeTagFilterState, bookmarkSortMode],
+  );
+
+  const activeViewBookmarkIds =
+    bookmarkViewMode === 'tiles' ? tileBookmarkIds : visibleBookmarkIds;
+
   const totalBookmarkCount = bookmarks.length;
-  const visibleBookmarkCount = visibleBookmarkIds.length;
+  const visibleBookmarkCount = activeViewBookmarkIds.length;
   const bookmarkCountLabel =
     visibleBookmarkCount === totalBookmarkCount
       ? `Bookmarks (${totalBookmarkCount})`
@@ -1021,7 +1036,7 @@ const DashboardApp: FunctionalComponent = () => {
   const handleRowSelection = useCallback(
     (event: MouseEvent | KeyboardEvent, id: string) => {
       event.preventDefault();
-    const currentIndex = visibleBookmarkIds.indexOf(id);
+      const currentIndex = activeViewBookmarkIds.indexOf(id);
       if (currentIndex === -1) {
         return;
       }
@@ -1034,7 +1049,7 @@ const DashboardApp: FunctionalComponent = () => {
           const anchor = lastSelectionRef.current.anchorIndex ?? currentIndex;
           const [start, end] = anchor < currentIndex ? [anchor, currentIndex] : [currentIndex, anchor];
           for (let index = start; index <= end; index += 1) {
-            const rangeId = filteredIds[index];
+            const rangeId = activeViewBookmarkIds[index];
             if (rangeId) {
               set.add(rangeId);
             }
@@ -1055,7 +1070,7 @@ const DashboardApp: FunctionalComponent = () => {
         return Array.from(set);
       });
     },
-    [filteredIds],
+    [activeViewBookmarkIds],
   );
 
   const handleRowContextMenu = useCallback((event: MouseEvent, id: string) => {
@@ -1310,8 +1325,8 @@ const DashboardApp: FunctionalComponent = () => {
 
   const tileColumnCount = useMemo(() => getGridColumnCount(listWidth), [listWidth]);
   const tileRows = useMemo(
-    () => toGridRows(visibleBookmarkIds, tileColumnCount),
-    [visibleBookmarkIds, tileColumnCount],
+    () => toGridRows(tileBookmarkIds, tileColumnCount),
+    [tileBookmarkIds, tileColumnCount],
   );
 
   const getTileRowHeight = useCallback(
@@ -1360,7 +1375,7 @@ const DashboardApp: FunctionalComponent = () => {
   useEffect(() => {
     tileRowHeightsRef.current.clear();
     tileListRef.current?.resetAfterIndex(0, true);
-  }, [tileColumnCount, visibleBookmarkIds]);
+  }, [tileColumnCount, tileBookmarkIds]);
 
   useEffect(() => {
     if (bookmarkViewMode !== 'tiles') {
@@ -2451,9 +2466,11 @@ const DashboardApp: FunctionalComponent = () => {
             role="group"
             aria-busy={isSearching}
           >
-            {treeRows.length === 0 ? (
+            {(bookmarkViewMode === 'tiles' ? tileRows.length === 0 : treeRows.length === 0) ? (
               <div className="empty-state">
-                {isSearching ? 'Suche…' : 'Keine Einträge gefunden.'}
+                {bookmarkViewMode === 'list' && isSearching
+                  ? 'Suche…'
+                  : 'Keine Einträge gefunden.'}
               </div>
             ) : listHeight > 0 ? (
               <div className={combineClassNames('view-mode-stage', bookmarkViewMode === 'tiles' && 'is-tiles')}>
