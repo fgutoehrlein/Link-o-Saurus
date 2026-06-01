@@ -4,7 +4,7 @@ import type { ComponentType as ReactComponentType } from 'react';
 import type { ListChildComponentProps } from 'react-window';
 import { applyNegativeTagContextAction, getTagFilterMode } from '../../shared/tag-filter';
 import type { BookmarkListData } from '../types';
-import { formatTimestamp, combineClassNames } from '../utils/formatting';
+import { combineClassNames, formatCompactTimestamp, formatTimestamp } from '../utils/formatting';
 import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
 
@@ -63,17 +63,30 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
         aria-level={row.depth + 1}
         aria-expanded={row.expanded}
         tabIndex={isActive ? 0 : -1}
-        className="bookmark-row bookmark-folder-row"
+        className={combineClassNames('bookmark-row', 'bookmark-folder-row', row.depth === 0 && 'is-root-folder')}
         ref={(node) => {
           rowRef.current = node;
           data.onRowRef(index, node);
         }}
-        style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
+        style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${14 + row.depth * 18}px` }}
         onFocus={() => data.onRowFocus(index)}
         onKeyDown={(event) => data.onRowKeyDown(event as unknown as KeyboardEvent, index)}
       >
-        <button type="button" tabIndex={-1} className="folder-toggle" onClick={() => data.onToggleFolder(row.id)} aria-expanded={row.expanded}>
-          <span aria-hidden="true">{row.expanded ? '▾' : '▸'}</span> {row.title}
+        <button
+          type="button"
+          tabIndex={-1}
+          className="folder-toggle"
+          onClick={() => data.onToggleFolder(row.id)}
+          aria-expanded={row.expanded}
+          aria-label={`${row.expanded ? 'Ordner einklappen' : 'Ordner ausklappen'}: ${row.title}`}
+        >
+          <span className="folder-toggle-icon" aria-hidden="true">
+            {row.expanded ? '▾' : '▸'}
+          </span>
+          <span className="folder-toggle-title">{row.title}</span>
+          <span className="folder-toggle-count" aria-label={`${row.childCount} Bookmarks`}>
+            ({row.childCount})
+          </span>
         </button>
       </div>
     );
@@ -86,6 +99,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
   const isSelected = data.selected.has(id);
   const domain = getBookmarkDomain(bookmark.url);
   const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
+  const updatedLabel = formatCompactTimestamp(bookmark.updatedAt);
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
   };
@@ -121,7 +135,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
         rowRef.current = node;
         data.onRowRef(index, node);
       }}
-      style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${12 + row.depth * 16}px` }}
+      style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${22 + row.depth * 18}px` }}
       onClick={handleClick}
       onFocus={() => data.onRowFocus(index)}
       onDblClick={handleDoubleClick}
@@ -187,10 +201,9 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           </ul>
         ) : null}
       </div>
-      <div className="bookmark-updated" title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
-        <span className="bookmark-updated-label">Aktualisiert</span>
-        <span>{formatTimestamp(bookmark.updatedAt)}</span>
-      </div>
+      <time className="bookmark-updated" dateTime={new Date(bookmark.updatedAt).toISOString()} title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
+        {updatedLabel}
+      </time>
     </div>
   );
 };

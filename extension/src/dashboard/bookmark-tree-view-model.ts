@@ -23,6 +23,9 @@ const compareBookmarks = (left: Bookmark, right: Bookmark): number =>
   left.createdAt - right.createdAt ||
   left.id.localeCompare(right.id);
 
+const getBoardBookmarkCount = (boardNode: { readonly categories: ReadonlyArray<{ readonly bookmarks: readonly Bookmark[] }> }): number =>
+  boardNode.categories.reduce((total, categoryNode) => total + categoryNode.bookmarks.length, 0);
+
 /**
  * Invariants for robust import and mixed data quality:
  * - Root consists of all known boards. Missing references never create synthetic root cycles.
@@ -80,6 +83,7 @@ export const buildBookmarkTreeRows = ({
       depth: 0,
       hasChildren: boardNode.categories.length > 0,
       expanded: boardExpanded,
+      childCount: getBoardBookmarkCount(boardNode),
     });
 
     if (!boardExpanded) continue;
@@ -93,6 +97,7 @@ export const buildBookmarkTreeRows = ({
         depth: 1,
         hasChildren: categoryNode.bookmarks.length > 0,
         expanded: categoryExpanded,
+        childCount: categoryNode.bookmarks.length,
       });
 
       if (!categoryExpanded) continue;

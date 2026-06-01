@@ -41,6 +41,13 @@ describe('buildBookmarkTreeRows', () => {
       'bookmark:m3',
       'board:b2',
     ]);
+
+    expect(rows.filter((row) => row.kind === 'folder').map((row) => [row.id, row.childCount])).toEqual([
+      ['board:b1', 3],
+      ['category:c1', 2],
+      ['category:c2', 1],
+      ['board:b2', 0],
+    ]);
   });
 
   it('flattens according to expand/collapse state', () => {
