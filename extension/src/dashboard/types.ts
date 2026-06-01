@@ -24,7 +24,15 @@ export type BookmarkNode = {
 export type TreeNode = FolderNode | BookmarkNode;
 
 export type VisibleRow =
-  | { readonly kind: 'folder'; readonly id: string; readonly title: string; readonly depth: number; readonly hasChildren: boolean; readonly expanded: boolean }
+  | {
+      readonly kind: 'folder';
+      readonly id: string;
+      readonly title: string;
+      readonly depth: number;
+      readonly hasChildren: boolean;
+      readonly expanded: boolean;
+      readonly childCount: number;
+    }
   | { readonly kind: 'bookmark'; readonly id: string; readonly bookmarkId: string; readonly depth: number };
 
 export type BookmarkListData = {

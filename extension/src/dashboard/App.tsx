@@ -125,7 +125,8 @@ type SelectionChange = {
   anchorIndex: number | null;
 };
 
-const DEFAULT_ITEM_HEIGHT = 116;
+const DEFAULT_FOLDER_ROW_HEIGHT = 42;
+const DEFAULT_BOOKMARK_ROW_HEIGHT = 68;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
 const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
@@ -1091,13 +1092,19 @@ const DashboardApp: FunctionalComponent = () => {
     [selectedIds, selectedSet],
   );
 
+  const getDefaultListRowHeight = useCallback(
+    (index: number) => (treeRows[index]?.kind === 'folder' ? DEFAULT_FOLDER_ROW_HEIGHT : DEFAULT_BOOKMARK_ROW_HEIGHT),
+    [treeRows],
+  );
+
   const getRowHeight = useCallback(
-    (index: number) => listRowHeightsRef.current.get(index) ?? DEFAULT_ITEM_HEIGHT,
-    [],
+    (index: number) => listRowHeightsRef.current.get(index) ?? getDefaultListRowHeight(index),
+    [getDefaultListRowHeight],
   );
 
   const setListRowHeight = useCallback((rowIndex: number, size: number) => {
-    const height = Math.max(DEFAULT_ITEM_HEIGHT, Math.ceil(size));
+    const minHeight = treeRows[rowIndex]?.kind === 'folder' ? DEFAULT_FOLDER_ROW_HEIGHT : DEFAULT_BOOKMARK_ROW_HEIGHT;
+    const height = Math.max(minHeight, Math.ceil(size));
     const current = listRowHeightsRef.current.get(rowIndex);
     if (typeof current === 'number' && Math.abs(current - height) <= ROW_HEIGHT_UPDATE_THRESHOLD) {
       return;
@@ -1119,7 +1126,7 @@ const DashboardApp: FunctionalComponent = () => {
       }
       listRef.current?.resetAfterIndex(resetIndex, false);
     });
-  }, []);
+  }, [treeRows]);
 
   useEffect(
     () => () => {
@@ -2481,7 +2488,7 @@ const DashboardApp: FunctionalComponent = () => {
                     width="100%"
                     itemCount={treeRows.length}
                     itemSize={getRowHeight}
-                    estimatedItemSize={DEFAULT_ITEM_HEIGHT}
+                    estimatedItemSize={DEFAULT_BOOKMARK_ROW_HEIGHT}
                     overscanCount={6}
                     itemData={listData}
                     ref={(instance) => {

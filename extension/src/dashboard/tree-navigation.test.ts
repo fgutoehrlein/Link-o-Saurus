@@ -3,8 +3,8 @@ import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import type { VisibleRow } from './types';
 
 const rows: VisibleRow[] = [
-  { kind: 'folder', id: 'board:1', title: 'Board', depth: 0, hasChildren: true, expanded: true },
-  { kind: 'folder', id: 'category:1', title: 'Category', depth: 1, hasChildren: true, expanded: false },
+  { kind: 'folder', id: 'board:1', title: 'Board', depth: 0, hasChildren: true, expanded: true, childCount: 1 },
+  { kind: 'folder', id: 'category:1', title: 'Category', depth: 1, hasChildren: true, expanded: false, childCount: 1 },
   { kind: 'bookmark', id: 'bookmark:1', bookmarkId: 'bookmark:1', depth: 2 },
 ];
 
