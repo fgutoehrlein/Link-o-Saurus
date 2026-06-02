@@ -9,8 +9,17 @@ import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
 
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
+const TREE_INDENT_STEP = 18;
+const FOLDER_BASE_INDENT = 14;
+const BOOKMARK_BASE_INDENT = 22;
 
 type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
+type TreeRowStyle = JSX.CSSProperties & { '--tree-row-indent': string };
+
+const getTreeRowStyle = (style: BookmarkRowProps['style'], baseIndent: number, depth: number): TreeRowStyle => ({
+  ...(style as JSX.CSSProperties),
+  '--tree-row-indent': `${baseIndent + depth * TREE_INDENT_STEP}px`,
+});
 
 export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
   const row = data.rows[index];
@@ -68,7 +77,8 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           rowRef.current = node;
           data.onRowRef(index, node);
         }}
-        style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${14 + row.depth * 18}px` }}
+        data-depth={row.depth}
+        style={getTreeRowStyle(style, FOLDER_BASE_INDENT, row.depth)}
         onFocus={() => data.onRowFocus(index)}
         onKeyDown={(event) => data.onRowKeyDown(event as unknown as KeyboardEvent, index)}
       >
@@ -135,7 +145,8 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
         rowRef.current = node;
         data.onRowRef(index, node);
       }}
-      style={{ ...(style as JSX.CSSProperties), paddingInlineStart: `${22 + row.depth * 18}px` }}
+      data-depth={row.depth}
+      style={getTreeRowStyle(style, BOOKMARK_BASE_INDENT, row.depth)}
       onClick={handleClick}
       onFocus={() => data.onRowFocus(index)}
       onDblClick={handleDoubleClick}
