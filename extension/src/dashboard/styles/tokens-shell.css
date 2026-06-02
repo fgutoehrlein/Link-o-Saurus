@@ -1636,12 +1636,28 @@ button.danger {
   border-radius: 0;
   background: rgba(255, 255, 255, 0.48);
   box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.12);
+  position: relative;
   cursor: pointer;
   box-sizing: border-box;
   transition:
     box-shadow 140ms ease,
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.bookmark-row.has-tree-guide::before {
+  content: '';
+  position: absolute;
+  top: 0.42rem;
+  bottom: 0.42rem;
+  left: calc(var(--tree-row-indent) - 9px);
+  width: 1px;
+  background: rgba(100, 116, 139, 0.12);
+  pointer-events: none;
+}
+
+[data-theme='dark'] .bookmark-row.has-tree-guide::before {
+  background: rgba(148, 163, 184, 0.14);
 }
 
 .bookmark-row.selected {
