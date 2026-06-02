@@ -99,9 +99,16 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           <span className="folder-toggle-icon" aria-hidden="true">
             {row.expanded ? '▾' : '▸'}
           </span>
+          <span
+            className={combineClassNames(
+              'folder-kind-icon',
+              isRootFolder ? 'root-folder-icon' : 'child-folder-icon',
+            )}
+            aria-hidden="true"
+          />
           <span className="folder-toggle-title">{row.title}</span>
           <span className="folder-toggle-count" aria-label={`${row.childCount} Bookmarks`}>
-            ({row.childCount})
+            {row.childCount}
           </span>
         </button>
       </div>
