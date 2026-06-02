@@ -42,6 +42,16 @@ describe('buildBookmarkTreeRows', () => {
       'board:b2',
     ]);
 
+    expect(rows.map((row) => [row.id, row.depth])).toEqual([
+      ['board:b1', 0],
+      ['category:c1', 1],
+      ['bookmark:m1', 2],
+      ['bookmark:m2', 2],
+      ['category:c2', 1],
+      ['bookmark:m3', 2],
+      ['board:b2', 0],
+    ]);
+
     expect(rows.filter((row) => row.kind === 'folder').map((row) => [row.id, row.childCount])).toEqual([
       ['board:b1', 3],
       ['category:c1', 2],
