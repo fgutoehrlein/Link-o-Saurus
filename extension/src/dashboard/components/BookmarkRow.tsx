@@ -78,6 +78,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           'bookmark-folder-row',
           isRootFolder && 'is-root-folder',
           !isRootFolder && 'is-child-folder',
+          row.depth > 0 && 'has-tree-guide',
         )}
         ref={(node) => {
           rowRef.current = node;
@@ -153,7 +154,12 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
       aria-level={row.depth + 1}
       aria-selected={isSelected}
       tabIndex={data.activeRowIndex === index ? 0 : -1}
-      className={combineClassNames('bookmark-row', 'bookmark-entry-row', isSelected && 'selected')}
+      className={combineClassNames(
+        'bookmark-row',
+        'bookmark-entry-row',
+        row.depth > 0 && 'has-tree-guide',
+        isSelected && 'selected',
+      )}
       ref={(node) => {
         rowRef.current = node;
         data.onRowRef(index, node);
