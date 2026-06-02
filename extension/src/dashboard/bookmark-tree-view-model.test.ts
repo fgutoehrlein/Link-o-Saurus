@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Bookmark, Board, Category } from '../shared/types';
-import { buildBookmarkTreeRows } from './bookmark-tree-view-model';
+import { buildBookmarkTreeRows, getExpandedFolderIdsForBookmarks } from './bookmark-tree-view-model';
 
 const board = (id: string, title: string): Board => ({ id, title, sortOrder: 0, createdAt: 0, updatedAt: 0 });
 const category = (id: string, boardId: string, title: string): Category => ({ id, boardId, title, sortOrder: 0 });
@@ -63,6 +63,27 @@ describe('buildBookmarkTreeRows', () => {
     });
 
     expect(rows.map((row) => row.id)).toEqual(['board:b1', 'category:c1']);
+  });
+
+  it('returns only parent folders for filtered bookmark matches', () => {
+    const bookmarks = [
+      bookmark('match-1', 'c1', 'One', 1),
+      bookmark('match-2', 'c2', 'Two', 2),
+      bookmark('hidden', 'c3', 'Three', 3),
+      bookmark('orphan', 'missing', 'Four', 4),
+    ];
+
+    const expanded = getExpandedFolderIdsForBookmarks({
+      bookmarksById: new Map(bookmarks.map((item) => [item.id, item] as const)),
+      bookmarkIds: ['match-1', 'match-2', 'orphan'],
+      categories: [
+        category('c1', 'b1', 'Inbox'),
+        category('c2', 'b1', 'Work'),
+        category('c3', 'b1', 'Later'),
+      ],
+    });
+
+    expect(Array.from(expanded).sort()).toEqual(['category:c1', 'category:c2']);
   });
 
   it('ignores malformed parent references and missing categories', () => {

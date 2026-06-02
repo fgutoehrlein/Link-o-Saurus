@@ -9,6 +9,12 @@ export type BuildBookmarkTreeRowsInput = {
   readonly expandedFolderIds: ReadonlySet<string>;
 };
 
+export type GetExpandedFolderIdsForBookmarksInput = {
+  readonly bookmarksById: ReadonlyMap<string, Bookmark>;
+  readonly bookmarkIds: readonly string[];
+  readonly categories: readonly Category[];
+};
+
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 const normalizeName = (value: string | undefined): string => value?.trim().toLocaleLowerCase() ?? '';
@@ -25,6 +31,24 @@ const compareBookmarks = (left: Bookmark, right: Bookmark): number =>
 
 const getBoardBookmarkCount = (boardNode: { readonly categories: ReadonlyArray<{ readonly bookmarks: readonly Bookmark[] }> }): number =>
   boardNode.categories.reduce((total, categoryNode) => total + categoryNode.bookmarks.length, 0);
+
+export const getExpandedFolderIdsForBookmarks = ({
+  bookmarksById,
+  bookmarkIds,
+  categories,
+}: GetExpandedFolderIdsForBookmarksInput): ReadonlySet<string> => {
+  const knownCategoryIds = new Set(categories.map((category) => category.id));
+  const folderIds = new Set<string>();
+
+  for (const bookmarkId of bookmarkIds) {
+    const categoryId = bookmarksById.get(bookmarkId)?.categoryId;
+    if (categoryId && knownCategoryIds.has(categoryId)) {
+      folderIds.add(`category:${categoryId}`);
+    }
+  }
+
+  return folderIds;
+};
 
 /**
  * Invariants for robust import and mixed data quality:

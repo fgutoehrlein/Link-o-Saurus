@@ -51,7 +51,7 @@ import {
 import './App.css';
 import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
-import { buildBookmarkTreeRows } from './bookmark-tree-view-model';
+import { buildBookmarkTreeRows, getExpandedFolderIdsForBookmarks } from './bookmark-tree-view-model';
 import {
   getGridColumnCount,
   resolveBookmarkViewMode,
@@ -957,16 +957,42 @@ const DashboardApp: FunctionalComponent = () => {
     ).map((bookmark) => bookmark.id);
   }, [searchQuery, searchHits, bookmarkEntries, bookmarkSortMode, activeTagFilterState]);
 
+  const filteredBookmarksById = useMemo(
+    () =>
+      new Map(
+        filteredIds
+          .map((id) => [id, bookmarkEntries.get(id)?.bookmark] as const)
+          .filter((entry): entry is readonly [string, Bookmark] => Boolean(entry[1])),
+      ),
+    [filteredIds, bookmarkEntries],
+  );
+
+  const shouldAutoExpandFilteredFolders =
+    searchQuery.trim().length > 0 ||
+    activeTagFilterState.include.length > 0 ||
+    activeTagFilterState.exclude.length > 0;
+
+  const effectiveExpandedFolderIds = useMemo(
+    () =>
+      shouldAutoExpandFilteredFolders
+        ? getExpandedFolderIdsForBookmarks({
+            bookmarksById: filteredBookmarksById,
+            bookmarkIds: filteredIds,
+            categories,
+          })
+        : expandedFolderIds,
+    [shouldAutoExpandFilteredFolders, filteredBookmarksById, filteredIds, categories, expandedFolderIds],
+  );
+
   const treeRows = useMemo<readonly VisibleRow[]>(() => {
-    const bookmarksById = new Map(filteredIds.map((id) => [id, bookmarkEntries.get(id)?.bookmark] as const).filter((entry): entry is readonly [string, Bookmark] => Boolean(entry[1])));
     return buildBookmarkTreeRows({
-      bookmarksById,
+      bookmarksById: filteredBookmarksById,
       filteredBookmarkIds: filteredIds,
       boards,
       categories,
-      expandedFolderIds,
+      expandedFolderIds: effectiveExpandedFolderIds,
     });
-  }, [filteredIds, bookmarkEntries, boards, categories, expandedFolderIds]);
+  }, [filteredIds, filteredBookmarksById, boards, categories, effectiveExpandedFolderIds]);
 
   const visibleBookmarkIds = useMemo(
     () => treeRows.filter((row) => row.kind === 'bookmark').map((row) => row.bookmarkId),
