@@ -17,6 +17,8 @@ type BookmarkRowProps = ListChildComponentProps<BookmarkListData>;
 type TreeRowStyle = JSX.CSSProperties & { '--tree-row-indent': string };
 
 const getTreeRowStyle = (style: BookmarkRowProps['style'], baseIndent: number, depth: number): TreeRowStyle => ({
+  // Keep every react-window positioning property intact; the CSS custom property only
+  // feeds indentation and must not replace the virtualized row style.
   ...(style as JSX.CSSProperties),
   '--tree-row-indent': `${baseIndent + depth * TREE_INDENT_STEP}px`,
 });
