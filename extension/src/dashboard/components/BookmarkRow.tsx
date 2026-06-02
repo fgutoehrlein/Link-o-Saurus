@@ -66,13 +66,19 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
   }
   if (row.kind === 'folder') {
     const isActive = data.activeRowIndex === index;
+    const isRootFolder = row.depth === 0;
     return (
       <div
         role="treeitem"
         aria-level={row.depth + 1}
         aria-expanded={row.expanded}
         tabIndex={isActive ? 0 : -1}
-        className={combineClassNames('bookmark-row', 'bookmark-folder-row', row.depth === 0 && 'is-root-folder')}
+        className={combineClassNames(
+          'bookmark-row',
+          'bookmark-folder-row',
+          isRootFolder && 'is-root-folder',
+          !isRootFolder && 'is-child-folder',
+        )}
         ref={(node) => {
           rowRef.current = node;
           data.onRowRef(index, node);
@@ -140,7 +146,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
       aria-level={row.depth + 1}
       aria-selected={isSelected}
       tabIndex={data.activeRowIndex === index ? 0 : -1}
-      className={combineClassNames('bookmark-row', isSelected && 'selected')}
+      className={combineClassNames('bookmark-row', 'bookmark-entry-row', isSelected && 'selected')}
       ref={(node) => {
         rowRef.current = node;
         data.onRowRef(index, node);
