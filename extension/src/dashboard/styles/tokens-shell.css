@@ -2123,7 +2123,7 @@ button.danger {
   font-weight: 500;
   color: color-mix(in srgb, var(--accent) 76%, #1e293b);
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .bookmark-tag-chip:hover {
@@ -2914,8 +2914,23 @@ button.danger {
     gap: 0.62rem;
     padding-block: 0.44rem;
   }
+  .bookmark-entry-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
   .bookmark-folder-row {
     display: flex;
+    padding-inline-start: var(--tree-row-indent);
+  }
+  .bookmark-folder-row.is-root-folder,
+  .bookmark-folder-row.is-child-folder {
+    padding-inline-start: var(--tree-row-indent);
+  }
+  .bookmark-folder-row .folder-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .bookmark-folder-row .folder-toggle-title {
+    min-width: 0;
   }
   .bookmark-updated {
     display: none;
