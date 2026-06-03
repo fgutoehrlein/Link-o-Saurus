@@ -2395,7 +2395,6 @@ const DashboardApp: FunctionalComponent = () => {
           <div className="list-header">
             <h2>{bookmarkCountLabel}</h2>
             <div className="list-actions">
-              <p className="list-help-hint">{DASHBOARD_LIST_HELP_TEXT}</p>
               <label className="toolbar-select">
                 <span>Sortierung</span>
                 <select value={bookmarkSortMode} onChange={handleSortModeChange}>
