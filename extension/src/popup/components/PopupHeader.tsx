@@ -18,9 +18,6 @@ export const PopupHeader: FunctionalComponent = () => {
     <header className="popup-header">
       <h1>Link-O-Saurus</h1>
       <div className="popup-header-actions">
-        <button type="button" className="ghost-button" onClick={() => void openSidePanel()}>
-          Side Panel
-        </button>
         <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
           Dashboard
         </button>
