@@ -336,6 +336,8 @@ select:focus-visible,
   margin: 0;
   padding: 0;
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 6px;
   overflow: auto;
 }
