@@ -169,6 +169,8 @@ test.describe('Link-O-Saurus extension', () => {
     const uniqueSuffix = Date.now();
     const newBookmarkTitle = `Playwright Handbook ${uniqueSuffix}`;
     const newBookmarkUrl = `https://playwright.dev/${uniqueSuffix}`;
+    const adjacentBookmarkTitle = `Playwright Layout Check ${uniqueSuffix}`;
+    const adjacentBookmarkUrl = `https://playwright.dev/layout-${uniqueSuffix}`;
 
     await page.getByRole('button', { name: 'Details' }).click();
     await page.getByLabel('Titel').fill(newBookmarkTitle);
@@ -190,11 +192,23 @@ test.describe('Link-O-Saurus extension', () => {
     }
 
     await page.waitForFunction(
-      async (expectedTitle: string) => {
+      () => typeof window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark === 'function',
+    );
+    await page.evaluate(
+      ({ title, url }) =>
+        window.__LINKOSAURUS_POPUP_HARNESS?.addBookmark({
+          title,
+          url,
+        }),
+      { title: adjacentBookmarkTitle, url: adjacentBookmarkUrl },
+    );
+
+    await page.waitForFunction(
+      async (expectedTitles: string[]) => {
         const titles = await window.__LINKOSAURUS_POPUP_HARNESS?.visibleTitles(20);
-        return Array.isArray(titles) && titles.includes(expectedTitle);
+        return Array.isArray(titles) && expectedTitles.every((title) => titles.includes(title));
       },
-      newBookmarkTitle,
+      [newBookmarkTitle, adjacentBookmarkTitle],
     );
 
     const collapseDetailsButton = page.getByRole('button', { name: 'Weniger' });
@@ -205,6 +219,24 @@ test.describe('Link-O-Saurus extension', () => {
     const searchField = page.getByPlaceholder('Bookmarks durchsuchen (/)');
     await searchField.fill('Playwright');
     await expect(page.locator('.access-list')).toContainText(newBookmarkTitle);
+    await expect(page.locator('.access-list')).toContainText(adjacentBookmarkTitle);
+
+    const visibleSearchResults = page.locator('.access-list .access-item:visible');
+    await expect.poll(() => visibleSearchResults.count()).toBeGreaterThanOrEqual(2);
+
+    const resultGap = await visibleSearchResults.evaluateAll((items) => {
+      const [firstItem, secondItem] = items.slice(0, 2);
+      if (!firstItem || !secondItem) {
+        throw new Error('Expected at least two visible search results for layout measurement.');
+      }
+
+      const firstBox = firstItem.getBoundingClientRect();
+      const secondBox = secondItem.getBoundingClientRect();
+
+      return secondBox.top - firstBox.bottom;
+    });
+    expect(resultGap).toBeGreaterThanOrEqual(0);
+    expect(resultGap).toBeLessThanOrEqual(16);
 
     await page.getByRole('button', { name: 'Dashboard' }).click();
     const targetUrl = await page.evaluate(() => {
