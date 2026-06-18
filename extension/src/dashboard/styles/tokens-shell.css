@@ -779,11 +779,40 @@ body {
   margin: 0 0 0.35rem;
 }
 
+.sidebar-navigation-section {
+  margin-bottom: 0.35rem;
+}
+
+.sidebar-navigation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.35rem;
+}
+
+.sidebar-navigation-header h2 {
+  margin: 0;
+  color: var(--text-muted-light);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+[data-theme='dark'] .sidebar-navigation-header h2 {
+  color: var(--text-muted-dark);
+}
+
 .sidebar-compact-toggle {
   min-width: 2.7rem;
   height: 2.35rem;
   padding: 0.38rem 0.75rem;
   border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: rgba(37, 99, 235, 0.08);
+  color: inherit;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -797,27 +826,18 @@ body {
     box-shadow 180ms ease;
 }
 
-.sidebar-nav-toggle {
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-light));
-  background: color-mix(in srgb, var(--panel-light) 78%, var(--accent) 22%);
-  color: inherit;
-  box-shadow: 0 10px 20px -16px rgba(15, 23, 42, 0.55);
-  justify-content: center;
+[data-theme='dark'] .sidebar-compact-toggle {
+  border-color: var(--border-dark);
+  background: rgba(96, 165, 250, 0.1);
 }
 
-[data-theme='dark'] .sidebar-nav-toggle {
-  border-color: color-mix(in srgb, var(--accent-dark) 50%, var(--border-dark));
-  background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 72%, var(--accent-dark) 28%);
-}
-
-.sidebar-nav-toggle:hover {
+.sidebar-compact-toggle:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--accent) 68%, var(--border-light));
-  box-shadow: 0 16px 28px -18px rgba(15, 23, 42, 0.58);
+  box-shadow: 0 12px 24px -18px rgba(15, 23, 42, 0.52);
 }
 
-.sidebar-nav-toggle.is-compact {
+.sidebar-compact-toggle.is-compact {
   width: 2.7rem;
   padding-inline: 0;
 }
@@ -825,11 +845,6 @@ body {
 .nav-toggle-icon {
   font-size: 0.98rem;
   line-height: 1;
-}
-
-.nav-toggle-label {
-  font-size: 0.8rem;
-  letter-spacing: 0.02em;
 }
 
 .section-buttons {
@@ -1120,7 +1135,8 @@ body {
   overflow: hidden;
 }
 
-.dashboard-sidebar.compact .filter-reset {
+.dashboard-sidebar.compact .filter-reset,
+.dashboard-sidebar.compact .sidebar-navigation-header {
   justify-content: center;
 }
 

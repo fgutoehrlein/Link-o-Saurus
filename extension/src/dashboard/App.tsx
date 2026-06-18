@@ -2285,31 +2285,27 @@ const DashboardApp: FunctionalComponent = () => {
             isSidebarCompact && canUseCompactSidebar && 'compact',
           )}
         >
-          <section>
-            <div className="filter-reset">
+          <section className="sidebar-navigation-section" aria-labelledby="sidebar-navigation-heading">
+            <header className="sidebar-navigation-header">
+              {!isSidebarCompact || !canUseCompactSidebar ? (
+                <h2 id="sidebar-navigation-heading">Navigation</h2>
+              ) : (
+                <span id="sidebar-navigation-heading" className="sr-only">Navigation</span>
+              )}
               {canUseCompactSidebar ? (
                 <button
                   type="button"
-                  className={combineClassNames('sidebar-compact-toggle', 'sidebar-nav-toggle', isSidebarCompact && 'is-compact')}
+                  className={combineClassNames('sidebar-compact-toggle', isSidebarCompact && 'is-compact')}
                   aria-pressed={isSidebarCompact}
                   aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
                   title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
                   onClick={() => setSidebarCompact((value) => !value)}
                 >
-                  {isSidebarCompact ? (
-                    <>
-                      <span aria-hidden="true" className="nav-toggle-icon">☰</span>
-                    </>
-                  ) : (
-                    <>
-                      <span aria-hidden="true" className="nav-toggle-icon">☰</span>
-                      <span className="nav-toggle-label">Navigation</span>
-                    </>
-                  )}
+                  <span aria-hidden="true" className="nav-toggle-icon">☰</span>
                   <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
                 </button>
               ) : null}
-            </div>
+            </header>
           </section>
           {!isSidebarCompact || !canUseCompactSidebar ? (
           <section>
