@@ -919,30 +919,31 @@ body {
 }
 
 .dashboard-sidebar section > header .tag-section-toggle {
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 1.8rem;
+  height: 1.8rem;
   padding: 0;
-  border: 0;
+  border: 1px solid rgba(37, 99, 235, 0.2);
   border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted-light);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent);
   box-shadow: none;
 }
 
 [data-theme='dark'] .dashboard-sidebar section > header .tag-section-toggle {
-  border: 0;
-  background: transparent;
-  color: var(--text-muted-dark);
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.14);
+  color: var(--accent-light);
 }
 
 .dashboard-sidebar section > header .tag-section-toggle:hover {
-  background: rgba(37, 99, 235, 0.1);
-  border-color: transparent;
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.34);
   color: var(--accent);
 }
 
 .dashboard-sidebar section > header .tag-section-toggle .chevron {
-  font-size: 0.78rem;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .dashboard-sidebar section > header button:focus-visible {
