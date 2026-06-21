@@ -3,11 +3,18 @@ import { ensureReadLaterAlarm, registerBadgeController, updateReadLaterBadge } f
 import { registerContextMenu, registerContextMenuController } from './context-menu-controller';
 import { handleBackgroundRequest } from './message-router';
 import { initializeNewTabController } from './newtab-controller';
-import { openSidePanelForWindow, rememberQuickSaveTab, setSidePanelActionBehavior } from './side-panel-controller';
+import {
+  openSidePanelForWindow,
+  registerSidePanelStateTracking,
+  rememberQuickSaveTab,
+  setSidePanelActionBehavior,
+  toggleSidePanelForWindow,
+} from './side-panel-controller';
 
 console.log('[Link-o-Saurus] background service worker initialized');
 
 void initializeNewTabController();
+registerSidePanelStateTracking();
 
 const initializeBackgroundSurface = (): void => {
   registerContextMenu();
@@ -31,8 +38,8 @@ registerContextMenuController();
 
 chrome.action?.onClicked?.addListener((tab) => {
   rememberQuickSaveTab(tab);
-  void openSidePanelForWindow(tab.windowId).catch((error) => {
-    console.error('[Link-o-Saurus] Extension action failed to open side panel.', error);
+  void toggleSidePanelForWindow(tab.windowId).catch((error) => {
+    console.error('[Link-o-Saurus] Extension action failed to toggle side panel.', error);
   });
 });
 
