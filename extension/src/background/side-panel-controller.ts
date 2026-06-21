@@ -1,3 +1,22 @@
+type SidePanelCloseOptions = { windowId?: number; tabId?: number };
+
+type SidePanelPanelInfo = { windowId: number; tabId?: number; path?: string };
+
+type SidePanelEvent = {
+  addListener?: (callback: (info: SidePanelPanelInfo) => void) => void;
+};
+
+type ToggleableSidePanelApi = typeof chrome.sidePanel & {
+  open?: (options: { windowId: number }) => Promise<void>;
+  close?: (options: SidePanelCloseOptions) => Promise<void>;
+  onOpened?: SidePanelEvent;
+  onClosed?: SidePanelEvent;
+};
+
+const getSidePanelApi = (): ToggleableSidePanelApi | undefined => chrome.sidePanel as ToggleableSidePanelApi | undefined;
+
+const openSidePanelWindows = new Set<number>();
+
 export type QuickSaveTabMetadata = {
   readonly title?: string;
   readonly url?: string;
@@ -80,6 +99,18 @@ export const resolveQuickSaveTab = async (): Promise<QuickSaveTabMetadata | unde
   return rememberQuickSaveTab(lastFocusedWindowTab);
 };
 
+export const registerSidePanelStateTracking = (): void => {
+  const sidePanelApi = getSidePanelApi();
+
+  sidePanelApi?.onOpened?.addListener?.((info) => {
+    openSidePanelWindows.add(info.windowId);
+  });
+
+  sidePanelApi?.onClosed?.addListener?.((info) => {
+    openSidePanelWindows.delete(info.windowId);
+  });
+};
+
 export const setSidePanelActionBehavior = async (): Promise<void> => {
   if (!chrome.sidePanel?.setPanelBehavior) {
     return;
@@ -91,29 +122,50 @@ export const setSidePanelActionBehavior = async (): Promise<void> => {
   }
 };
 
+const resolveSidePanelWindowId = async (windowId?: number): Promise<number | undefined> => {
+  if (typeof windowId === 'number') {
+    return windowId;
+  }
+
+  return (
+    await chrome.windows.getLastFocused({
+      populate: false,
+      windowTypes: ['normal'],
+    })
+  ).id;
+};
+
 export const openSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
-  const sidePanelApi = chrome.sidePanel as typeof chrome.sidePanel & {
-    open?: (options: { windowId: number }) => Promise<void>;
-  };
+  const sidePanelApi = getSidePanelApi();
 
   if (!sidePanelApi?.open) {
     return false;
   }
 
-  const resolvedWindowId =
-    typeof windowId === 'number'
-      ? windowId
-      : (
-          await chrome.windows.getLastFocused({
-            populate: false,
-            windowTypes: ['normal'],
-          })
-        ).id;
+  const resolvedWindowId = await resolveSidePanelWindowId(windowId);
 
   if (typeof resolvedWindowId !== 'number') {
     return false;
   }
 
   await sidePanelApi.open({ windowId: resolvedWindowId });
+  openSidePanelWindows.add(resolvedWindowId);
   return true;
+};
+
+export const toggleSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
+  const sidePanelApi = getSidePanelApi();
+  const resolvedWindowId = await resolveSidePanelWindowId(windowId);
+
+  if (typeof resolvedWindowId !== 'number') {
+    return false;
+  }
+
+  if (openSidePanelWindows.has(resolvedWindowId) && sidePanelApi?.close) {
+    await sidePanelApi.close({ windowId: resolvedWindowId });
+    openSidePanelWindows.delete(resolvedWindowId);
+    return true;
+  }
+
+  return openSidePanelForWindow(resolvedWindowId);
 };
