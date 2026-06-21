@@ -122,11 +122,7 @@ export const setSidePanelActionBehavior = async (): Promise<void> => {
   }
 };
 
-const resolveSidePanelWindowId = async (windowId?: number): Promise<number | undefined> => {
-  if (typeof windowId === 'number') {
-    return windowId;
-  }
-
+const getLastFocusedWindowId = async (): Promise<number | undefined> => {
   return (
     await chrome.windows.getLastFocused({
       populate: false,
@@ -142,7 +138,7 @@ export const openSidePanelForWindow = async (windowId?: number): Promise<boolean
     return false;
   }
 
-  const resolvedWindowId = await resolveSidePanelWindowId(windowId);
+  const resolvedWindowId = typeof windowId === 'number' ? windowId : await getLastFocusedWindowId();
 
   if (typeof resolvedWindowId !== 'number') {
     return false;
@@ -155,7 +151,7 @@ export const openSidePanelForWindow = async (windowId?: number): Promise<boolean
 
 export const toggleSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
   const sidePanelApi = getSidePanelApi();
-  const resolvedWindowId = await resolveSidePanelWindowId(windowId);
+  const resolvedWindowId = typeof windowId === 'number' ? windowId : await getLastFocusedWindowId();
 
   if (typeof resolvedWindowId !== 'number') {
     return false;
