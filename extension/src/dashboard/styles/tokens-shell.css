@@ -918,6 +918,34 @@ body {
   padding: 0.35rem;
 }
 
+.dashboard-sidebar section > header .tag-section-toggle {
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+[data-theme='dark'] .dashboard-sidebar section > header .tag-section-toggle {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.14);
+  color: var(--accent-light);
+}
+
+.dashboard-sidebar section > header .tag-section-toggle:hover {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.34);
+  color: var(--accent);
+}
+
+.dashboard-sidebar section > header .tag-section-toggle .chevron {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
 .dashboard-sidebar section > header button:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.45);
   outline-offset: 2px;
