@@ -1,6 +1,6 @@
 import { FunctionalComponent } from 'preact';
 import { useCallback } from 'preact/hooks';
-import { openDashboard, openSidePanel } from '../../shared/utils';
+import { openDashboard } from '../../shared/utils';
 
 export const PopupHeader: FunctionalComponent = () => {
   const handleOpenSettings = useCallback(() => {
@@ -16,7 +16,6 @@ export const PopupHeader: FunctionalComponent = () => {
 
   return (
     <header className="popup-header">
-      <h1>Link-O-Saurus</h1>
       <div className="popup-header-actions">
         <button type="button" className="ghost-button" onClick={() => void openDashboard()}>
           Dashboard

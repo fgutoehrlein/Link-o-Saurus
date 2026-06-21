@@ -54,8 +54,8 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
   <section className="quick-save" aria-labelledby="quick-save-title">
     <div className="quick-save__top">
       <p id="quick-save-title">Aktuellen Tab speichern</p>
-      <button type="button" className="inline-link" onClick={onReload}>
-        Neu laden
+      <button type="button" className="icon-link-button" onClick={onReload} aria-label="Aktiven Tab neu laden" title="Aktiven Tab neu laden">
+        <i className="fa-solid fa-rotate-right" aria-hidden="true" />
       </button>
     </div>
 

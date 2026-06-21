@@ -57,7 +57,7 @@ body {
 .popup-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .popup-header-actions {
@@ -143,6 +143,7 @@ body {
 .subtle-button,
 .ghost-button,
 .inline-link,
+.icon-link-button,
 .access-item,
 .tag-chip button {
   border: 0;
@@ -158,6 +159,13 @@ body {
   font-weight: 600;
   background: linear-gradient(140deg, var(--accent), var(--accent-strong));
   box-shadow: 0 8px 16px rgba(45, 99, 255, 0.35);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.primary-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 10px 22px rgba(45, 99, 255, 0.45);
 }
 
 .primary-button:disabled {
@@ -172,6 +180,15 @@ body {
   padding: 8px 10px;
   background: rgba(148, 163, 184, 0.14);
   border: 1px solid rgba(148, 163, 184, 0.2);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.subtle-button:hover,
+.ghost-button:hover {
+  transform: translateY(-1px);
+  background: rgba(148, 163, 184, 0.22);
+  border-color: rgba(158, 195, 255, 0.5);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.28);
 }
 
 .icon-only-button {
@@ -208,9 +225,28 @@ body {
   text-decoration: none;
 }
 
+.icon-link-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #9ec3ff;
+  transition: transform 160ms ease, color 160ms ease, background 160ms ease;
+}
+
 .inline-link:hover,
 .inline-link:focus-visible {
+  color: #c7dcff;
   text-decoration: underline;
+}
+
+.icon-link-button:hover,
+.icon-link-button:focus-visible {
+  transform: rotate(18deg) scale(1.06);
+  color: #d8e7ff;
+  background: rgba(79, 124, 255, 0.16);
 }
 
 .quick-save__details {
@@ -243,6 +279,7 @@ select:focus-visible,
 .primary-button:focus-visible,
 .subtle-button:focus-visible,
 .ghost-button:focus-visible,
+.icon-link-button:focus-visible,
 .access-item:focus-visible,
 .tag-chip button:focus-visible {
   outline: 2px solid rgba(130, 168, 255, 0.95);

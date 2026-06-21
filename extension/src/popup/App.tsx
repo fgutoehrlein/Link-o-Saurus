@@ -117,6 +117,15 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
     [popupSearch, quickSave],
   );
 
+  const handleReloadQuickSave = useCallback(async () => {
+    try {
+      await Promise.all([quickSave.loadQuickSaveFromTab(), popupSearch.refreshSearchIndex()]);
+      quickSave.setStatus({ tone: 'info', text: 'Aktiver Tab und Bookmark-Liste wurden aktualisiert.' });
+    } catch {
+      quickSave.setStatus({ tone: 'error', text: 'Aktualisieren fehlgeschlagen.' });
+    }
+  }, [popupSearch, quickSave]);
+
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === 'ArrowDown') {
@@ -203,7 +212,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
               }
             });
           }}
-          onReload={() => void quickSave.loadQuickSaveFromTab()}
+          onReload={() => void handleReloadQuickSave()}
           onTagsChange={(next) => {
             quickSave.setManualTagEdits(true);
             quickSave.setTags(next);
