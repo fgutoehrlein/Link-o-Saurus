@@ -22,6 +22,7 @@ type UsePopupSearchResult = {
   readonly searchTerm: string;
   readonly addBookmarkToIndex: (bookmark: Bookmark) => void;
   readonly handleSortModeChange: (event: Event) => void;
+  readonly refreshSearchIndex: () => Promise<void>;
   readonly recordOpenedBookmark: (bookmark: Bookmark) => Promise<void>;
   readonly setSearchSelection: (updater: number | ((current: number) => number)) => void;
   readonly setSearchTerm: (term: string) => void;
@@ -38,6 +39,17 @@ export const usePopupSearch = (url: string): UsePopupSearchResult => {
   useEffect(() => {
     searchEntriesRef.current = searchEntries;
   }, [searchEntries]);
+
+  const refreshSearchIndex = useCallback(async () => {
+    const [bookmarks, settings] = await Promise.all([
+      listBookmarks({ includeArchived: false, limit: SEARCH_INDEX_LIMIT }),
+      getUserSettings(),
+    ]);
+    const nextEntries = sortBookmarks(bookmarks, settings.bookmarkSortMode).map((bookmark) => buildSearchEntry(bookmark));
+    setBookmarkSortMode(settings.bookmarkSortMode);
+    searchEntriesRef.current = nextEntries;
+    setSearchEntries(nextEntries);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +151,7 @@ export const usePopupSearch = (url: string): UsePopupSearchResult => {
     searchTerm,
     addBookmarkToIndex,
     handleSortModeChange,
+    refreshSearchIndex,
     recordOpenedBookmark,
     setSearchSelection,
     setSearchTerm,
