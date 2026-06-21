@@ -918,6 +918,33 @@ body {
   padding: 0.35rem;
 }
 
+.dashboard-sidebar section > header .tag-section-toggle {
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted-light);
+  box-shadow: none;
+}
+
+[data-theme='dark'] .dashboard-sidebar section > header .tag-section-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted-dark);
+}
+
+.dashboard-sidebar section > header .tag-section-toggle:hover {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.dashboard-sidebar section > header .tag-section-toggle .chevron {
+  font-size: 0.78rem;
+}
+
 .dashboard-sidebar section > header button:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.45);
   outline-offset: 2px;

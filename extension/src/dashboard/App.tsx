@@ -2313,7 +2313,7 @@ const DashboardApp: FunctionalComponent = () => {
               <h2>Tags</h2>
               <button
                 type="button"
-                className="icon-button"
+                className="tag-section-toggle"
                 aria-expanded={areTagsExpanded}
                 aria-controls="tag-list"
                 aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
@@ -2321,7 +2321,7 @@ const DashboardApp: FunctionalComponent = () => {
                 onClick={() => setTagsExpanded((value) => !value)}
               >
                 <span aria-hidden="true" className="chevron">
-                  {areTagsExpanded ? '▴' : '▾'}
+                  {areTagsExpanded ? '⌄' : '›'}
                 </span>
                 <span className="sr-only">
                   {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
