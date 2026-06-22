@@ -2298,12 +2298,8 @@ const DashboardApp: FunctionalComponent = () => {
                     onClick={() => setSidebarCompact((value) => !value)}
                   >
                     <span className="sidebar-tags-title-text">Tags</span>
-                    <span
-                      aria-hidden="true"
-                      className={combineClassNames('sidebar-resize-icon', isSidebarCompact && 'is-compact')}
-                    >
-                      <span className="sidebar-resize-icon-panel" />
-                      <span className="sidebar-resize-icon-arrow">{isSidebarCompact ? '›' : '‹'}</span>
+                    <span aria-hidden="true" className="sidebar-tags-collapse-arrow">
+                      {isSidebarCompact ? '→' : '←'}
                     </span>
                   </button>
                 ) : (
