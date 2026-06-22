@@ -2278,48 +2278,40 @@ const DashboardApp: FunctionalComponent = () => {
             isSidebarCompact && canUseCompactSidebar && 'compact',
           )}
         >
-          <section className="sidebar-navigation-section" aria-labelledby="sidebar-navigation-heading">
-            <header className="sidebar-navigation-header">
-              {!isSidebarCompact || !canUseCompactSidebar ? (
-                <h2 id="sidebar-navigation-heading">Navigation</h2>
-              ) : (
-                <span id="sidebar-navigation-heading" className="sr-only">Navigation</span>
-              )}
-              {canUseCompactSidebar ? (
+          <section className="sidebar-tags-section">
+            <header className="sidebar-section-header sidebar-tags-header">
+              <h2>Tags</h2>
+              <div className="sidebar-tags-header-actions">
+                {canUseCompactSidebar ? (
+                  <button
+                    type="button"
+                    className={combineClassNames('sidebar-compact-toggle', isSidebarCompact && 'is-compact')}
+                    aria-pressed={isSidebarCompact}
+                    aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
+                    title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
+                    onClick={() => setSidebarCompact((value) => !value)}
+                  >
+                    <span aria-hidden="true" className="nav-toggle-icon">☰</span>
+                    <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className={combineClassNames('sidebar-compact-toggle', isSidebarCompact && 'is-compact')}
-                  aria-pressed={isSidebarCompact}
-                  aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
-                  title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
-                  onClick={() => setSidebarCompact((value) => !value)}
+                  className="tag-section-toggle"
+                  aria-expanded={areTagsExpanded}
+                  aria-controls="tag-list"
+                  aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                  title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                  onClick={() => setTagsExpanded((value) => !value)}
                 >
-                  <span aria-hidden="true" className="nav-toggle-icon">☰</span>
-                  <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
+                  <span aria-hidden="true" className="chevron">
+                    {areTagsExpanded ? '⌄' : '›'}
+                  </span>
+                  <span className="sr-only">
+                    {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                  </span>
                 </button>
-              ) : null}
-            </header>
-          </section>
-          {!isSidebarCompact || !canUseCompactSidebar ? (
-          <section>
-            <header className="sidebar-section-header">
-              <h2>Tags</h2>
-              <button
-                type="button"
-                className="tag-section-toggle"
-                aria-expanded={areTagsExpanded}
-                aria-controls="tag-list"
-                aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                onClick={() => setTagsExpanded((value) => !value)}
-              >
-                <span aria-hidden="true" className="chevron">
-                  {areTagsExpanded ? '⌄' : '›'}
-                </span>
-                <span className="sr-only">
-                  {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                </span>
-              </button>
+              </div>
             </header>
             {areTagsExpanded ? (
               <ul id="tag-list" className="sidebar-tag-list">
@@ -2368,7 +2360,6 @@ const DashboardApp: FunctionalComponent = () => {
               </p>
             )}
           </section>
-          ) : null}
           {!isSidebarCompact || !canUseCompactSidebar ? (
           <section className="sidebar-actions">
             <button type="button" onClick={handleOpenSettings} title={SIDEBAR_ACTIONS.importExport.description}>
