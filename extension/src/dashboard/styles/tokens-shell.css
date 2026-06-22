@@ -542,7 +542,7 @@ body {
 }
 
 .dashboard-shell.sidebar-compact-mode .dashboard-main {
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .layout-triple .dashboard-main.detail-panel-open {
@@ -550,7 +550,7 @@ body {
 }
 
 .dashboard-shell.layout-triple.sidebar-compact-mode .dashboard-main.detail-panel-open {
-  grid-template-columns: max-content minmax(0, 1fr) minmax(320px, 390px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
 }
 
 .layout-double .dashboard-main {
@@ -1212,6 +1212,9 @@ body {
 }
 
 .dashboard-sidebar.compact {
+  position: absolute;
+  top: 1.5rem;
+  left: 2rem;
   width: auto;
   padding: 0;
   align-items: stretch;
@@ -1221,6 +1224,7 @@ body {
   box-shadow: none;
   max-height: none;
   overflow: visible;
+  z-index: 12;
 }
 
 .dashboard-sidebar.compact > section {
