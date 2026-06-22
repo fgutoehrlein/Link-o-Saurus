@@ -495,6 +495,20 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, [layoutMode]);
 
+  const updateSidebarCompact = useCallback((nextValue: boolean) => {
+    const applyCompactState = () => {
+      setSidebarCompact(nextValue);
+    };
+    const documentWithViewTransition = document as Document & {
+      startViewTransition?: (updateCallback: () => void) => void;
+    };
+    if (typeof documentWithViewTransition.startViewTransition === 'function') {
+      documentWithViewTransition.startViewTransition(applyCompactState);
+      return;
+    }
+    applyCompactState();
+  }, []);
+
   const showSidebarTooltip = useCallback((target: EventTarget | null, label: string) => {
     if (!(target instanceof HTMLElement) || !showCompactTooltip) {
       return;
@@ -2295,7 +2309,7 @@ const DashboardApp: FunctionalComponent = () => {
                     aria-pressed={isSidebarCompact}
                     aria-label={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
                     title={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
-                    onClick={() => setSidebarCompact((value) => !value)}
+                    onClick={() => updateSidebarCompact(!isSidebarCompact)}
                   >
                     <span className="sidebar-tags-title-text">Tags</span>
                     <span aria-hidden="true" className="sidebar-tags-collapse-arrow">
@@ -2451,7 +2465,7 @@ const DashboardApp: FunctionalComponent = () => {
                   aria-pressed={isSidebarCompact}
                   aria-label="Tags-Leiste erweitern"
                   title="Tags-Leiste erweitern"
-                  onClick={() => setSidebarCompact(false)}
+                  onClick={() => updateSidebarCompact(false)}
                 >
                   <span className="sidebar-tags-title-text">Tags</span>
                   <span aria-hidden="true" className="sidebar-tags-collapse-arrow">→</span>
