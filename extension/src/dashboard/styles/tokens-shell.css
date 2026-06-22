@@ -946,6 +946,41 @@ body {
   color: var(--text-muted-dark);
 }
 
+.dashboard-sidebar section > header .sidebar-tags-title-toggle {
+  min-height: 2.35rem;
+  border-radius: 999px;
+  padding: 0.38rem 0.55rem 0.38rem 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font: inherit;
+  color: var(--text-muted-light);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.06));
+}
+
+[data-theme='dark'] .dashboard-sidebar section > header .sidebar-tags-title-toggle {
+  color: var(--text-muted-dark);
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.16), rgba(14, 165, 233, 0.08));
+}
+
+.dashboard-sidebar section > header .sidebar-tags-title-toggle:hover {
+  background: rgba(37, 99, 235, 0.16);
+  color: var(--accent);
+}
+
+.sidebar-tags-title-text {
+  line-height: 1;
+}
+
+.dashboard-sidebar.compact .sidebar-tags-title-toggle {
+  width: 2.7rem;
+  min-width: 2.7rem;
+  justify-content: center;
+  padding-inline: 0;
+}
+
 .dashboard-sidebar section > header button {
   border-radius: 10px;
   border: 1px solid var(--border-light);
@@ -1197,7 +1232,7 @@ body {
   align-items: stretch;
 }
 
-.dashboard-sidebar.compact .sidebar-section-header h2,
+.dashboard-sidebar.compact .sidebar-tags-title-text,
 .dashboard-sidebar.compact .tag-item .usage,
 .dashboard-sidebar.compact .filter-reset button:not(.sidebar-compact-toggle),
 .dashboard-sidebar.compact .sidebar-actions .theme-card,

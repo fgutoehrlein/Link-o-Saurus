@@ -2287,17 +2287,17 @@ const DashboardApp: FunctionalComponent = () => {
         >
           <section className="sidebar-tags-section">
             <header className="sidebar-section-header sidebar-tags-header">
-              <h2>Tags</h2>
-              <div className="sidebar-tags-header-actions">
+              <h2>
                 {canUseCompactSidebar ? (
                   <button
                     type="button"
-                    className={combineClassNames('sidebar-compact-toggle', isSidebarCompact && 'is-compact')}
+                    className={combineClassNames('sidebar-tags-title-toggle', isSidebarCompact && 'is-compact')}
                     aria-pressed={isSidebarCompact}
                     aria-label={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
                     title={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
                     onClick={() => setSidebarCompact((value) => !value)}
                   >
+                    <span className="sidebar-tags-title-text">Tags</span>
                     <span
                       aria-hidden="true"
                       className={combineClassNames('sidebar-resize-icon', isSidebarCompact && 'is-compact')}
@@ -2305,9 +2305,12 @@ const DashboardApp: FunctionalComponent = () => {
                       <span className="sidebar-resize-icon-panel" />
                       <span className="sidebar-resize-icon-arrow">{isSidebarCompact ? '›' : '‹'}</span>
                     </span>
-                    <span className="sr-only">{isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}</span>
                   </button>
-                ) : null}
+                ) : (
+                  'Tags'
+                )}
+              </h2>
+              <div className="sidebar-tags-header-actions">
                 {!isSidebarCompact || !canUseCompactSidebar ? (
                   <button
                     type="button"
