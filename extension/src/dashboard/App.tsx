@@ -2444,15 +2444,48 @@ const DashboardApp: FunctionalComponent = () => {
           </div>
           <div className="active-tag-filters" role="status" aria-live="polite">
             <div className="active-tag-filters-header">
-              <p className="active-tag-filters-title">Aktive Filter</p>
-              <div className="active-filter-summary">{searchResultLabel}</div>
+              {isSidebarCompact && canUseCompactSidebar ? (
+                <button
+                  type="button"
+                  className="sidebar-tags-title-toggle in-filter-row"
+                  aria-pressed={isSidebarCompact}
+                  aria-label="Tags-Leiste erweitern"
+                  title="Tags-Leiste erweitern"
+                  onClick={() => setSidebarCompact(false)}
+                >
+                  <span className="sidebar-tags-title-text">Tags</span>
+                  <span aria-hidden="true" className="sidebar-tags-collapse-arrow">→</span>
+                </button>
+              ) : null}
+              <div className="active-filter-copy">
+                <p className="active-tag-filters-title">Aktive Filter</p>
+                <div className="active-filter-summary">{searchResultLabel}</div>
+                <button
+                  type="button"
+                  className="active-filter-disclosure"
+                  aria-expanded={showFilterDetails}
+                  onClick={() => setShowFilterDetails((value) => !value)}
+                >
+                  {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
+                </button>
+              </div>
               <button
                 type="button"
-                className="active-filter-disclosure"
-                aria-expanded={showFilterDetails}
-                onClick={() => setShowFilterDetails((value) => !value)}
+                className={combineClassNames('detail-toggle-button', 'in-filter-row', isDetailPanelOpen && 'is-open')}
+                aria-expanded={isDetailPanelOpen}
+                aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+                title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
+                onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
               >
-                {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
+                {isDetailPanelOpen ? (
+                  <>
+                    Details <span aria-hidden="true">→</span>
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden="true">←</span> Details
+                  </>
+                )}
               </button>
             </div>
             {showFilterDetails ? (
@@ -2560,24 +2593,6 @@ const DashboardApp: FunctionalComponent = () => {
             {detailPanel()}
           </aside>
         ) : null}
-        <button
-          type="button"
-          className={combineClassNames('detail-toggle-button', isDetailPanelOpen && 'is-open')}
-          aria-expanded={isDetailPanelOpen}
-          aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-          title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-          onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
-        >
-          {isDetailPanelOpen ? (
-            <>
-              Details <span aria-hidden="true">→</span>
-            </>
-          ) : (
-            <>
-              <span aria-hidden="true">←</span> Details
-            </>
-          )}
-        </button>
       </div>
       <div
         className={combineClassNames('sidebar-floating-tooltip', sidebarTooltip.visible && 'visible')}
