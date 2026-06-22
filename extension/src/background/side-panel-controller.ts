@@ -84,11 +84,6 @@ const queryTabsForQuickSave = async (queryInfo: chrome.tabs.QueryInfo): Promise<
 };
 
 export const resolveQuickSaveTab = async (): Promise<QuickSaveTabMetadata | undefined> => {
-  const cached = getCachedQuickSaveTab();
-  if (cached) {
-    return cached;
-  }
-
   const [currentWindowTab] = await queryTabsForQuickSave({ active: true, currentWindow: true });
   const currentWindowMetadata = rememberQuickSaveTab(currentWindowTab);
   if (currentWindowMetadata?.url || currentWindowMetadata?.title) {
@@ -96,7 +91,12 @@ export const resolveQuickSaveTab = async (): Promise<QuickSaveTabMetadata | unde
   }
 
   const [lastFocusedWindowTab] = await queryTabsForQuickSave({ active: true, lastFocusedWindow: true });
-  return rememberQuickSaveTab(lastFocusedWindowTab);
+  const lastFocusedWindowMetadata = rememberQuickSaveTab(lastFocusedWindowTab);
+  if (lastFocusedWindowMetadata?.url || lastFocusedWindowMetadata?.title) {
+    return lastFocusedWindowMetadata;
+  }
+
+  return getCachedQuickSaveTab();
 };
 
 export const registerSidePanelStateTracking = (): void => {
