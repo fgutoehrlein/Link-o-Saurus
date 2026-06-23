@@ -1849,6 +1849,24 @@ const DashboardApp: FunctionalComponent = () => {
     setDetailPanelOpen(true);
   }, []);
 
+  const updateDetailPanelVisibility = useCallback((nextValue: boolean) => {
+    const applyDetailPanelState = () => {
+      if (nextValue) {
+        handleManualOpenDetailPanel();
+      } else {
+        handleManualCloseDetailPanel();
+      }
+    };
+    const documentWithViewTransition = document as Document & {
+      startViewTransition?: (updateCallback: () => void) => void;
+    };
+    if (typeof documentWithViewTransition.startViewTransition === 'function') {
+      documentWithViewTransition.startViewTransition(applyDetailPanelState);
+      return;
+    }
+    applyDetailPanelState();
+  }, [handleManualCloseDetailPanel, handleManualOpenDetailPanel]);
+
   useEffect(() => {
     if (!isDetailPanelOpen) {
       return;
@@ -2483,24 +2501,18 @@ const DashboardApp: FunctionalComponent = () => {
                   {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
                 </button>
               </div>
-              <button
-                type="button"
-                className={combineClassNames('detail-toggle-button', 'in-filter-row', isDetailPanelOpen && 'is-open')}
-                aria-expanded={isDetailPanelOpen}
-                aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-                title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-                onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
-              >
-                {isDetailPanelOpen ? (
-                  <>
-                    Details <span aria-hidden="true">→</span>
-                  </>
-                ) : (
-                  <>
-                    <span aria-hidden="true">←</span> Details
-                  </>
-                )}
-              </button>
+              {!isDetailPanelOpen ? (
+                <button
+                  type="button"
+                  className="detail-toggle-button in-filter-row"
+                  aria-expanded={isDetailPanelOpen}
+                  aria-label="Detailbereich öffnen"
+                  title="Detailbereich öffnen"
+                  onClick={() => updateDetailPanelVisibility(true)}
+                >
+                  <span aria-hidden="true">←</span> Details
+                </button>
+              ) : null}
             </div>
             {showFilterDetails ? (
               <>
@@ -2603,6 +2615,16 @@ const DashboardApp: FunctionalComponent = () => {
                   {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
                 </span>
               </div>
+              <button
+                type="button"
+                className="detail-toggle-button in-detail-header is-open"
+                aria-expanded={isDetailPanelOpen}
+                aria-label="Detailbereich einklappen"
+                title="Detailbereich einklappen"
+                onClick={() => updateDetailPanelVisibility(false)}
+              >
+                Details <span aria-hidden="true">→</span>
+              </button>
             </div>
             {detailPanel()}
           </aside>

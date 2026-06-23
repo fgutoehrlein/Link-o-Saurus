@@ -2600,6 +2600,7 @@ button.danger {
   gap: 0.35rem;
   cursor: pointer;
   box-shadow: 0 12px 24px -16px rgba(15, 23, 42, 0.55);
+  view-transition-name: detail-panel-toggle;
   transform: translateY(-50%);
   transition:
     top 230ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -2644,6 +2645,17 @@ button.danger {
   transform: translateY(-1px);
 }
 
+.detail-toggle-button.in-detail-header {
+  position: static;
+  margin-left: auto;
+  transform: none;
+  z-index: 1;
+}
+
+.detail-toggle-button.in-detail-header:hover {
+  transform: translateY(-1px);
+}
+
 .detail-column {
   background: color-mix(in srgb, var(--panel-light) 76%, white 24%);
   border: 1px solid color-mix(in srgb, var(--border-light) 70%, transparent);
@@ -2682,7 +2694,6 @@ button.danger {
   justify-content: space-between;
   gap: 0.75rem;
   padding-bottom: 0.6rem;
-  padding-right: 6.1rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.22);
 }
 
@@ -3167,6 +3178,12 @@ button.danger {
 
 ::view-transition-old(tags-sidebar-toggle),
 ::view-transition-new(tags-sidebar-toggle) {
+  animation-duration: 230ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-old(detail-panel-toggle),
+::view-transition-new(detail-panel-toggle) {
   animation-duration: 230ms;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
