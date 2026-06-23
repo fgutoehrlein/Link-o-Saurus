@@ -1014,15 +1014,8 @@ const DashboardApp: FunctionalComponent = () => {
   );
 
   const tileBookmarkIds = useMemo(
-    () =>
-      sortBookmarks(
-        bookmarks.filter(
-          (bookmark) =>
-            !bookmark.archived && matchesTagFilter(bookmark.tags, activeTagFilterState),
-        ),
-        bookmarkSortMode,
-      ).map((bookmark) => bookmark.id),
-    [bookmarks, activeTagFilterState, bookmarkSortMode],
+    () => filteredIds,
+    [filteredIds],
   );
 
   const activeViewBookmarkIds =
