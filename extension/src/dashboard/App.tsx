@@ -1838,7 +1838,7 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   const handleManualOpenDetailPanel = useCallback(() => {
-    setDetailAutoOpenEnabled(true);
+    setDetailAutoOpenEnabled(false);
     setDetailPanelOpen(true);
   }, []);
 
