@@ -495,6 +495,20 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, [layoutMode]);
 
+  const updateSidebarCompact = useCallback((nextValue: boolean) => {
+    const applyCompactState = () => {
+      setSidebarCompact(nextValue);
+    };
+    const documentWithViewTransition = document as Document & {
+      startViewTransition?: (updateCallback: () => void) => void;
+    };
+    if (typeof documentWithViewTransition.startViewTransition === 'function') {
+      documentWithViewTransition.startViewTransition(applyCompactState);
+      return;
+    }
+    applyCompactState();
+  }, []);
+
   const showSidebarTooltip = useCallback((target: EventTarget | null, label: string) => {
     if (!(target instanceof HTMLElement) || !showCompactTooltip) {
       return;
@@ -1828,6 +1842,24 @@ const DashboardApp: FunctionalComponent = () => {
     setDetailPanelOpen(true);
   }, []);
 
+  const updateDetailPanelVisibility = useCallback((nextValue: boolean) => {
+    const applyDetailPanelState = () => {
+      if (nextValue) {
+        handleManualOpenDetailPanel();
+      } else {
+        handleManualCloseDetailPanel();
+      }
+    };
+    const documentWithViewTransition = document as Document & {
+      startViewTransition?: (updateCallback: () => void) => void;
+    };
+    if (typeof documentWithViewTransition.startViewTransition === 'function') {
+      documentWithViewTransition.startViewTransition(applyDetailPanelState);
+      return;
+    }
+    applyDetailPanelState();
+  }, [handleManualCloseDetailPanel, handleManualOpenDetailPanel]);
+
   useEffect(() => {
     if (!isDetailPanelOpen) {
       return;
@@ -2280,40 +2312,47 @@ const DashboardApp: FunctionalComponent = () => {
         >
           <section className="sidebar-tags-section">
             <header className="sidebar-section-header sidebar-tags-header">
-              <h2>Tags</h2>
-              <div className="sidebar-tags-header-actions">
+              <h2>
                 {canUseCompactSidebar ? (
                   <button
                     type="button"
-                    className={combineClassNames('sidebar-compact-toggle', isSidebarCompact && 'is-compact')}
+                    className={combineClassNames('sidebar-tags-title-toggle', isSidebarCompact && 'is-compact')}
                     aria-pressed={isSidebarCompact}
-                    aria-label={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
-                    title={isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}
-                    onClick={() => setSidebarCompact((value) => !value)}
+                    aria-label={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
+                    title={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
+                    onClick={() => updateSidebarCompact(!isSidebarCompact)}
                   >
-                    <span aria-hidden="true" className="nav-toggle-icon">☰</span>
-                    <span className="sr-only">{isSidebarCompact ? 'Sidebar erweitern' : 'Sidebar einklappen'}</span>
+                    <span className="sidebar-tags-title-text">Tags</span>
+                    <span aria-hidden="true" className="sidebar-tags-collapse-arrow">
+                      {isSidebarCompact ? '→' : '←'}
+                    </span>
+                  </button>
+                ) : (
+                  'Tags'
+                )}
+              </h2>
+              <div className="sidebar-tags-header-actions">
+                {!isSidebarCompact || !canUseCompactSidebar ? (
+                  <button
+                    type="button"
+                    className="tag-section-toggle"
+                    aria-expanded={areTagsExpanded}
+                    aria-controls="tag-list"
+                    aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                    title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                    onClick={() => setTagsExpanded((value) => !value)}
+                  >
+                    <span aria-hidden="true" className="chevron">
+                      {areTagsExpanded ? '⌄' : '›'}
+                    </span>
+                    <span className="sr-only">
+                      {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
+                    </span>
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="tag-section-toggle"
-                  aria-expanded={areTagsExpanded}
-                  aria-controls="tag-list"
-                  aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                  title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                  onClick={() => setTagsExpanded((value) => !value)}
-                >
-                  <span aria-hidden="true" className="chevron">
-                    {areTagsExpanded ? '⌄' : '›'}
-                  </span>
-                  <span className="sr-only">
-                    {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                  </span>
-                </button>
               </div>
             </header>
-            {areTagsExpanded ? (
+            {areTagsExpanded && (!isSidebarCompact || !canUseCompactSidebar) ? (
               <ul id="tag-list" className="sidebar-tag-list">
                 {tags.map((tag) => {
                   const mode = getTagFilterMode(activeTagFilterState, tag.path);
@@ -2354,11 +2393,11 @@ const DashboardApp: FunctionalComponent = () => {
                   );
                 })}
               </ul>
-            ) : (
+            ) : !isSidebarCompact || !canUseCompactSidebar ? (
               <p id="tag-list" className="sidebar-hint" role="status">
                 Tags eingeklappt
               </p>
-            )}
+            ) : null}
           </section>
           {!isSidebarCompact || !canUseCompactSidebar ? (
           <section className="sidebar-actions">
@@ -2430,16 +2469,43 @@ const DashboardApp: FunctionalComponent = () => {
           </div>
           <div className="active-tag-filters" role="status" aria-live="polite">
             <div className="active-tag-filters-header">
-              <p className="active-tag-filters-title">Aktive Filter</p>
-              <div className="active-filter-summary">{searchResultLabel}</div>
-              <button
-                type="button"
-                className="active-filter-disclosure"
-                aria-expanded={showFilterDetails}
-                onClick={() => setShowFilterDetails((value) => !value)}
-              >
-                {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
-              </button>
+              {isSidebarCompact && canUseCompactSidebar ? (
+                <button
+                  type="button"
+                  className="sidebar-tags-title-toggle in-filter-row"
+                  aria-pressed={isSidebarCompact}
+                  aria-label="Tags-Leiste erweitern"
+                  title="Tags-Leiste erweitern"
+                  onClick={() => updateSidebarCompact(false)}
+                >
+                  <span className="sidebar-tags-title-text">Tags</span>
+                  <span aria-hidden="true" className="sidebar-tags-collapse-arrow">→</span>
+                </button>
+              ) : null}
+              <div className="active-filter-copy">
+                <p className="active-tag-filters-title">Aktive Filter</p>
+                <div className="active-filter-summary">{searchResultLabel}</div>
+                <button
+                  type="button"
+                  className="active-filter-disclosure"
+                  aria-expanded={showFilterDetails}
+                  onClick={() => setShowFilterDetails((value) => !value)}
+                >
+                  {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
+                </button>
+              </div>
+              {!isDetailPanelOpen ? (
+                <button
+                  type="button"
+                  className="detail-toggle-button in-filter-row"
+                  aria-expanded={isDetailPanelOpen}
+                  aria-label="Detailbereich öffnen"
+                  title="Detailbereich öffnen"
+                  onClick={() => updateDetailPanelVisibility(true)}
+                >
+                  <span aria-hidden="true">←</span> Details
+                </button>
+              ) : null}
             </div>
             {showFilterDetails ? (
               <>
@@ -2542,28 +2608,20 @@ const DashboardApp: FunctionalComponent = () => {
                   {isDetailAutoOpenEnabled ? 'Auto-Modus aktiv' : 'Manueller Modus aktiv'}
                 </span>
               </div>
+              <button
+                type="button"
+                className="detail-toggle-button in-detail-header is-open"
+                aria-expanded={isDetailPanelOpen}
+                aria-label="Detailbereich einklappen"
+                title="Detailbereich einklappen"
+                onClick={() => updateDetailPanelVisibility(false)}
+              >
+                Details <span aria-hidden="true">→</span>
+              </button>
             </div>
             {detailPanel()}
           </aside>
         ) : null}
-        <button
-          type="button"
-          className={combineClassNames('detail-toggle-button', isDetailPanelOpen && 'is-open')}
-          aria-expanded={isDetailPanelOpen}
-          aria-label={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-          title={isDetailPanelOpen ? 'Detailbereich einklappen' : 'Detailbereich öffnen'}
-          onClick={isDetailPanelOpen ? handleManualCloseDetailPanel : handleManualOpenDetailPanel}
-        >
-          {isDetailPanelOpen ? (
-            <>
-              Details <span aria-hidden="true">→</span>
-            </>
-          ) : (
-            <>
-              <span aria-hidden="true">←</span> Details
-            </>
-          )}
-        </button>
       </div>
       <div
         className={combineClassNames('sidebar-floating-tooltip', sidebarTooltip.visible && 'visible')}
