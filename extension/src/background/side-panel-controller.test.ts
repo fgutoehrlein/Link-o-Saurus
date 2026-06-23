@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { rememberQuickSaveTab, resolveQuickSaveTab } from './side-panel-controller';
+import { closeSidePanelForWindow, rememberQuickSaveTab, resolveQuickSaveTab } from './side-panel-controller';
 
 const setTabsQueryResult = (tabs: chrome.tabs.Tab[]) => {
   vi.stubGlobal('chrome', {
@@ -33,5 +33,26 @@ describe('resolveQuickSaveTab', () => {
       title: 'Fallback Tab',
       url: 'https://fallback.example/',
     });
+  });
+});
+
+
+describe('closeSidePanelForWindow', () => {
+  it('closes the side panel for the provided window id', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('chrome', {
+      sidePanel: { close },
+    });
+
+    await expect(closeSidePanelForWindow(7)).resolves.toBe(true);
+    expect(close).toHaveBeenCalledWith({ windowId: 7 });
+  });
+
+  it('returns false when the close API is unavailable', async () => {
+    vi.stubGlobal('chrome', {
+      sidePanel: {},
+    });
+
+    await expect(closeSidePanelForWindow(7)).resolves.toBe(false);
   });
 });

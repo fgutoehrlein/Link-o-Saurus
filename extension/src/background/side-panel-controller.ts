@@ -149,6 +149,24 @@ export const openSidePanelForWindow = async (windowId?: number): Promise<boolean
   return true;
 };
 
+export const closeSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
+  const sidePanelApi = getSidePanelApi();
+
+  if (!sidePanelApi?.close) {
+    return false;
+  }
+
+  const resolvedWindowId = typeof windowId === 'number' ? windowId : await getLastFocusedWindowId();
+
+  if (typeof resolvedWindowId !== 'number') {
+    return false;
+  }
+
+  await sidePanelApi.close({ windowId: resolvedWindowId });
+  openSidePanelWindows.delete(resolvedWindowId);
+  return true;
+};
+
 export const toggleSidePanelForWindow = async (windowId?: number): Promise<boolean> => {
   const sidePanelApi = getSidePanelApi();
   const resolvedWindowId = typeof windowId === 'number' ? windowId : await getLastFocusedWindowId();

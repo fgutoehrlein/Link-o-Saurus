@@ -178,7 +178,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
       role="application"
       aria-label="Link-O-Saurus Popup"
     >
-      <PopupHeader />
+      <PopupHeader closeSidePanelOnDashboardOpen={layout === 'sidepanel'} />
 
       <main className="popup-main">
         <QuickSaveForm
