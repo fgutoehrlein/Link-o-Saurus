@@ -63,6 +63,7 @@ import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import {
   BookmarkRowRenderer,
   BookmarkTileRowRenderer,
+  DetailTagInput,
   SessionDialog,
   TileVirtualList,
   VirtualList,
@@ -1501,6 +1502,15 @@ const DashboardApp: FunctionalComponent = () => {
     [],
   );
 
+  const handleDetailTagsChange = useCallback((nextTags: string) => {
+    setDetailState((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return { ...previous, tags: nextTags };
+    });
+  }, []);
+
   const handleDetailCategoryChange = useCallback((event: Event) => {
     const select = event.currentTarget as HTMLSelectElement;
     setDetailState((previous) => {
@@ -1968,8 +1978,8 @@ const DashboardApp: FunctionalComponent = () => {
           <section className="detail-section" aria-label="Tags und Notizen">
             <h3>Tags</h3>
             <label>
-              <span>Tags (Kommagetrennt)</span>
-              <input type="text" value={detailState?.tags ?? ''} onInput={handleDetailChange('tags')} />
+              <span id="new-bookmark-tags-label">Tags</span>
+              <DetailTagInput id="new-bookmark-tags" tagsText={detailState?.tags ?? ''} onChange={handleDetailTagsChange} />
             </label>
             <label>
               <span>Notizen</span>
@@ -2030,8 +2040,8 @@ const DashboardApp: FunctionalComponent = () => {
           <section className="detail-section" aria-label="Tags und Notizen">
             <h3>Tags</h3>
             <label>
-              <span>Tags (Kommagetrennt)</span>
-              <input type="text" value={detailState.tags} onInput={handleDetailChange('tags')} />
+              <span id="bookmark-detail-tags-label">Tags</span>
+              <DetailTagInput id="bookmark-detail-tags" tagsText={detailState.tags} onChange={handleDetailTagsChange} />
             </label>
             <h3>Notizen</h3>
             <label>

@@ -2828,6 +2828,71 @@ button.danger {
   resize: vertical;
 }
 
+.detail-tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  padding: 0.44rem;
+  border: 1px solid color-mix(in srgb, var(--border-light) 60%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-light) 56%, transparent);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.detail-tag-input:focus-within {
+  border-color: color-mix(in srgb, var(--accent-light) 72%, white 28%);
+  background: color-mix(in srgb, var(--panel-light) 74%, transparent);
+}
+
+.detail-tag-input input {
+  min-width: 8rem;
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.06rem 0.2rem;
+  background: transparent;
+}
+
+.detail-tag-input input:focus-visible {
+  border-color: transparent;
+  background: transparent;
+}
+
+.detail-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-light) 18%, transparent);
+  color: color-mix(in srgb, var(--accent-light) 55%, var(--text-light));
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.detail-tag-chip button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  line-height: 1;
+}
+
+[data-theme='dark'] .detail-tag-input {
+  border-color: color-mix(in srgb, var(--border-dark) 70%, transparent);
+  background: rgba(30, 41, 59, 0.62);
+}
+
+[data-theme='dark'] .detail-tag-input:focus-within {
+  border-color: rgba(96, 165, 250, 0.82);
+  background: rgba(30, 41, 59, 0.78);
+}
+
+[data-theme='dark'] .detail-tag-chip {
+  background: rgba(96, 165, 250, 0.18);
+  color: #bfdbfe;
+}
+
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
