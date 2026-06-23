@@ -27,7 +27,8 @@ type SessionMessageType =
   | 'session.delete'
   | 'settings.applyNewTab'
   | 'readLater.refreshBadge'
-  | 'sidePanel.open';
+  | 'sidePanel.open'
+  | 'sidePanel.close';
 
 type SessionResponseType =
   | 'quickSave.getActiveTab.result'
@@ -38,6 +39,7 @@ type SessionResponseType =
   | 'settings.applyNewTab.result'
   | 'readLater.refreshBadge.result'
   | 'sidePanel.open.result'
+  | 'sidePanel.close.result'
   | 'session.error';
 
 export type BackgroundRequest =
@@ -48,7 +50,8 @@ export type BackgroundRequest =
   | { type: 'session.delete'; sessionId: string }
   | { type: 'settings.applyNewTab'; enabled: boolean }
   | { type: 'readLater.refreshBadge' }
-  | { type: 'sidePanel.open'; windowId?: number };
+  | { type: 'sidePanel.open'; windowId?: number }
+  | { type: 'sidePanel.close'; windowId?: number };
 
 export type BackgroundResponse =
   | { type: 'quickSave.getActiveTab.result'; tab?: QuickSaveTabMetadata }
@@ -59,6 +62,7 @@ export type BackgroundResponse =
   | { type: 'settings.applyNewTab.result'; enabled: boolean }
   | { type: 'readLater.refreshBadge.result'; count: number }
   | { type: 'sidePanel.open.result'; opened: boolean }
+  | { type: 'sidePanel.close.result'; closed: boolean }
   | {
       type: 'session.error';
       error: string;
@@ -86,6 +90,7 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'settings.applyNewTab',
   'readLater.refreshBadge',
   'sidePanel.open',
+  'sidePanel.close',
 ]);
 
 const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
@@ -98,6 +103,7 @@ const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
   'settings.applyNewTab.result',
   'readLater.refreshBadge.result',
   'sidePanel.open.result',
+  'sidePanel.close.result',
 ]);
 
 export const isBackgroundRequest = (value: unknown): value is BackgroundRequest => {
@@ -176,7 +182,8 @@ export const validateBackgroundRequest = (value: unknown): BackgroundRequestVali
       }
       return { ok: true, value: { type, enabled } };
     }
-    case 'sidePanel.open': {
+    case 'sidePanel.open':
+    case 'sidePanel.close': {
       const { windowId } = value;
       if (
         typeof windowId !== 'undefined' &&

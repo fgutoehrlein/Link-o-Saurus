@@ -7,7 +7,7 @@ import {
   removeSession,
   saveCurrentWindowAsSession,
 } from './session-controller';
-import { openSidePanelForWindow, resolveQuickSaveTab } from './side-panel-controller';
+import { closeSidePanelForWindow, openSidePanelForWindow, resolveQuickSaveTab } from './side-panel-controller';
 
 export const handleBackgroundRequest = async (
   message: BackgroundRequest,
@@ -44,6 +44,10 @@ export const handleBackgroundRequest = async (
     case 'sidePanel.open': {
       const opened = await openSidePanelForWindow(message.windowId);
       return { type: 'sidePanel.open.result', opened };
+    }
+    case 'sidePanel.close': {
+      const closed = await closeSidePanelForWindow(message.windowId);
+      return { type: 'sidePanel.close.result', closed };
     }
     default:
       throw new Error(`Unhandled message type: ${(message as BackgroundRequest).type}`);

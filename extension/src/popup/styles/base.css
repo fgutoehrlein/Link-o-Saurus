@@ -140,6 +140,7 @@ body {
 }
 
 .primary-button,
+.dashboard-button,
 .subtle-button,
 .ghost-button,
 .inline-link,
@@ -151,6 +152,32 @@ body {
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+.dashboard-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 9px 14px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 24px rgba(45, 99, 255, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.dashboard-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 12px 28px rgba(45, 99, 255, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.dashboard-button .fa-table-columns {
+  font-size: 13px;
 }
 
 .primary-button {
@@ -278,6 +305,7 @@ input:focus-visible,
 select:focus-visible,
 .primary-button:focus-visible,
 .subtle-button:focus-visible,
+.dashboard-button:focus-visible,
 .ghost-button:focus-visible,
 .icon-link-button:focus-visible,
 .access-item:focus-visible,

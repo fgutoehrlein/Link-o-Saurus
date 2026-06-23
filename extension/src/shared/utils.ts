@@ -326,6 +326,20 @@ export async function openDashboard(params?: DashboardOpenParams): Promise<chrom
   }
 }
 
+export async function closeSidePanel(windowId?: number): Promise<boolean> {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+    return false;
+  }
+
+  try {
+    const response = await sendBackgroundMessage({ type: 'sidePanel.close', ...(typeof windowId === 'number' ? { windowId } : {}) });
+    return response.type === 'sidePanel.close.result' ? response.closed : false;
+  } catch (error) {
+    console.warn('[Link-o-Saurus] Side panel konnte nicht geschlossen werden.', error);
+    return false;
+  }
+}
+
 export async function openSidePanel(windowId?: number): Promise<boolean> {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
     return false;
