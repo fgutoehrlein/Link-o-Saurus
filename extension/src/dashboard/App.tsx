@@ -1850,13 +1850,6 @@ const DashboardApp: FunctionalComponent = () => {
         handleManualCloseDetailPanel();
       }
     };
-    const documentWithViewTransition = document as Document & {
-      startViewTransition?: (updateCallback: () => void) => void;
-    };
-    if (typeof documentWithViewTransition.startViewTransition === 'function') {
-      documentWithViewTransition.startViewTransition(applyDetailPanelState);
-      return;
-    }
     applyDetailPanelState();
   }, [handleManualCloseDetailPanel, handleManualOpenDetailPanel]);
 
