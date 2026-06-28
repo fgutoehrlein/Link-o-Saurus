@@ -290,7 +290,7 @@ test.describe('Link-O-Saurus extension', () => {
     await newTabPage.close();
   });
 
-  test('toggles the tag sidebar between expanded and collapsed states', async () => {
+  test('toggles the tag sidebar with the Tags button', async () => {
     const sidePanelHarnessPage = await context.newPage();
     await openSidePanel(sidePanelHarnessPage, extensionId);
     await sidePanelHarnessPage.waitForFunction(
@@ -322,15 +322,16 @@ test.describe('Link-O-Saurus extension', () => {
       await expect(tagItems.filter({ hasText: tagName })).toBeVisible();
     }
 
-    const collapseButton = dashboardPage.getByRole('button', { name: 'Tags einklappen' });
-    await collapseButton.click();
+    const tagsButton = dashboardPage.getByRole('button', { name: 'Tags-Leiste einklappen' });
+    await expect(tagsButton).toBeVisible();
+    await tagsButton.click();
 
-    await expect(dashboardPage.getByRole('button', { name: 'Tags anzeigen' })).toBeVisible();
+    const expandTagsButton = dashboardPage.getByRole('button', { name: 'Tags-Leiste erweitern' });
+    await expect(expandTagsButton).toBeVisible();
     await expect(dashboardPage.locator('.sidebar-tag-list .tag-item')).toHaveCount(0);
-    await expect(dashboardPage.locator('#tag-list')).toHaveText(/Tags eingeklappt/);
 
-    await dashboardPage.getByRole('button', { name: 'Tags anzeigen' }).click();
-    await expect(dashboardPage.getByRole('button', { name: 'Tags einklappen' })).toBeVisible();
+    await expandTagsButton.click();
+    await expect(dashboardPage.getByRole('button', { name: 'Tags-Leiste einklappen' })).toBeVisible();
     for (const tagName of tagNames) {
       await expect(tagItems.filter({ hasText: tagName })).toBeVisible();
     }
