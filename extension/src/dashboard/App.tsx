@@ -417,7 +417,6 @@ const DashboardApp: FunctionalComponent = () => {
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
-  const [areTagsExpanded, setTagsExpanded] = useState<boolean>(true);
   const [isSidebarCompact, setSidebarCompact] = useState<boolean>(false);
   const [isRefreshingFavicon, setRefreshingFavicon] = useState<boolean>(false);
   const [isIconDropActive, setIconDropActive] = useState<boolean>(false);
@@ -2334,28 +2333,8 @@ const DashboardApp: FunctionalComponent = () => {
                   'Tags'
                 )}
               </h2>
-              <div className="sidebar-tags-header-actions">
-                {!isSidebarCompact || !canUseCompactSidebar ? (
-                  <button
-                    type="button"
-                    className="tag-section-toggle"
-                    aria-expanded={areTagsExpanded}
-                    aria-controls="tag-list"
-                    aria-label={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                    title={areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                    onClick={() => setTagsExpanded((value) => !value)}
-                  >
-                    <span aria-hidden="true" className="chevron">
-                      {areTagsExpanded ? '⌄' : '›'}
-                    </span>
-                    <span className="sr-only">
-                      {areTagsExpanded ? 'Tags einklappen' : 'Tags anzeigen'}
-                    </span>
-                  </button>
-                ) : null}
-              </div>
             </header>
-            {areTagsExpanded && (!isSidebarCompact || !canUseCompactSidebar) ? (
+            {!isSidebarCompact || !canUseCompactSidebar ? (
               <ul id="tag-list" className="sidebar-tag-list">
                 {tags.map((tag) => {
                   const mode = getTagFilterMode(activeTagFilterState, tag.path);
@@ -2396,10 +2375,6 @@ const DashboardApp: FunctionalComponent = () => {
                   );
                 })}
               </ul>
-            ) : !isSidebarCompact || !canUseCompactSidebar ? (
-              <p id="tag-list" className="sidebar-hint" role="status">
-                Tags eingeklappt
-              </p>
             ) : null}
           </section>
           {!isSidebarCompact || !canUseCompactSidebar ? (
