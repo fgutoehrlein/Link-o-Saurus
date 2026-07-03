@@ -2601,6 +2601,7 @@ button.danger {
   cursor: pointer;
   box-shadow: 0 12px 24px -16px rgba(15, 23, 42, 0.55);
   transform: translateY(-50%);
+  view-transition-name: detail-panel-toggle;
   transition:
     top 230ms cubic-bezier(0.22, 1, 0.36, 1),
     right 230ms cubic-bezier(0.22, 1, 0.36, 1),
