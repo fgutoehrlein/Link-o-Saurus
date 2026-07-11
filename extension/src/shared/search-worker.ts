@@ -27,7 +27,7 @@ export type SearchHit = {
 
 type SearchSource = Iterable<Bookmark> | AsyncIterable<Bookmark>;
 
-const DEFAULT_LIMIT = 50;
+export const DEFAULT_SEARCH_LIMIT = 50;
 const STREAM_BATCH_SIZE = 250;
 
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -151,10 +151,17 @@ const matchesFilters = (doc: BookmarkDocument, filters?: SearchFilters): boolean
 const query = async (
   rawQuery: string,
   filters?: SearchFilters,
-  limit: number = DEFAULT_LIMIT,
+  limit: number = DEFAULT_SEARCH_LIMIT,
 ): Promise<SearchHit[]> => {
   const queryText = rawQuery.trim();
-  const effectiveLimit = Math.max(limit, DEFAULT_LIMIT);
+  // A caller-provided limit is a contract, not a lower bound. This also
+  // prevents an empty result request from scanning/sorting the index.
+  const effectiveLimit = Number.isFinite(limit)
+    ? Math.max(0, Math.trunc(limit))
+    : DEFAULT_SEARCH_LIMIT;
+  if (effectiveLimit === 0) {
+    return [];
+  }
 
   if (!queryText) {
     const results: SearchHit[] = [];
@@ -204,7 +211,12 @@ const query = async (
   }
 
   return Array.from(aggregated.values())
-    .sort((a, b) => b.score - a.score || b.bookmark.updatedAt - a.bookmark.updatedAt)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.bookmark.updatedAt - a.bookmark.updatedAt ||
+        a.id.localeCompare(b.id),
+    )
     .slice(0, effectiveLimit);
 };
 

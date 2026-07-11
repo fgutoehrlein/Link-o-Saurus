@@ -53,6 +53,16 @@ describe('search worker tag filtering', () => {
     await expect(rebuildIndex([createBookmark()])).resolves.toBeUndefined();
   });
 
+  it('respects an explicit zero and small result limit', async () => {
+    await rebuildIndex([
+      createBookmark({ id: 'limit-a', title: 'Limit alpha' }),
+      createBookmark({ id: 'limit-b', title: 'Limit beta' }),
+    ]);
+
+    expect(await query('', undefined, 0)).toEqual([]);
+    expect(await query('', undefined, 1)).toHaveLength(1);
+  });
+
   it('returns only bookmarks that match all requested tags', async () => {
     await rebuildIndex([
       createBookmark({ id: 'a', title: 'Design systems', tags: ['Design', 'UI'] }),

@@ -1,98 +1,120 @@
 # Link-O-Saurus
 
-Link-O-Saurus ist eine Offline-first Browser-Erweiterung für das Sammeln, Strukturieren und Wiederfinden von Links. Die Erweiterung kombiniert Bookmark-Verwaltung, Team-Notizen und Session-Speicherung in einer schnellen Preact-Oberfläche und speichert alle Daten lokal in IndexedDB.
+Link-O-Saurus ist eine offline-first Browser-Erweiterung zum Sammeln, Organisieren und Wiederfinden von Links. Die Daten bleiben lokal in IndexedDB, die UI ist in Preact umgesetzt und rechenintensive Aufgaben laufen in Web Workern.
 
-## Kundenfunktionen
+## Was die Erweiterung kann
 
-- **Sammlungen & Boards organisieren** – Links werden als `Bookmark` mit Boards, Kategorien und Tags gespeichert. So lassen sich Sammlungen logisch gliedern und mit Regeln automatisieren.【F:extension/src/shared/types.ts†L3-L58】【F:extension/src/shared/db.ts†L1-L120】
-- **Tagging mit Hierarchien** – Tags werden kanonisiert, als Pfad gespeichert und beim Filtern hierarchisch ausgewertet. Dadurch funktionieren auch verschachtelte Themenbereiche zuverlässig.【F:extension/src/shared/tag-utils.ts†L1-L160】【F:extension/src/shared/search-worker.ts†L1-L88】
-- **Kommentare pro Bookmark** – Nutzer:innen können Kommentare mit Markdown verfassen, bearbeiten oder löschen; alle Einträge bleiben chronologisch sortiert.【F:extension/src/popup/CommentsSection.tsx†L1-L165】
-- **„Später lesen“ mit Snooze** – Fällige Links erscheinen in einer separaten Liste, können geöffnet, priorisiert oder auf vordefinierte Zeiträume verschoben werden.【F:extension/src/popup/ReadLaterList.tsx†L1-L160】
-- **Session Packs sichern & wiederherstellen** – Aktuelle Tab-Sitzungen lassen sich speichern, benennen und später selektiv erneut öffnen – inklusive Feedback über den Erfolg.【F:extension/src/popup/SessionManager.tsx†L1-L160】
-- **Volltextsuche & Filter** – Ein FlexSearch-basierter Worker indexiert Titel, URLs, Notizen und Tags und unterstützt Filter auf Tags, Archivstatus oder Pins.【F:extension/src/shared/search-worker.ts†L1-L160】
-- **Import & Export** – Bookmarks können in einem Worker gebündelt importiert oder exportiert werden, um Datenmigrationen oder Backups zu ermöglichen.【F:extension/src/shared/import-export.ts†L1-L200】【F:extension/src/shared/import-export-worker.ts†L1-L200】
-- **Markdown & sichere Darstellung** – Inhalte werden mit `marked` gerendert und anschließend via `sanitize-html` gesichert, damit Notizen im Popup sicher angezeigt werden.【F:extension/src/shared/markdown.ts†L1-L140】
-- **Hintergrundaktionen & Badges** – Popup-Komponenten kommunizieren asynchron mit dem Service Worker, z. B. um Sitzungen zu speichern oder Read-Later-Badges zu aktualisieren.【F:extension/src/popup/ReadLaterList.tsx†L35-L76】【F:extension/src/popup/SessionManager.tsx†L40-L120】
+- Schnelles Speichern von Bookmarks im Popup oder in der Sidepanel-Ansicht.
+- Suche und Schnellzugriff auf Bookmarks mit Worker-gestütztem Index.
+- Boards, Kategorien, Tags und regelbasierte Automatisierung.
+- Kommentare pro Bookmark.
+- „Später lesen“ mit Snooze-Logik.
+- Session-Speicherung und Wiederherstellung offener Tabs.
+- Import und Export für Backup- und Migrationsszenarien.
+- Optionale AI-gestützte Vorschläge für Tags und Zielordner.
+- Optionale New-Tab-Umleitung über die Einstellungen.
 
-## UI-Übersicht
+## Oberflächen
 
-- **Popup:** Schnelles Hinzufügen neuer Lesezeichen mit Mini-Suche, eine Liste der zuletzt gespeicherten Einträge sowie eine klar sichtbare „Zum Dashboard“-Schaltfläche für den Wechsel in die Vollansicht.【F:extension/src/popup/App.tsx†L560-L720】
-- **Dashboard:** Vollfunktionsseite mit Boards, Tags, Import/Export, Sessions und Detail-Editor inklusive virtueller Liste für große Datenmengen.【F:extension/src/dashboard/App.tsx†L1560-L1820】
-- **New-Tab-Option:** Keine erzwungene Übernahme des New-Tab-Tabs – die Aktivierung bleibt eine separate Option in den Einstellungen.【F:extension/src/options/App.tsx†L720-L770】
+- Popup: Quick Save, Mini-Suche, Recent-/Quick-Access-Liste und der Wechsel ins Dashboard.
+- Dashboard: Vollansicht für Verwaltung, Detailbearbeitung, virtuelle Listen, Import/Export, Sessions und Regeln.
+- Options-Seite: Einstellungen für New Tab, Sync, Import/Export-Verhalten und Regelverwaltung.
+- Sidepanel: dieselbe Schnellansicht wie das Popup, aber in der Browser-Seitenleiste.
 
-## Technischer Überblick
+## Technischer Aufbau
 
-| Bereich | Technologie |
-| --- | --- |
-| UI | [Preact](https://preactjs.com/) + `react-window` für performante Listen-Renderings.【F:extension/src/popup/App.tsx†L1-L68】 |
-| Datenhaltung | IndexedDB via Dexie, inklusive Utilities für IDs, Zeitstempel und Tag-Normalisierung.【F:extension/src/shared/db.ts†L1-L160】 |
-| Suche | FlexSearch im Web-Worker (`shared/search-worker.ts`).【F:extension/src/shared/search-worker.ts†L1-L160】 |
-| Markdown/Notizen | `marked` + `sanitize-html` für sichere Darstellung.【F:extension/src/shared/markdown.ts†L1-L140】 |
-| Tests | Vitest-Konfiguration inkl. Fake-IndexedDB für DB-Tests.【F:vitest.config.ts†L1-L80】【F:package.json†L6-L34】 |
-| Build-Pipeline | Vite + benutzerdefinierte Build-Skripte für Chrome/Firefox sowie Zip-Export.【F:scripts/build.ts†L1-L200】【F:package.json†L6-L34】 |
+- UI: Preact
+- Datenhaltung: IndexedDB über Dexie
+- Suche und Import/Export: Web Workers
+- Build-System: Vite
+- Tests: Vitest
+- E2E-Tests: Playwright
+
+Die wichtigsten Bereiche liegen unter `extension/src/`:
+
+- `background/` für Service-Worker-Logik, Messaging, Sessions, Sidepanel und New-Tab-Handling
+- `popup/` für Quick Save, Suche und Schnellzugriff
+- `dashboard/` für die Verwaltungsoberfläche
+- `options/` für die Einstellungen
+- `sidepanel/` für den Sidepanel-Einstieg
+- `shared/` für Datenbank, Typen, Suche, Import/Export und allgemeine Hilfsfunktionen
 
 ## Projektstruktur
 
-```
+```text
 .
 ├─ extension/
-│  ├─ manifest.json        # WebExtension Manifest für Chrome/Firefox
-│  ├─ src/
-│  │  ├─ background/       # Service Worker & Hintergrundlogik
-│  │  ├─ popup/            # Popup-App (Preact)
-│  │  ├─ options/          # Options-Seite (Platzhalter)
-│  │  └─ shared/           # Geteilte Daten- & Utility-Module
-├─ scripts/                # Build- und Packaging-Skripte
-├─ types/                  # Zusätzliche TypeScript-Typen
-└─ vitest.config.ts        # Testkonfiguration
+│  ├─ manifest.json
+│  ├─ assets/
+│  └─ src/
+│     ├─ background/
+│     ├─ content/
+│     ├─ dashboard/
+│     ├─ options/
+│     ├─ popup/
+│     ├─ sidepanel/
+│     └─ shared/
+├─ scripts/
+├─ package.json
+└─ README.md
 ```
 
+## Setup
 
-## Graphify-Codegraph
+```bash
+pnpm install
+```
 
-Link-O-Saurus enthält ein lokales Graphify-Skript, das Importbeziehungen, Top-Level-Symbole und grobe Codebereiche aus TypeScript/TSX-, CSS-, JSON-, Markdown- und Asset-Dateien indexiert. Es ist als Orientierungshilfe für Agenten gedacht, damit Änderungen zuerst über den Codegraphen eingegrenzt werden können, bevor große Dateien wie das Dashboard vollständig gelesen werden müssen.
+## Entwicklung
 
-Nützliche Befehle:
+Chrome im Watch-Modus:
 
-- `pnpm graphify` – generiert `.graphify/graph.json` und `.graphify/graph.md` neu. Der Ausgabeordner ist ignoriert und wird nicht eingecheckt.
-- `pnpm graphify -- summary` – schreibt eine Markdown-Zusammenfassung in stdout, ohne Dateien zu erzeugen.
-- `pnpm graphify -- explain extension/src/shared/db.ts` – zeigt Imports, abhängige Dateien und Top-Level-Deklarationen für eine Datei.
-- `pnpm graphify -- impacted extension/src/shared/db.ts` – listet direkte und transitive Abhängige einer geänderten Datei.
+```bash
+pnpm dev:chrome
+```
 
-Der Graph normalisiert Vite-Worker-Imports wie `?worker&module`, verfolgt nur relative Repo-Kanten und meldet nicht auflösbare relative Imports. Externe npm-Pakete bleiben bewusst außerhalb des Graphen, weil sie bereits über `package.json` und Lockfiles nachvollziehbar sind.
+Firefox im Watch-Modus:
 
-## Entwicklung & Setup
+```bash
+pnpm dev:firefox
+```
 
-1. Repository klonen und Abhängigkeiten installieren:
-   ```bash
-   pnpm install
-   ```
-2. Entwicklungs-Build für Chrome oder Firefox starten:
-   ```bash
-   pnpm dev:chrome
-   # oder
-   pnpm dev:firefox
-   ```
-3. Ziel-Browser öffnen und den Ordner `dist/<browser>` als „Unpacked Extension“ laden.
+Danach die jeweilige Extension aus `dist/chrome` oder `dist/firefox` als unpacked extension laden.
 
-Weitere nützliche Skripte:
+## Produktion
 
-- `pnpm build:chrome` / `pnpm build:firefox` – Produktionsbuild ohne Watcher.【F:package.json†L6-L20】
-- `pnpm zip:chrome` / `pnpm zip:firefox` – Release-Pakete erstellen.【F:package.json†L6-L20】
-- `pnpm test` – Vitest-Suite (inkl. Worker- und DB-Tests) ausführen.【F:package.json†L6-L20】
-- `pnpm lint` – TypeScript-Typprüfung ohne Ausgabe.【F:package.json†L6-L20】
+```bash
+pnpm build:chrome
+pnpm build:firefox
+pnpm zip:chrome
+pnpm zip:firefox
+```
 
-## Qualitäts- und UX-Richtlinien
+## Tests und Qualität
 
-- Der Popup-Start muss unter 100 ms bleiben; Listen werden virtualisiert, damit auch große Link-Sammlungen flüssig scrollen.【F:extension/src/popup/App.tsx†L1-L80】
-- Schreiboperationen laufen gesammelt über Dexie-Transaktionen, um IndexedDB effizient zu nutzen.【F:extension/src/shared/db.ts†L160-L320】
-- Suche, Import/Export und andere rechenintensive Aufgaben laufen in Web Workern, damit die UI reaktionsschnell bleibt.【F:extension/src/shared/search-worker.ts†L1-L160】【F:extension/src/shared/import-export-worker.ts†L1-L200】
-- Einstellungen wie Theme oder New-Tab-Modus werden lokal gespeichert, sodass die Erweiterung komplett offline funktioniert.【F:extension/src/shared/db.ts†L1-L80】
+```bash
+pnpm lint
+pnpm test
+pnpm test:e2e
+```
 
-## Tests
+## Graphify
 
-Die Vitest-Suite umfasst Unit- und Worker-Tests für Tagging, Markdown-Rendering, Suche und Datenbankinteraktionen. Führe sie lokal mit `pnpm test` aus, bevor du Änderungen veröffentlichst.【F:extension/src/shared/tag-utils.test.ts†L1-L160】【F:extension/src/shared/search-worker.test.ts†L1-L120】【F:extension/src/shared/markdown.test.ts†L1-L120】
+Für Architektur- und Impact-Analysen ist ein lokaler Graphify-Workflow eingebaut.
+
+```bash
+pnpm graphify
+pnpm graphify:summary
+pnpm graphify -- explain extension/src/shared/db/index.ts
+pnpm graphify -- impacted extension/src/shared/db/index.ts
+```
+
+`pnpm graphify` erzeugt `.graphify/graph.json` und `.graphify/graph.md`. Die Summary- und Explain-/Impacted-Ausgaben helfen dabei, Änderungen auf ihre Abhängigkeiten zu begrenzen.
+
+## Build- und Laufzeitdaten
+
+Das Manifest ist auf Chrome und Firefox ausgelegt. Die Erweiterung verwendet keine `host_permissions`; optionale Rechte werden nur angefordert, wenn sie für konkrete Funktionen nötig sind.
 
 ## Lizenz
 
-Der Lizenztext ist noch nicht final definiert. Ergänze hier die gewünschte Lizenz, bevor die Erweiterung veröffentlicht wird.
+Die Lizenz ist noch nicht final festgelegt. Bitte vor einer Veröffentlichung ergänzen.

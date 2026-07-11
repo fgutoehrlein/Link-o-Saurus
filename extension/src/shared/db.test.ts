@@ -224,6 +224,38 @@ describe('IndexedDB data layer', () => {
     ]);
   });
 
+  it('supports deterministic indexed sorting and cursor pagination', async () => {
+    await createBookmarks(
+      [0, 1, 2, 3].map((index) => ({
+        id: `paged-${index}`,
+        url: `https://example.com/${index}`,
+        title: `Paged ${index}`,
+        tags: [],
+        createdAt: 100 + Math.floor(index / 2),
+        updatedAt: 100 + index,
+      })),
+      database,
+    );
+
+    const firstPage = await listBookmarks(
+      { includeArchived: true, sortBy: 'createdAt', sortDirection: 'desc', limit: 2 },
+      database,
+    );
+    expect(firstPage.map((bookmark) => bookmark.id)).toEqual(['paged-2', 'paged-3']);
+
+    const nextPage = await listBookmarks(
+      {
+        includeArchived: true,
+        sortBy: 'createdAt',
+        sortDirection: 'desc',
+        limit: 2,
+        cursor: { value: firstPage[1]!.createdAt, id: firstPage[1]!.id },
+      },
+      database,
+    );
+    expect(nextPage.map((bookmark) => bookmark.id)).toEqual(['paged-0', 'paged-1']);
+  });
+
   it('adjusts tag usage counts when bookmark tags change', async () => {
     await createBookmark(
       {

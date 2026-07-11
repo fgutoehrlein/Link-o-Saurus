@@ -865,40 +865,43 @@ const DashboardApp: FunctionalComponent = () => {
       return;
     }
     let cancelled = false;
-    const runSearch = async () => {
-      const trimmed = searchQuery.trim();
-      if (!trimmed) {
-        setSearchHits([]);
-        setSearchError(null);
-        return;
-      }
-      setIsSearching(true);
-      try {
-        const hits = await searchWorkerRef.current!.query(
-          trimmed,
-          activeTagFilters.include.length > 0 || activeTagFilters.exclude.length > 0
-            ? { tags: activeTagFilters.include, excludeTags: activeTagFilters.exclude }
-            : undefined,
-          MAX_QUERY_RESULTS,
-        );
-        if (!cancelled) {
-          setSearchHits(hits);
+    const debounceHandle = window.setTimeout(() => {
+      const runSearch = async () => {
+        const trimmed = searchQuery.trim();
+        if (!trimmed) {
+          setSearchHits([]);
           setSearchError(null);
+          return;
         }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Search failed', error);
-          setSearchError('Suche fehlgeschlagen.');
+        setIsSearching(true);
+        try {
+          const hits = await searchWorkerRef.current!.query(
+            trimmed,
+            activeTagFilters.include.length > 0 || activeTagFilters.exclude.length > 0
+              ? { tags: activeTagFilters.include, excludeTags: activeTagFilters.exclude }
+              : undefined,
+            MAX_QUERY_RESULTS,
+          );
+          if (!cancelled) {
+            setSearchHits(hits);
+            setSearchError(null);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            console.error('Search failed', error);
+            setSearchError('Suche fehlgeschlagen.');
+          }
+        } finally {
+          if (!cancelled) {
+            setIsSearching(false);
+          }
         }
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
-      }
-    };
-    void runSearch();
+      };
+      void runSearch();
+    }, 60);
     return () => {
       cancelled = true;
+      window.clearTimeout(debounceHandle);
     };
   }, [searchQuery, activeTagFilters, searchGeneration]);
 
