@@ -2,6 +2,7 @@ import { render } from 'preact';
 
 import App from './App';
 import { installE2ENavigationTimingClamp } from '../shared/e2e-flags';
+import { I18nProvider } from '../shared/i18n';
 
 const container = document.getElementById('root');
 
@@ -11,4 +12,9 @@ if (!container) {
 
 installE2ENavigationTimingClamp();
 
-render(<App />, container);
+render(
+  <I18nProvider>
+    <App />
+  </I18nProvider>,
+  container,
+);

@@ -17,7 +17,7 @@ void initializeNewTabController();
 registerSidePanelStateTracking();
 
 const initializeBackgroundSurface = (): void => {
-  registerContextMenu();
+  void registerContextMenu();
   void setSidePanelActionBehavior();
   void ensureReadLaterAlarm();
   void updateReadLaterBadge();

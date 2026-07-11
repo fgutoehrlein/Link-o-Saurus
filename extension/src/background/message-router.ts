@@ -1,6 +1,7 @@
 import type { BackgroundRequest, BackgroundResponse } from '../shared/messaging';
 import { applyNewTabOverride } from './newtab-controller';
 import { updateReadLaterBadge } from './badge-controller';
+import { registerContextMenu } from './context-menu-controller';
 import {
   openAllSessionTabs,
   openSelectedSessionTabs,
@@ -36,6 +37,10 @@ export const handleBackgroundRequest = async (
     case 'settings.applyNewTab': {
       const applied = await applyNewTabOverride(message.enabled);
       return { type: 'settings.applyNewTab.result', enabled: applied };
+    }
+    case 'settings.refreshContextMenu': {
+      await registerContextMenu();
+      return { type: 'settings.refreshContextMenu.result' };
     }
     case 'readLater.refreshBadge': {
       const count = await updateReadLaterBadge();

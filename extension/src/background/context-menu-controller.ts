@@ -1,15 +1,37 @@
-import { createBookmark, listCategories } from '../shared/db';
+import { createBookmark, getUserSettings, listCategories } from '../shared/db';
 import { presentLinkOSaurusQuickDialog, showLinkOSaurusToast } from './injected/quick-save-dialog';
 import { openSidePanelForWindow, rememberQuickSaveTab } from './side-panel-controller';
 
 export const CONTEXT_MENU_ID = 'link-o-saurus-context-save';
 export const CONTEXT_MENU_OPEN_SIDE_PANEL_ID = 'link-o-saurus-context-open-side-panel';
 
-export const registerContextMenu = (): void => {
+const removeAllContextMenus = (): Promise<void> =>
+  new Promise((resolve) => chrome.contextMenus.removeAll(() => resolve()));
+
+const resolveContextMenuLocale = (language: 'auto' | 'de' | 'en'): 'de' | 'en' => {
+  if (language === 'de' || language === 'en') return language;
+  return chrome.i18n.getUILanguage().toLowerCase().startsWith('de') ? 'de' : 'en';
+};
+
+const contextMenuText = (locale: 'de' | 'en') =>
+  locale === 'de'
+    ? {
+        save: 'Zu Link-o-Saurus speichern',
+        openSidePanel: 'Link-o-Saurus Seitenleiste öffnen',
+      }
+    : {
+        save: 'Save to Link-o-Saurus',
+        openSidePanel: 'Open Link-o-Saurus side panel',
+      };
+
+export const registerContextMenu = async (): Promise<void> => {
+  const settings = await getUserSettings();
+  const labels = contextMenuText(resolveContextMenuLocale(settings.language));
+  await removeAllContextMenus();
   chrome.contextMenus.create(
     {
       id: CONTEXT_MENU_ID,
-      title: 'Zu Link-o-Saurus speichern',
+      title: labels.save,
       contexts: ['page', 'selection', 'frame'],
     },
     () => {
@@ -22,7 +44,7 @@ export const registerContextMenu = (): void => {
   chrome.contextMenus.create(
     {
       id: CONTEXT_MENU_OPEN_SIDE_PANEL_ID,
-      title: 'Link-o-Saurus Seitenleiste öffnen',
+      title: labels.openSidePanel,
       contexts: ['action'],
     },
     () => {
@@ -36,6 +58,11 @@ export const registerContextMenu = (): void => {
 
 export const registerContextMenuController = (): void => {
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId !== CONTEXT_MENU_ID && info.menuItemId !== CONTEXT_MENU_OPEN_SIDE_PANEL_ID) {
+      return;
+    }
+    const settings = await getUserSettings();
+    const locale = resolveContextMenuLocale(settings.language);
     if (info.menuItemId === CONTEXT_MENU_OPEN_SIDE_PANEL_ID) {
       rememberQuickSaveTab(tab);
       try {
@@ -46,7 +73,7 @@ export const registerContextMenuController = (): void => {
       return;
     }
 
-    if (info.menuItemId !== CONTEXT_MENU_ID || !tab?.id) {
+    if (!tab?.id) {
       return;
     }
 
@@ -68,7 +95,7 @@ export const registerContextMenuController = (): void => {
       const [dialogResult] = await chrome.scripting.executeScript({
         target: { tabId },
         func: presentLinkOSaurusQuickDialog,
-        args: [{ title, url, categories }],
+        args: [{ title, url, categories, locale }],
       });
 
       const response = dialogResult?.result as
@@ -92,7 +119,7 @@ export const registerContextMenuController = (): void => {
       await chrome.scripting.executeScript({
         target: { tabId },
         func: showLinkOSaurusToast,
-        args: ['Bookmark gespeichert'],
+        args: [locale === 'de' ? 'Bookmark gespeichert' : 'Bookmark saved'],
       });
     } catch (error) {
       console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);

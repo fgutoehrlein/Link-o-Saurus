@@ -2,10 +2,12 @@ export function presentLinkOSaurusQuickDialog({
   title,
   url,
   categories,
+  locale = 'de',
 }: {
   title: string;
   url: string;
   categories: { id: string; title: string }[];
+  locale?: 'de' | 'en';
 }): Promise<{ action: 'save'; title: string; categoryId?: string; tags: string[] } | { action: 'cancel' }> {
   const existing = document.getElementById('link-o-saurus-quick-dialog-root');
   if (existing) {
@@ -19,6 +21,33 @@ export function presentLinkOSaurusQuickDialog({
     }
 
     const overlay = document.createElement('div');
+    const copy = locale === 'en'
+      ? {
+          saveBookmark: 'Save bookmark',
+          metadata: 'Metadata',
+          title: 'Title',
+          category: 'Category',
+          chooseCategory: 'Choose category',
+          noCategory: 'No categories available',
+          tags: 'Tags',
+          addTags: 'Add tags (press Enter)',
+          removeTag: (tag: string) => `Remove tag ${tag}`,
+          cancel: 'Cancel',
+          save: 'Save',
+        }
+      : {
+          saveBookmark: 'Bookmark speichern',
+          metadata: 'Metadaten',
+          title: 'Titel',
+          category: 'Kategorie',
+          chooseCategory: 'Kategorie auswählen',
+          noCategory: 'Keine Kategorie verfügbar',
+          tags: 'Tags',
+          addTags: 'Tags hinzufügen (Enter drücken)',
+          removeTag: (tag: string) => `Tag ${tag} entfernen`,
+          cancel: 'Abbrechen',
+          save: 'Speichern',
+        };
     overlay.id = 'link-o-saurus-quick-dialog-root';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
@@ -81,7 +110,7 @@ export function presentLinkOSaurusQuickDialog({
     });
 
     const titleLabel = document.createElement('h2');
-    titleLabel.textContent = 'Bookmark speichern';
+    titleLabel.textContent = copy.saveBookmark;
     applyStyles(titleLabel, {
       margin: '0',
       fontSize: '15px',
@@ -93,7 +122,7 @@ export function presentLinkOSaurusQuickDialog({
     container.appendChild(header);
 
     const metadata = document.createElement('section');
-    metadata.setAttribute('aria-label', 'Metadaten');
+    metadata.setAttribute('aria-label', copy.metadata);
     applyStyles(metadata, {
       background: uiTokens.panel,
       border: `1px solid ${uiTokens.line}`,
@@ -121,8 +150,8 @@ export function presentLinkOSaurusQuickDialog({
     titleInput.type = 'text';
     titleInput.value = title;
     titleInput.required = true;
-    titleInput.setAttribute('aria-label', 'Titel');
-    titleField.append(makeLabel('Titel'), titleInput);
+    titleInput.setAttribute('aria-label', copy.title);
+    titleField.append(makeLabel(copy.title), titleInput);
 
     const urlField = document.createElement('div');
     applyStyles(urlField, { display: 'grid', gap: '4px' });
@@ -185,13 +214,13 @@ export function presentLinkOSaurusQuickDialog({
 
     const categoryBlock = document.createElement('label');
     applyStyles(categoryBlock, { display: 'grid', gap: '4px' });
-    categoryBlock.appendChild(makeLabel('Kategorie'));
+    categoryBlock.appendChild(makeLabel(copy.category));
 
     const selectRoot = document.createElement('div');
     applyStyles(selectRoot, { position: 'relative' });
     const selectButton = document.createElement('button');
     selectButton.type = 'button';
-    selectButton.textContent = 'Kategorie auswählen';
+    selectButton.textContent = copy.chooseCategory;
     applyStyles(selectButton, {
       ...baseInputStyles,
       textAlign: 'left',
@@ -237,7 +266,7 @@ export function presentLinkOSaurusQuickDialog({
     };
 
     const selectOptions: Array<{ id: string; title: string }> = [
-      { id: '', title: 'Kategorie auswählen' },
+      { id: '', title: copy.chooseCategory },
       ...categories.map((category) => ({ id: category.id, title: category.title })),
     ];
 
@@ -278,7 +307,7 @@ export function presentLinkOSaurusQuickDialog({
 
     const tagField = document.createElement('label');
     applyStyles(tagField, { display: 'grid', gap: '4px' });
-    tagField.appendChild(makeLabel('Tags'));
+    tagField.appendChild(makeLabel(copy.tags));
 
     const tagRoot = document.createElement('div');
     applyStyles(tagRoot, {
@@ -292,7 +321,7 @@ export function presentLinkOSaurusQuickDialog({
     });
     const tagInput = document.createElement('input');
     tagInput.type = 'text';
-    tagInput.placeholder = 'Tags hinzufügen (Enter drücken)';
+    tagInput.placeholder = copy.addTags;
     applyStyles(tagInput, {
       flex: '1',
       minWidth: '120px',
@@ -326,7 +355,7 @@ export function presentLinkOSaurusQuickDialog({
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
         removeButton.textContent = '×';
-        removeButton.setAttribute('aria-label', `Tag ${tag} entfernen`);
+        removeButton.setAttribute('aria-label', copy.removeTag(tag));
         applyStyles(removeButton, {
           border: 'none',
           background: 'transparent',
@@ -384,10 +413,10 @@ export function presentLinkOSaurusQuickDialog({
     container.appendChild(divider);
 
     if (categories.length > 0) {
-      setCategory('', 'Kategorie auswählen');
+      setCategory('', copy.chooseCategory);
     } else {
       selectButton.disabled = true;
-      selectButton.textContent = 'Keine Kategorie verfügbar';
+      selectButton.textContent = copy.noCategory;
       selectButton.style.color = uiTokens.muted;
       selectButton.style.cursor = 'not-allowed';
     }
@@ -397,7 +426,7 @@ export function presentLinkOSaurusQuickDialog({
 
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
-    cancelButton.textContent = 'Abbrechen';
+    cancelButton.textContent = copy.cancel;
     applyStyles(cancelButton, {
       border: `1px solid ${uiTokens.line}`,
       background: 'rgba(148, 163, 184, 0.12)',
@@ -418,7 +447,7 @@ export function presentLinkOSaurusQuickDialog({
 
     const submitButton = document.createElement('button');
     submitButton.type = 'submit';
-    submitButton.textContent = 'Speichern';
+    submitButton.textContent = copy.save;
     applyStyles(submitButton, {
       border: 'none',
       background: `linear-gradient(140deg, ${uiTokens.accent}, ${uiTokens.accentStrong})`,

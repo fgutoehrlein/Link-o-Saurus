@@ -11,6 +11,7 @@ import type { UserSettings } from '../shared/types';
 
 const createSettings = (overrides: Partial<UserSettings> = {}): UserSettings => ({
   theme: 'system',
+  language: 'auto',
   dashboardViewMode: 'list',
   bookmarkSortMode: 'relevance',
   newTabEnabled: false,

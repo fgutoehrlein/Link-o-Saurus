@@ -20,6 +20,7 @@ import type {
 } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress, ImportResult } from '../shared/import-export';
 import type { Rule } from '../shared/types';
+import { useI18n } from '../shared/i18n';
 import './App.css';
 import { computeProgressRatio, formatPercent, stageLabel } from './utils/import-progress';
 import { describeRuleActions, describeRuleConditions, parseCsvInput } from './utils/rule-formatting';
@@ -46,6 +47,7 @@ const INITIAL_RULE_FORM: RuleFormState = {
 };
 
 const App: FunctionalComponent = () => {
+  const { languagePreference, setLanguagePreference } = useI18n();
   const workerRef = useRef<Worker>();
   const apiRef = useRef<Remote<ImportExportWorkerApi>>();
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -426,6 +428,24 @@ const App: FunctionalComponent = () => {
         <h1>Link-O-Saurus Datenportabilität</h1>
         <p>Importiere oder exportiere deine Bookmarks ohne die UI zu blockieren.</p>
       </header>
+
+      <section class="panel">
+        <h2>Sprache</h2>
+        <p>Wähle die Sprache der Erweiterung. Bei „Automatisch“ wird die Browser-Sprache verwendet.</p>
+        <label class="toggle">
+          <span>Sprache</span>
+          <select
+            value={languagePreference}
+            onChange={(event) => {
+              void setLanguagePreference(event.currentTarget.value as 'auto' | 'de' | 'en');
+            }}
+          >
+            <option value="auto">Automatisch (Browser-Sprache)</option>
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+      </section>
 
       <section class="panel">
         <h2>Neuer Tab (Opt-in)</h2>
