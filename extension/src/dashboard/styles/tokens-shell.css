@@ -939,12 +939,47 @@ body {
     background-color 180ms ease;
 }
 
+.detail-toggle-button {
+  min-width: 5.9rem;
+  min-height: 2.35rem;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-light));
+  padding: 0.46rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font: inherit;
+  color: inherit;
+  background: color-mix(in srgb, var(--panel-light) 78%, var(--accent) 22%);
+  box-shadow: 0 12px 24px -16px rgba(15, 23, 42, 0.55);
+  view-transition-name: detail-sidebar-toggle;
+  transition:
+    transform 230ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
 [data-theme='dark'] .sidebar-tags-title-toggle.sidebar-tags-title-toggle {
   border-color: color-mix(in srgb, var(--accent-dark) 50%, var(--border-dark));
   background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 72%, var(--accent-dark) 28%);
 }
 
+[data-theme='dark'] .detail-toggle-button {
+  border-color: color-mix(in srgb, var(--accent-dark) 50%, var(--border-dark));
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 72%, var(--accent-dark) 28%);
+}
+
 .sidebar-tags-title-toggle.sidebar-tags-title-toggle:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-light));
+  box-shadow: 0 16px 30px -18px rgba(15, 23, 42, 0.58);
+}
+
+.detail-toggle-button:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--accent) 68%, var(--border-light));
   box-shadow: 0 16px 30px -18px rgba(15, 23, 42, 0.58);
@@ -2588,16 +2623,6 @@ button.danger {
   right: 2.3rem;
   top: 13.3%;
   z-index: 10;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-light));
-  background: color-mix(in srgb, var(--panel-light) 78%, var(--accent) 22%);
-  color: inherit;
-  padding: 0.46rem 0.8rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
   cursor: pointer;
   box-shadow: 0 12px 24px -16px rgba(15, 23, 42, 0.55);
   transform: translateY(-50%);
@@ -2611,49 +2636,25 @@ button.danger {
     background-color 180ms ease;
 }
 
-.detail-toggle-button:hover {
-  transform: translateY(calc(-50% - 1px));
-  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-light));
-  box-shadow: 0 16px 30px -18px rgba(15, 23, 42, 0.58);
-}
-
-[data-theme='dark'] .detail-toggle-button {
-  border-color: color-mix(in srgb, var(--accent-dark) 50%, var(--border-dark));
-  background: color-mix(in srgb, rgba(15, 23, 42, 0.9) 72%, var(--accent-dark) 28%);
+.detail-toggle-button.in-filter-row,
+.detail-toggle-button.in-detail-header {
+  margin-left: auto;
+  transform: none;
+  z-index: 1;
 }
 
 .detail-toggle-button.is-open {
   top: 1.92rem;
   right: 3.45rem;
-  transform: none;
   z-index: 12;
-}
-
-.detail-toggle-button.is-open:hover {
-  transform: translateY(-1px);
 }
 
 .detail-toggle-button.in-filter-row {
   position: static;
-  margin-left: auto;
-  transform: none;
-  z-index: 1;
-}
-
-.detail-toggle-button.in-filter-row:hover,
-.detail-toggle-button.in-filter-row.is-open:hover {
-  transform: translateY(-1px);
 }
 
 .detail-toggle-button.in-detail-header {
   position: static;
-  margin-left: auto;
-  transform: none;
-  z-index: 1;
-}
-
-.detail-toggle-button.in-detail-header:hover {
-  transform: translateY(-1px);
 }
 
 .detail-column {
