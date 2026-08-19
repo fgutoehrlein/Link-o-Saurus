@@ -2565,6 +2565,10 @@ button.danger {
   align-content: flex-start;
 }
 
+.bookmark-tile .bookmark-open-button {
+  align-self: end;
+}
+
 [data-theme='dark'] .bookmark-detail-text {
   color: var(--text-muted-dark);
 }
@@ -3046,6 +3050,66 @@ button.danger {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.modal-description {
+  margin: 1rem 1.25rem 0;
+  color: var(--text-muted-light);
+}
+
+[data-theme='dark'] .modal-description {
+  color: var(--text-muted-dark);
+}
+
+.bookmark-open-button {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border-light));
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel-light));
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+[data-theme='dark'] .bookmark-open-button {
+  border-color: color-mix(in srgb, var(--accent-dark) 48%, var(--border-dark));
+  background: color-mix(in srgb, var(--accent-dark) 9%, var(--panel-dark));
+  color: var(--text-dark);
+}
+
+.bookmark-open-button:hover,
+.bookmark-open-button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-light));
+}
+
+[data-theme='dark'] .bookmark-open-button:hover,
+[data-theme='dark'] .bookmark-open-button:focus-visible {
+  background: color-mix(in srgb, var(--accent-dark) 18%, var(--panel-dark));
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 12rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.empty-state span {
+  max-width: 34rem;
+  color: var(--text-muted-light);
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
 }
 
 .modal-actions {

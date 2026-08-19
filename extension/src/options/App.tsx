@@ -425,8 +425,8 @@ const App: FunctionalComponent = () => {
   return (
     <main class="options">
       <header>
-        <h1>Link-O-Saurus Datenportabilität</h1>
-        <p>Importiere oder exportiere deine Bookmarks ohne die UI zu blockieren.</p>
+        <h1>Link-O-Saurus Einstellungen</h1>
+        <p>Verwalte Darstellung, Synchronisation, Regeln und deine portablen Bookmark-Daten.</p>
       </header>
 
       <section class="panel">

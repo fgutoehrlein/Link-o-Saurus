@@ -178,6 +178,17 @@ export const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): J
             ) : (
               <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
             )}
+            <button
+              type="button"
+              className="bookmark-open-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onOpenBookmark(bookmark);
+              }}
+              aria-label={`Öffnen: ${bookmark.title || bookmark.url}`}
+            >
+              Öffnen
+            </button>
           </article>
         );
       })}

@@ -236,6 +236,17 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
       <time className="bookmark-updated" dateTime={new Date(bookmark.updatedAt).toISOString()} title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
         {updatedLabel}
       </time>
+      <button
+        type="button"
+        className="bookmark-open-button"
+        onClick={(event) => {
+          event.stopPropagation();
+          data.onOpenBookmark(bookmark);
+        }}
+        aria-label={`Öffnen: ${bookmark.title || bookmark.url}`}
+      >
+        Öffnen
+      </button>
     </div>
   );
 };

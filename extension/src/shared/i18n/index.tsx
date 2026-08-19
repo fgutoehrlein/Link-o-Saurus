@@ -176,6 +176,30 @@ const translations: Record<string, string> = {
   'Import/Export läuft…': 'Import/export in progress…',
   'Unterstützte Formate:': 'Supported formats:',
   'Mehrere Tags oder URL-Teile bitte mit Komma trennen. Host-Matches gelten auch für Subdomains.': 'Separate multiple tags or URL parts with commas. Host matches also apply to subdomains.',
+  'Liste': 'List',
+  'Kacheln': 'Tiles',
+  'Detaillierte Zeilenansicht mit Metadaten zum schnellen Scannen.': 'Detailed row view with metadata for quick scanning.',
+  'Visueller Überblick mit Fokus auf Titel, Icons und schnelle Orientierung.': 'Visual overview focused on titles, icons and quick orientation.',
+  'Neu': 'New',
+  'Details anzeigen': 'Show details',
+  'Details ausblenden': 'Hide details',
+  'Alle Filter entfernen': 'Clear all filters',
+  'Suche…': 'Searching…',
+  'Auto-Modus aktiv': 'Auto mode active',
+  'Manueller Modus aktiv': 'Manual mode active',
+  'Öffnen': 'Open',
+  'Vorhandenes öffnen': 'Open existing',
+  'Diese URL ist bereits gespeichert.': 'This URL is already saved.',
+  'Link-O-Saurus Einstellungen': 'Link-O-Saurus settings',
+  'Verwalte Darstellung, Synchronisation, Regeln und deine portablen Bookmark-Daten.': 'Manage appearance, synchronization, rules, and portable bookmark data.',
+  'Keine passenden Bookmarks gefunden.': 'No matching bookmarks found.',
+  'Entferne Suchbegriffe oder Filter, oder erstelle ein neues Bookmark.': 'Remove search terms or filters, or create a new bookmark.',
+  'Filter zurücksetzen': 'Reset filters',
+  'Neues Bookmark': 'New bookmark',
+  'Noch keine Bookmarks.': 'No bookmarks yet.',
+  'Speichere einen Link im Popup oder lege hier dein erstes Bookmark an.': 'Save a link from the popup or create your first bookmark here.',
+  'Noch keine Sessions gespeichert.': 'No sessions saved yet.',
+  'Importiere HTML- oder JSON-Dateien. Der Vorgang läuft im Hintergrund weiter.': 'Import HTML or JSON files. The operation continues in the background.',
 };
 
 const reverseTranslations = Object.fromEntries(
@@ -185,6 +209,9 @@ const reverseTranslations = Object.fromEntries(
 const dynamicTranslations = (value: string): string | undefined => {
   const patterns: Array<[RegExp, (...parts: string[]) => string]> = [
     [/^Tag (.+) entfernen$/, (tag) => `Remove tag ${tag}`],
+    [/^(\d+) Ergebnis$/, (count) => `${count} result`],
+    [/^(\d+) Ergebnisse$/, (count) => `${count} results`],
+    [/^(\d+) ausgewählt$/, (count) => `${count} selected`],
     [/^(\d+) weitere Tags$/, (count) => `${count} more tags`],
     [/^Zuletzt aktualisiert (.+)$/, (date) => `Last updated ${date}`],
     [/^Kommentare zu (.+)$/, (title) => `Comments on ${title}`],
@@ -208,6 +235,9 @@ const dynamicTranslations = (value: string): string | undefined => {
 const reverseDynamicTranslations = (value: string): string | undefined => {
   const patterns: Array<[RegExp, (...parts: string[]) => string]> = [
     [/^Remove tag (.+)$/, (tag) => `Tag ${tag} entfernen`],
+    [/^(\d+) result$/, (count) => `${count} Ergebnis`],
+    [/^(\d+) results$/, (count) => `${count} Ergebnisse`],
+    [/^(\d+) selected$/, (count) => `${count} ausgewählt`],
     [/^(\d+) more tags$/, (count) => `${count} weitere Tags`],
     [/^Last updated (.+)$/, (date) => `Zuletzt aktualisiert ${date}`],
     [/^Comments on (.+)$/, (title) => `Kommentare zu ${title}`],

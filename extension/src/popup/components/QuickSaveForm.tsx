@@ -22,6 +22,7 @@ type QuickSaveFormProps = {
   readonly onAddSuggestedTag: (tag: string) => void;
   readonly onFolderChange: (categoryId: string) => void;
   readonly onQuickSave: () => void;
+  readonly onOpenDuplicate: () => void;
   readonly onReload: () => void;
   readonly onTagsChange: (tags: string[]) => void;
   readonly onTitleChange: (title: string) => void;
@@ -45,6 +46,7 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
   onAddSuggestedTag,
   onFolderChange,
   onQuickSave,
+  onOpenDuplicate,
   onReload,
   onTagsChange,
   onTitleChange,
@@ -72,6 +74,15 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
         {showDetails ? 'Weniger' : 'Details'}
       </button>
     </div>
+
+    {duplicateEntry ? (
+      <p className="duplicate-notice" role="status">
+        Diese URL ist bereits gespeichert.{' '}
+        <button type="button" className="inline-link" onClick={onOpenDuplicate}>
+          Vorhandenes öffnen
+        </button>
+      </p>
+    ) : null}
 
     {showDetails ? (
       <div className="quick-save__details">

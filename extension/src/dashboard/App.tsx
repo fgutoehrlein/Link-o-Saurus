@@ -2536,7 +2536,24 @@ const DashboardApp: FunctionalComponent = () => {
               <div className="empty-state">
                 {bookmarkViewMode === 'list' && isSearching
                   ? 'Suche…'
-                  : 'Keine Einträge gefunden.'}
+                  : searchQuery.trim() || hasActiveFilters
+                    ? (
+                      <>
+                        <strong>Keine passenden Bookmarks gefunden.</strong>
+                        <span>Entferne Suchbegriffe oder Filter, oder erstelle ein neues Bookmark.</span>
+                        <div className="empty-state-actions">
+                          <button type="button" onClick={handleResetAllFilters}>Filter zurücksetzen</button>
+                          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>Neues Bookmark</button>
+                        </div>
+                      </>
+                    )
+                    : (
+                      <>
+                        <strong>Noch keine Bookmarks.</strong>
+                        <span>Speichere einen Link im Popup oder lege hier dein erstes Bookmark an.</span>
+                        <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>Neues Bookmark</button>
+                      </>
+                    )}
               </div>
             ) : listHeight > 0 ? (
               <div className={combineClassNames('view-mode-stage', bookmarkViewMode === 'tiles' && 'is-tiles')}>

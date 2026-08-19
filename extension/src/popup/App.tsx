@@ -212,6 +212,9 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
               }
             });
           }}
+          onOpenDuplicate={() => {
+            if (popupSearch.duplicateEntry) void handleOpenUrl(popupSearch.duplicateEntry.bookmark);
+          }}
           onReload={() => void handleReloadQuickSave()}
           onTagsChange={(next) => {
             quickSave.setManualTagEdits(true);
