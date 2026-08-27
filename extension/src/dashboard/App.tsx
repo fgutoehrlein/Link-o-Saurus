@@ -38,6 +38,7 @@ import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
 import { isDashboardMessage } from '../shared/messaging';
+import { translateText, useI18n } from '../shared/i18n';
 import {
   EMPTY_TAG_FILTER_STATE,
   applyNegativeTagContextAction,
@@ -381,6 +382,7 @@ const refreshBookmarkFavicon = async (bookmark: Bookmark): Promise<string | unde
 };
 
 const DashboardApp: FunctionalComponent = () => {
+  const { locale } = useI18n();
   const [boards, setBoards] = useState<readonly Board[]>([]);
   const [categories, setCategories] = useState<readonly Category[]>([]);
   const [bookmarks, setBookmarks] = useState<readonly Bookmark[]>([]);
@@ -1688,7 +1690,7 @@ const DashboardApp: FunctionalComponent = () => {
     if (selectedIds.length === 0) {
       return;
     }
-    if (!window.confirm(`Sollen ${selectedIds.length} Lesezeichen gelöscht werden?`)) {
+    if (!window.confirm(translateText(`Sollen ${selectedIds.length} Lesezeichen gelöscht werden?`, locale))) {
       return;
     }
     try {
@@ -1704,7 +1706,7 @@ const DashboardApp: FunctionalComponent = () => {
       console.error('Failed to delete bookmarks', error);
       setStatusMessage('Löschen fehlgeschlagen.');
     }
-  }, [selectedIds, selectedSet, applySearchWorkerRemoval, clearSelection, refreshTags]);
+  }, [selectedIds, selectedSet, applySearchWorkerRemoval, clearSelection, refreshTags, locale]);
 
   const handleDropOnCategory = useCallback(
     async (categoryId: string) => {
@@ -1746,7 +1748,7 @@ const DashboardApp: FunctionalComponent = () => {
         .map((tab) => ({ url: tab.url as string, title: tab.title ?? '', favIconUrl: tab.favIconUrl ?? '' }));
       const session = await createSession({
         id: crypto.randomUUID(),
-        title: `Session ${new Date().toLocaleString()}`,
+        title: `Session ${new Date().toLocaleString(locale)}`,
         tabs: filtered,
         savedAt: Date.now(),
       });
@@ -1757,7 +1759,7 @@ const DashboardApp: FunctionalComponent = () => {
       console.error('Failed to save session', error);
       setSessionState({ busy: false, error: 'Session konnte nicht gespeichert werden.' });
     }
-  }, []);
+  }, [locale]);
 
   const handleSessionOpen = useCallback(async (session: SessionPack) => {
     setSessionState({ busy: true, error: null });
@@ -1775,7 +1777,7 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   const handleSessionDelete = useCallback(async (session: SessionPack) => {
-    if (!window.confirm(`Session "${session.title}" löschen?`)) {
+    if (!window.confirm(translateText(`Session "${session.title}" löschen?`, locale))) {
       return;
     }
     try {
@@ -1786,7 +1788,7 @@ const DashboardApp: FunctionalComponent = () => {
       console.error('Failed to delete session', error);
       setSessionState({ busy: false, error: 'Session konnte nicht gelöscht werden.' });
     }
-  }, []);
+  }, [locale]);
 
   const handleThemeChange = useCallback(async (theme: ThemeChoice) => {
     setThemeChoice(theme);
@@ -2013,7 +2015,7 @@ const DashboardApp: FunctionalComponent = () => {
         <div className="detail-panel" aria-live="polite">
           <header className="detail-panel-head">
             <h2>{detailState.title.trim() || 'Unbenanntes Lesezeichen'}</h2>
-            <p className="detail-meta">Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt)}</p>
+            <p className="detail-meta">Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt, locale)}</p>
           </header>
           <section className="detail-section" aria-label="Allgemeine Informationen">
             <h3>Allgemeine Informationen</h3>
@@ -2063,7 +2065,7 @@ const DashboardApp: FunctionalComponent = () => {
             <div className="detail-meta-grid">
               <p>
                 <span>Erstellt</span>
-                <strong>{formatTimestamp(entry.bookmark.createdAt)}</strong>
+                <strong>{formatTimestamp(entry.bookmark.createdAt, locale)}</strong>
               </p>
               <p>
                 <span>Besuche</span>

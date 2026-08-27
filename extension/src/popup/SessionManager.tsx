@@ -3,13 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { listSessions } from '../shared/db';
 import type { SessionPack } from '../shared/types';
 import { sendBackgroundMessage } from '../shared/messaging';
+import { useI18n } from '../shared/i18n';
 
 type Feedback = { tone: 'info' | 'error'; message: string };
 
-const formatTimestamp = (timestamp: number): string =>
-  new Date(timestamp).toLocaleString();
+const formatTimestamp = (timestamp: number, locale: string): string =>
+  new Date(timestamp).toLocaleString(locale);
 
 const SessionManager: FunctionalComponent = () => {
+  const { locale } = useI18n();
   const [sessions, setSessions] = useState<SessionPack[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTabIndexes, setSelectedTabIndexes] = useState<Set<number>>(new Set());
@@ -272,7 +274,7 @@ const SessionManager: FunctionalComponent = () => {
                   <span class="session-item__meta">
                     <span>{session.tabs.length} Tabs</span>
                     <time dateTime={new Date(session.savedAt).toISOString()}>
-                      {formatTimestamp(session.savedAt)}
+                      {formatTimestamp(session.savedAt, locale)}
                     </time>
                   </span>
                 </button>

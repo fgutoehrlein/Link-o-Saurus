@@ -47,7 +47,7 @@ const INITIAL_RULE_FORM: RuleFormState = {
 };
 
 const App: FunctionalComponent = () => {
-  const { languagePreference, setLanguagePreference } = useI18n();
+  const { languagePreference, locale, setLanguagePreference } = useI18n();
   const workerRef = useRef<Worker>();
   const apiRef = useRef<Remote<ImportExportWorkerApi>>();
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -711,19 +711,19 @@ const App: FunctionalComponent = () => {
           <dl class="stats">
             <div>
               <dt>Verarbeitet</dt>
-              <dd>{importResult.stats.processedBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.processedBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Importiert</dt>
-              <dd>{importResult.stats.createdBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.createdBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Übersprungen</dt>
-              <dd>{importResult.stats.skippedBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.skippedBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Duplikate</dt>
-              <dd>{importResult.stats.duplicateBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.duplicateBookmarks.toLocaleString(locale)}</dd>
             </div>
           </dl>
         )}

@@ -9,13 +9,14 @@ import {
 } from '../shared/db';
 import { renderMarkdownToSafeHtml } from '../shared/markdown';
 import type { Comment } from '../shared/types';
+import { useI18n } from '../shared/i18n';
 
 const sortComments = (items: Comment[]): Comment[] =>
   [...items].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
-const formatTimestamp = (value: number): string => {
+const formatTimestamp = (value: number, locale: string): string => {
   try {
-    return new Date(value).toLocaleString();
+    return new Date(value).toLocaleString(locale);
   } catch {
     return '';
   }
@@ -30,6 +31,7 @@ const CommentsSection: FunctionalComponent<CommentsSectionProps> = ({
   bookmarkId,
   bookmarkTitle,
 }) => {
+  const { locale } = useI18n();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -178,7 +180,7 @@ const CommentsSection: FunctionalComponent<CommentsSectionProps> = ({
               <div class="comment-meta">
                 <span class="comment-author">{comment.author}</span>
                 <time dateTime={new Date(comment.createdAt).toISOString()}>
-                  {formatTimestamp(comment.createdAt)}
+                  {formatTimestamp(comment.createdAt, locale)}
                 </time>
               </div>
               <div

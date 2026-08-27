@@ -79,7 +79,7 @@ export const registerContextMenuController = (): void => {
 
     const tabId = tab.id;
     const url = info.pageUrl ?? tab.url;
-    const title = tab.title ?? info.selectionText ?? url ?? 'Unbenannte Seite';
+    const title = tab.title ?? info.selectionText ?? url ?? (locale === 'de' ? 'Unbenannte Seite' : 'Untitled page');
 
     if (!url) {
       console.warn('[Link-o-Saurus] Kein URL-Kontext für Bookmark vorhanden.');

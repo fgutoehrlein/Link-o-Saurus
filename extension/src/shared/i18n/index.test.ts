@@ -21,5 +21,13 @@ describe('i18n', () => {
     expect(translateText('33 Ergebnisse', 'en')).toBe('33 results');
     expect(translateText('Kacheln', 'en')).toBe('Tiles');
     expect(translateText('Details', 'de')).toBe('Details');
+    expect(translateText('Favicon aktualisieren', 'en')).toBe('Update favicon');
+    expect(translateText('3 Tabs geöffnet.', 'en')).toBe('Opened 3 tabs.');
+    expect(translateText('2 / 5 ausgewählt', 'en')).toBe('2 / 5 selected');
+    expect(translateText('Host entspricht: example.com', 'en')).toBe('Host matches: example.com');
+    expect(translateText('Sollen 2 Lesezeichen gelöscht werden?', 'en')).toBe('Delete 2 bookmarks?');
+    expect(translateText('Opened 3 tabs.', 'de')).toBe('3 Tabs geöffnet.');
+    expect(translateText('z. B. Videos', 'en')).toBe('e.g. Videos');
+    expect(translateText('Invalid file payload', 'de')).toBe('Ungültige Dateidaten.');
   });
 });
