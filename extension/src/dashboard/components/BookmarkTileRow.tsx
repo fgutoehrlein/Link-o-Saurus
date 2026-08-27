@@ -7,7 +7,7 @@ import type { BookmarkTileListData } from '../types';
 import { formatTimestamp, combineClassNames } from '../utils/formatting';
 import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
-import { useI18n } from '../../shared/i18n';
+import { translateText, useI18n } from '../../shared/i18n';
 
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const MAX_VISIBLE_TILE_TITLE_LINES = 3;
@@ -187,9 +187,9 @@ export const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): J
                 event.stopPropagation();
                 data.onOpenBookmark(bookmark);
               }}
-              aria-label={`Öffnen: ${bookmark.title || bookmark.url}`}
+              aria-label={translateText(`Öffnen: ${bookmark.title || bookmark.url}`, locale)}
             >
-              Öffnen
+              {translateText('Öffnen', locale)}
             </button>
           </article>
         );

@@ -22,6 +22,7 @@ describe('i18n', () => {
     expect(translateText('Kacheln', 'en')).toBe('Tiles');
     expect(translateText('Details', 'de')).toBe('Details');
     expect(translateText('Favicon aktualisieren', 'en')).toBe('Update favicon');
+    expect(translateText('Öffnen', 'en')).toBe('Open');
     expect(translateText('3 Tabs geöffnet.', 'en')).toBe('Opened 3 tabs.');
     expect(translateText('2 / 5 ausgewählt', 'en')).toBe('2 / 5 selected');
     expect(translateText('Host entspricht: example.com', 'en')).toBe('Host matches: example.com');

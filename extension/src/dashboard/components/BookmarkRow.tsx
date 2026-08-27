@@ -7,7 +7,7 @@ import type { BookmarkListData } from '../types';
 import { combineClassNames, formatCompactTimestamp, formatTimestamp } from '../utils/formatting';
 import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
-import { useI18n } from '../../shared/i18n';
+import { translateText, useI18n } from '../../shared/i18n';
 
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const TREE_INDENT_STEP = 18;
@@ -245,9 +245,9 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           event.stopPropagation();
           data.onOpenBookmark(bookmark);
         }}
-        aria-label={`Öffnen: ${bookmark.title || bookmark.url}`}
+        aria-label={translateText(`Öffnen: ${bookmark.title || bookmark.url}`, locale)}
       >
-        Öffnen
+        {translateText('Öffnen', locale)}
       </button>
     </div>
   );
