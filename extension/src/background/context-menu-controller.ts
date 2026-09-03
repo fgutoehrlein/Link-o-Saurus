@@ -95,7 +95,7 @@ export const registerContextMenuController = (): void => {
       const [dialogResult] = await chrome.scripting.executeScript({
         target: { tabId },
         func: presentLinkOSaurusQuickDialog,
-        args: [{ title, url, categories, locale }],
+        args: [{ title, url, categories, locale, theme: settings.theme }],
       });
 
       const response = dialogResult?.result as
@@ -119,7 +119,7 @@ export const registerContextMenuController = (): void => {
       await chrome.scripting.executeScript({
         target: { tabId },
         func: showLinkOSaurusToast,
-        args: [locale === 'de' ? 'Bookmark gespeichert' : 'Bookmark saved'],
+        args: [locale === 'de' ? 'Bookmark gespeichert' : 'Bookmark saved', settings.theme],
       });
     } catch (error) {
       console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);

@@ -43,7 +43,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
 
   const quickSave = useQuickSave();
 
-  const { aiSuggestions, loadingSuggestions, setAiSuggestions } = useAiSuggestions({
+  const { aiSuggestions, loadingSuggestions, setAiSuggestions, requestSuggestions, refreshSuggestions } = useAiSuggestions({
     pageSignals: quickSave.pageSignals,
     selectedCategoryId,
     showDetails,
@@ -205,7 +205,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
             setSelectedCategoryId(categoryId);
           }}
           onQuickSave={() => {
-            void quickSave.handleQuickSave({ aiSuggestions, selectedCategoryId }).then((bookmark) => {
+            void quickSave.handleQuickSave({ aiSuggestions, requestSuggestions, selectedCategoryId }).then((bookmark) => {
               if (bookmark) {
                 popupSearch.addBookmarkToIndex(bookmark);
                 setAiSuggestions(null);
@@ -215,6 +215,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
           onOpenDuplicate={() => {
             if (popupSearch.duplicateEntry) void handleOpenUrl(popupSearch.duplicateEntry.bookmark);
           }}
+          onRefreshSuggestions={refreshSuggestions}
           onReload={() => void handleReloadQuickSave()}
           onTagsChange={(next) => {
             quickSave.setManualTagEdits(true);

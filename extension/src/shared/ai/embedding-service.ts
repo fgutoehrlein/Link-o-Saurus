@@ -1,7 +1,11 @@
+import { wrap } from 'comlink';
+import EmbeddingWorkerFactory from './embedding-worker?worker&module';
+import type { EmbeddingWorker } from './embedding-worker';
+
 export type EmbeddingProvider = {
   modelName: string;
   isFallback: boolean;
-  embed(text: string): Promise<Float32Array>;
+  embed(texts: string[]): Promise<Float32Array[]>;
 };
 
 const VECTOR_SIZE = 192;
@@ -46,47 +50,35 @@ export const cosineSimilarity = (a: Float32Array, b: Float32Array): number => {
 const createFallbackEmbeddingProvider = (): EmbeddingProvider => ({
   modelName: 'local-hash-embeddings-v1',
   isFallback: true,
-  async embed(text: string): Promise<Float32Array> {
-    const vector = new Float32Array(VECTOR_SIZE);
-    const normalized = text.toLowerCase();
-    for (let i = 0; i < normalized.length - 2; i += 1) {
-      const gram = normalized.slice(i, i + 3);
-      const hash = fnv1a(gram);
-      vector[hash % VECTOR_SIZE] += 1;
-    }
-    return l2Normalize(vector);
+  async embed(texts: string[]): Promise<Float32Array[]> {
+    return texts.map((text) => {
+      const vector = new Float32Array(VECTOR_SIZE);
+      const normalized = text.toLowerCase();
+      for (let i = 0; i < normalized.length - 2; i += 1) {
+        const gram = normalized.slice(i, i + 3);
+        const hash = fnv1a(gram);
+        vector[hash % VECTOR_SIZE] += 1;
+      }
+      return l2Normalize(vector);
+    });
   },
 });
 
-const createTransformersEmbeddingProvider = async (): Promise<EmbeddingProvider | null> => {
+const createModelEmbeddingProvider = async (): Promise<EmbeddingProvider | null> => {
+  if (typeof Worker === 'undefined' || typeof chrome === 'undefined') return null;
+  const worker = new EmbeddingWorkerFactory();
   try {
-    const dynamicImport = new Function(
-      'moduleName',
-      'return import(/* @vite-ignore */ moduleName);',
-    ) as (moduleName: string) => Promise<{
-      pipeline: (
-        task: 'feature-extraction',
-        model: string,
-        options: { quantized: boolean },
-      ) => Promise<(text: string, options: { pooling: 'mean'; normalize: boolean }) => Promise<{ data: Float32Array }>>;
-      env: { allowRemoteModels: boolean; useBrowserCache: boolean };
-    }>;
-    const { pipeline, env } = await dynamicImport('@xenova/transformers');
-    env.allowRemoteModels = false;
-    env.useBrowserCache = true;
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-      quantized: true,
-    });
-
+    const api = wrap<EmbeddingWorker>(worker);
+    const modelName = await api.ready();
     return {
-      modelName: 'Xenova/all-MiniLM-L6-v2 (quantized)',
+      modelName,
       isFallback: false,
-      async embed(text: string): Promise<Float32Array> {
-        const output = await extractor(text, { pooling: 'mean', normalize: true });
-        return Float32Array.from(output.data as Float32Array);
+      embed(texts: string[]): Promise<Float32Array[]> {
+        return api.embed(texts);
       },
     };
   } catch {
+    worker.terminate();
     return null;
   }
 };
@@ -96,8 +88,8 @@ let providerPromise: Promise<EmbeddingProvider> | null = null;
 export const getEmbeddingProvider = async (): Promise<EmbeddingProvider> => {
   if (!providerPromise) {
     providerPromise = (async () => {
-      const transformerProvider = await createTransformersEmbeddingProvider();
-      return transformerProvider ?? createFallbackEmbeddingProvider();
+      const modelProvider = await createModelEmbeddingProvider();
+      return modelProvider ?? createFallbackEmbeddingProvider();
     })();
   }
   return providerPromise;

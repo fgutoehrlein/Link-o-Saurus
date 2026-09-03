@@ -2,7 +2,7 @@ import type { Bookmark, Tag } from '../types';
 import { cosineSimilarity } from './embedding-service';
 import { detectDomainRule, deriveKeywordTags } from './domain-rules';
 import { dedupeTags, normalizeTag, parseDomain, tokenize } from './normalization';
-import { embedText } from './model-service';
+import { embedTexts } from './model-service';
 import type { BookmarkSignalInput, SimilarBookmark, TagSuggestion } from './types';
 
 type Inputs = {
@@ -14,6 +14,54 @@ type Inputs = {
 const MIN_TAG_SCORE = 0.28;
 const MAX_ANCHORED_TAGS = 3;
 const MAX_EXPLORATORY_TAGS = 3;
+const MAX_PAGE_CHUNKS = 6;
+const PAGE_CHUNK_LENGTH = 700;
+const MAX_SIMILAR_BOOKMARKS = 120;
+const MAX_EXISTING_TAGS = 160;
+const PAGE_STOPWORDS = new Set(['about', 'also', 'and', 'are', 'for', 'from', 'have', 'into', 'mit', 'more', 'not', 'that', 'the', 'this', 'und', 'was', 'with', 'you']);
+
+const buildInputText = (input: BookmarkSignalInput): string =>
+  [input.title, input.url, input.metaDescription ?? '', input.pageTitle ?? '', input.selectedText ?? ''].join(' | ');
+
+export const selectPageChunks = (content: string): string[] => {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  if (normalized.length <= PAGE_CHUNK_LENGTH) return [normalized];
+  const lastStart = Math.max(0, normalized.length - PAGE_CHUNK_LENGTH);
+  return Array.from({ length: MAX_PAGE_CHUNKS }, (_, index) => {
+    const start = Math.round((lastStart * index) / (MAX_PAGE_CHUNKS - 1));
+    return normalized.slice(start, start + PAGE_CHUNK_LENGTH);
+  });
+};
+
+const averageEmbedding = (vectors: Float32Array[]): Float32Array => {
+  if (vectors.length === 1) return vectors[0];
+  const average = new Float32Array(vectors[0]?.length ?? 0);
+  for (const vector of vectors) {
+    vector.forEach((value, index) => {
+      average[index] += value / vectors.length;
+    });
+  }
+  return average;
+};
+
+const embedInput = async (input: BookmarkSignalInput): Promise<Float32Array> =>
+  averageEmbedding(await embedTexts([buildInputText(input), ...selectPageChunks(input.pageContent ?? '')]));
+
+const rankContentTokens = (input: BookmarkSignalInput): string[] => {
+  const scores = new Map<string, number>();
+  const add = (text: string, weight: number) => {
+    for (const token of tokenize(text)) {
+      if (token.length < 4 || PAGE_STOPWORDS.has(token)) continue;
+      scores.set(token, (scores.get(token) ?? 0) + weight);
+    }
+  };
+  add(input.title, 4);
+  add(input.metaDescription ?? '', 2);
+  add(input.pageTitle ?? '', 2);
+  add(input.pageContent ?? '', 1);
+  return [...scores.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([token]) => token).slice(0, 20);
+};
 
 const buildBookmarkText = (bookmark: Pick<Bookmark, 'title' | 'url' | 'tags' | 'notes'>): string =>
   [bookmark.title, bookmark.url, bookmark.notes ?? '', bookmark.tags.join(' ')].join(' | ');
@@ -22,12 +70,16 @@ const rankSimilarBookmarks = async (
   input: BookmarkSignalInput,
   bookmarks: Bookmark[],
 ): Promise<SimilarBookmark[]> => {
-  const bookmarkText = [input.title, input.url, input.metaDescription ?? '', input.selectedText ?? ''].join(' | ');
-  const targetEmbedding = await embedText(bookmarkText);
+  const targetEmbedding = await embedInput(input);
+  const inputDomain = parseDomain(input.url);
+  const candidates = [...bookmarks]
+    .sort((a, b) => Number(parseDomain(b.url) === inputDomain) - Number(parseDomain(a.url) === inputDomain) || b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SIMILAR_BOOKMARKS);
+  const candidateEmbeddings = await embedTexts(candidates.map(buildBookmarkText));
 
   const ranked: SimilarBookmark[] = [];
-  for (const bookmark of bookmarks) {
-    const similarity = cosineSimilarity(targetEmbedding, await embedText(buildBookmarkText(bookmark)));
+  for (const [index, bookmark] of candidates.entries()) {
+    const similarity = cosineSimilarity(targetEmbedding, candidateEmbeddings[index]);
     if (similarity >= 0.2) {
       ranked.push({ bookmark, similarity });
     }
@@ -37,14 +89,13 @@ const rankSimilarBookmarks = async (
 };
 
 export const suggestTags = async ({ input, existingTags, bookmarks }: Inputs): Promise<TagSuggestion[]> => {
-  const contentText = [input.title, input.metaDescription ?? '', input.pageTitle ?? '', input.selectedText ?? ''].join(' ');
+  const contentText = [input.title, input.metaDescription ?? '', input.pageTitle ?? '', input.pageContent ?? '', input.selectedText ?? ''].join(' ');
   const tokens = tokenize(contentText);
   const domainRule = detectDomainRule(input.url);
   const keywordTags = deriveKeywordTags(tokens);
   const similarBookmarks = await rankSimilarBookmarks(input, bookmarks);
 
-  const bookmarkText = [input.title, input.url, input.metaDescription ?? '', input.selectedText ?? ''].join(' | ');
-  const sourceEmbedding = await embedText(bookmarkText);
+  const sourceEmbedding = await embedInput(input);
 
   const candidateScores = new Map<string, TagSuggestion>();
   const collect = (tag: string, source: TagSuggestion['source'], score: number, reason: string) => {
@@ -77,8 +128,10 @@ export const suggestTags = async ({ input, existingTags, bookmarks }: Inputs): P
     }
   }
 
-  for (const existing of existingTags) {
-    const similarity = cosineSimilarity(sourceEmbedding, await embedText(existing.name));
+  const popularTags = [...existingTags].sort((a, b) => b.usageCount - a.usageCount).slice(0, MAX_EXISTING_TAGS);
+  const tagEmbeddings = await embedTexts(popularTags.map((tag) => tag.name));
+  for (const [index, existing] of popularTags.entries()) {
+    const similarity = cosineSimilarity(sourceEmbedding, tagEmbeddings[index]);
     if (similarity >= 0.24) {
       collect(existing.name, 'history', similarity * 0.8 + Math.min(existing.usageCount, 16) / 64, 'similar existing tag');
     }
@@ -113,9 +166,7 @@ export const suggestTags = async ({ input, existingTags, bookmarks }: Inputs): P
     .filter((entry) => entry.source === 'history')
     .slice(0, MAX_ANCHORED_TAGS);
 
-  const contentDerived: TagSuggestion[] = dedupeTags(tokens)
-    .filter((token) => token.length >= 4)
-    .slice(0, 20)
+  const contentDerived: TagSuggestion[] = dedupeTags(rankContentTokens(input))
     .map((token) => ({
       tag: token,
       score: 0.36,

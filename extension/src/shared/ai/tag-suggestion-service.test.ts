@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Bookmark, Tag } from '../types';
-import { suggestTags } from './tag-suggestion-service';
+import { selectPageChunks, suggestTags } from './tag-suggestion-service';
 
 describe('suggestTags policy', () => {
+  it('samples long page content across its full main-content range', () => {
+    const chunks = selectPageChunks(`${'start '.repeat(200)}${'middle '.repeat(200)}${'end '.repeat(200)}`);
+    expect(chunks).toHaveLength(6);
+    expect(chunks[0]).toContain('start');
+    expect(chunks[3]).toContain('middle');
+    expect(chunks[5]).toContain('end');
+  });
+
   it('keeps at most 3 history tags and adds exploratory content-based tags', async () => {
     const existingTags: Tag[] = [
       { id: 't1', name: 'javascript', path: 'javascript', slugParts: ['javascript'], usageCount: 10 },
@@ -30,6 +38,7 @@ describe('suggestTags policy', () => {
         url: 'https://example.dev/a11y-dashboard-checklist',
         metaDescription: 'A11y and usability checklist for modern design systems',
         selectedText: 'accessibility design systems usability heuristics',
+        pageContent: 'Accessibility practices for dashboards. This accessibility guide explains keyboard navigation and accessible dashboards.',
       },
       existingTags,
       bookmarks,
@@ -38,5 +47,6 @@ describe('suggestTags policy', () => {
     const historyCount = tags.filter((tag) => tag.source === 'history').length;
     expect(historyCount).toBeLessThanOrEqual(3);
     expect(tags.some((tag) => tag.reasons.includes('content token'))).toBe(true);
+    expect(tags.map((tag) => tag.tag)).toContain('accessibility');
   });
 });

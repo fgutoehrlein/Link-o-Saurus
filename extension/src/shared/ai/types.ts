@@ -4,6 +4,7 @@ export type BookmarkSignalInput = {
   title: string;
   url: string;
   metaDescription?: string;
+  pageContent?: string;
   pageTitle?: string;
   selectedText?: string;
   explicitTags?: string[];

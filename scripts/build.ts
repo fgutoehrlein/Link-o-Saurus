@@ -78,6 +78,21 @@ async function copyStaticAssets(): Promise<void> {
   await copyDirectory(assetsSource, assetsDestination);
 }
 
+async function copyInferenceRuntimeAssets(): Promise<void> {
+  const destination = path.join(distDir, 'assets', 'transformers');
+  await fs.mkdir(destination, { recursive: true });
+  await Promise.all([
+    fs.copyFile(
+      path.join(rootDir, 'node_modules', '@huggingface', 'transformers', 'dist', 'transformers.web.min.js'),
+      path.join(destination, 'transformers.web.min.js'),
+    ),
+    fs.copyFile(
+      path.join(rootDir, 'node_modules', 'onnxruntime-web', 'dist', 'ort-wasm-simd-threaded.wasm'),
+      path.join(destination, 'ort-wasm-simd-threaded.wasm'),
+    ),
+  ]);
+}
+
 async function writeHtmlShell(entry: EntryDefinition, cssFiles: readonly string[] = []) {
   if (!entry.html) return;
 
@@ -182,6 +197,9 @@ function createViteConfig(entry: EntryDefinition): InlineConfig {
       outDir,
       minify: modeArg === 'build',
       sourcemap: true,
+      // Keep the ONNX runtime's WASM binaries as extension assets; Vite otherwise
+      // inlines them into the AI worker and inflates its startup payload.
+      assetsInlineLimit: 0,
       lib: {
         entry: entry.entry,
         formats: ['es'],
@@ -214,6 +232,7 @@ async function run() {
   await ensureCleanOutput();
   await copyManifest();
   await copyStaticAssets();
+  await copyInferenceRuntimeAssets();
   await Promise.all(entries.map((entry) => writeHtmlShell(entry)));
 
   const activeWatchers: { watcher: RollupWatcher; entry: EntryDefinition }[] = [];
