@@ -37,8 +37,6 @@ const FIELD_WEIGHTS: Record<string, number> = {
   notes: 1,
 };
 
-const simpleEncode = (value: string): string[] => [value.trim().toLowerCase()].filter(Boolean);
-
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
 
@@ -50,10 +48,10 @@ function createDocumentIndex() {
       id: 'id',
       store: true,
       index: [
-        { field: 'title', tokenize: 'forward', encode: simpleEncode },
-        { field: 'url', tokenize: 'forward', encode: simpleEncode },
-        { field: 'notes', tokenize: 'forward', encode: simpleEncode },
-        { field: 'tags', tokenize: 'forward', encode: simpleEncode },
+        { field: 'title', tokenize: 'forward' },
+        { field: 'url', tokenize: 'forward' },
+        { field: 'notes', tokenize: 'forward' },
+        { field: 'tags', tokenize: 'forward' },
       ],
     },
   });
@@ -187,8 +185,7 @@ const query = async (
   for (const fieldResult of rawResults) {
     const weight = FIELD_WEIGHTS[fieldResult.field] ?? 1;
     fieldResult.result.forEach((entry, resultIndex) => {
-      const identifierList = entry.id as Id[];
-      const primaryId = identifierList[0];
+      const primaryId = Array.isArray(entry.id) ? (entry.id as Id[])[0] : entry.id;
       if (typeof primaryId === 'undefined') {
         return;
       }

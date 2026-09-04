@@ -21,8 +21,8 @@ import {
   createTag,
   deleteBoard,
   deleteBookmark,
+  deleteBookmarks,
   deleteCategory,
-  deleteComment,
   deleteReadLater,
   deleteSession,
   deleteTag,
@@ -497,6 +497,28 @@ describe('IndexedDB data layer', () => {
 
     await deleteBookmark('bookmark-comments-2', database);
     expect(await listComments('bookmark-comments-2', database)).toHaveLength(0);
+  });
+
+  it('deletes multiple bookmarks and their dependent data in one operation', async () => {
+    await createBookmark({ id: 'bulk-delete-1', url: 'https://one.example', title: 'One', tags: ['shared'] }, database);
+    await createBookmark({ id: 'bulk-delete-2', url: 'https://two.example', title: 'Two', tags: ['shared'] }, database);
+    await createComment({ bookmarkId: 'bulk-delete-1', author: 'A', body: 'Note' }, database);
+    await createComment({ bookmarkId: 'bulk-delete-2', author: 'B', body: 'Note' }, database);
+    await saveReadLater({ bookmarkId: 'bulk-delete-1', dueAt: Date.now() }, database);
+    await saveReadLater({ bookmarkId: 'bulk-delete-2', dueAt: Date.now() }, database);
+    await database.bookmarkMappings.bulkPut([
+      { nativeId: 'native-1', localId: 'bulk-delete-1', nodeType: 'bookmark', lastSyncAt: Date.now() },
+      { nativeId: 'native-2', localId: 'bulk-delete-2', nodeType: 'bookmark', lastSyncAt: Date.now() },
+    ]);
+
+    await deleteBookmarks(['bulk-delete-1', 'bulk-delete-2'], database);
+
+    expect(await listBookmarks({ includeArchived: true }, database)).toHaveLength(0);
+    expect(await listComments('bulk-delete-1', database)).toHaveLength(0);
+    expect(await listComments('bulk-delete-2', database)).toHaveLength(0);
+    expect(await listReadLater(database)).toHaveLength(0);
+    expect(await database.bookmarkMappings.toArray()).toHaveLength(0);
+    expect((await getTag('shared', database))?.usageCount).toBe(0);
   });
 
   it('performs CRUD for sessions', async () => {

@@ -2,16 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('flexsearch', () => {
   class MockDocument<T> {
-    constructor(options?: unknown) {
-      const indexes = (options as { document?: { index?: Array<{ encode?: unknown }> } })
-        ?.document?.index;
-      indexes?.forEach((entry) => {
-        if (typeof entry.encode !== 'function') {
-          throw new Error('Encoder must be a function');
-        }
-      });
-    }
-
     add(_doc: T): void {}
     remove(_id: string): void {}
     search(): unknown[] {
@@ -49,7 +39,7 @@ describe('search worker tag filtering', () => {
     await rebuildIndex([]);
   });
 
-  it('rebuilds the index without throwing when encoder is provided', async () => {
+  it('rebuilds the index without a custom encoder', async () => {
     await expect(rebuildIndex([createBookmark()])).resolves.toBeUndefined();
   });
 

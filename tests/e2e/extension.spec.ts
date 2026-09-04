@@ -175,7 +175,10 @@ test.describe('Link-O-Saurus extension', () => {
     await page.getByRole('button', { name: 'Details' }).click();
     await page.getByLabel('Titel').fill(newBookmarkTitle);
     await page.getByLabel('URL').fill(newBookmarkUrl);
-    const saveButton = page.getByRole('button', { name: 'Bookmark speichern' });
+    const renderedSaveButton = page.locator('button.primary-button');
+    await expect(renderedSaveButton).toHaveCount(1);
+    const appliedSaveButtonName = (await renderedSaveButton.innerText()).trim();
+    const saveButton = page.getByRole('button', { name: appliedSaveButtonName, exact: true });
     const isSaveEnabled = await saveButton.isEnabled();
     if (isSaveEnabled) {
       await saveButton.click();

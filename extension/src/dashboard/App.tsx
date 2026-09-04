@@ -13,7 +13,7 @@ import SearchWorkerFactory from '../shared/search-worker?worker&module';
 import {
   createBookmark,
   createSession,
-  deleteBookmark,
+  deleteBookmarks,
   deleteSession,
   getUserSettings,
   listBoards,
@@ -50,7 +50,6 @@ import {
   type TagFilterState,
 } from '../shared/tag-filter';
 import './App.css';
-import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { sortBookmarks } from '../shared/bookmark-sort';
 import { buildBookmarkTreeRows, getExpandedFolderIdsForBookmarks } from './bookmark-tree-view-model';
 import {
@@ -80,10 +79,10 @@ import {
   updateRouteHash,
   type RouteSnapshot,
 } from './utils/dashboard-route';
-import { createDragPayload, parseDragPayload } from './utils/drag';
+import { createDragPayload } from './utils/drag';
 import { getFaviconUrl } from './utils/favicon';
 import { combineClassNames, formatTimestamp } from './utils/formatting';
-import { DASHBOARD_LIST_HELP_TEXT, SIDEBAR_ACTIONS } from './ui-controls';
+import { SIDEBAR_ACTIONS } from './ui-controls';
 import linkOSaurusIcon from '../../assets/link-o-saurus-icon.png';
 
 declare global {
@@ -133,9 +132,6 @@ const DEFAULT_TILE_ROW_HEIGHT = 248;
 const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
-const MAX_VISIBLE_BOOKMARK_TAGS = 3;
-const MAX_VISIBLE_TILE_TITLE_LINES = 3;
-const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
 
 type ViewModeOption = {
   readonly value: BookmarkViewMode;
@@ -454,7 +450,6 @@ const DashboardApp: FunctionalComponent = () => {
 
   const searchWorkerRef = useRef<Remote<SearchWorker> | null>(null);
   const searchWorkerInstanceRef = useRef<Worker | null>(null);
-  const importWorkerInstanceRef = useRef<Worker | null>(null);
 
   useEffect(() => {
     return () => {
@@ -510,19 +505,6 @@ const DashboardApp: FunctionalComponent = () => {
     }
     applyCompactState();
   }, []);
-
-  const showSidebarTooltip = useCallback((target: EventTarget | null, label: string) => {
-    if (!(target instanceof HTMLElement) || !showCompactTooltip) {
-      return;
-    }
-    const rect = target.getBoundingClientRect();
-    setSidebarTooltip({
-      label,
-      x: rect.right + 12,
-      y: rect.top + rect.height / 2,
-      visible: true,
-    });
-  }, [showCompactTooltip]);
 
   const hideSidebarTooltip = useCallback(() => {
     setSidebarTooltip((current) => (current.visible ? { ...current, visible: false } : current));
@@ -846,14 +828,14 @@ const DashboardApp: FunctionalComponent = () => {
         }
           if (!cancelled) {
             window.__LINKOSAURUS_DASHBOARD_READY = true;
-            window.__LINKOSAURUS_DASHBOARD_READY_TIME = capE2EReadyTimestamp(performance.now());
+            window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
           }
       } catch (error) {
         console.error('Failed to initialize dashboard data', error);
         setStatusMessage('Initialdaten konnten nicht geladen werden.');
           if (!cancelled) {
             window.__LINKOSAURUS_DASHBOARD_READY = true;
-            window.__LINKOSAURUS_DASHBOARD_READY_TIME = capE2EReadyTimestamp(performance.now());
+            window.__LINKOSAURUS_DASHBOARD_READY_TIME = performance.now();
           }
       }
     })();
@@ -1694,10 +1676,8 @@ const DashboardApp: FunctionalComponent = () => {
       return;
     }
     try {
-      for (const id of selectedIds) {
-        await deleteBookmark(id);
-        await applySearchWorkerRemoval(id);
-      }
+      await deleteBookmarks(selectedIds);
+      await Promise.all(selectedIds.map((id) => applySearchWorkerRemoval(id)));
       setBookmarks((previous) => previous.filter((bookmark) => !selectedSet.has(bookmark.id)));
       clearSelection();
       setStatusMessage('Lesezeichen gelöscht.');
@@ -1707,34 +1687,6 @@ const DashboardApp: FunctionalComponent = () => {
       setStatusMessage('Löschen fehlgeschlagen.');
     }
   }, [selectedIds, selectedSet, applySearchWorkerRemoval, clearSelection, refreshTags, locale]);
-
-  const handleDropOnCategory = useCallback(
-    async (categoryId: string) => {
-      if (!categoryId) {
-        return;
-      }
-      const ids = Array.from(selectedSet.size > 0 ? selectedSet : new Set(selectedIds));
-      if (ids.length === 0) {
-        return;
-      }
-      const updates: Bookmark[] = [];
-      try {
-        for (const id of ids) {
-          const updated = await updateBookmark(id, { categoryId });
-          updates.push(updated);
-          await applySearchWorkerUpdate(updated);
-        }
-        updateBookmarksState(updates);
-        setStatusMessage('Drag & Drop erfolgreich.');
-      } catch (error) {
-        console.error('Drag & drop failed', error);
-        setStatusMessage('Verschieben per Drag & Drop fehlgeschlagen.');
-      }
-    },
-    [selectedIds, selectedSet, applySearchWorkerUpdate, updateBookmarksState],
-  );
-
-
 
   const handleSessionSave = useCallback(async () => {
     setSessionState({ busy: true, error: null });

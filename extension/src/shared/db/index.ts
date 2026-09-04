@@ -1390,45 +1390,62 @@ export const listPinnedBookmarks = async (
   return pinned;
 };
 
+export const deleteBookmarks = async (
+  ids: readonly string[],
+  database?: LinkOSaurusDB,
+): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (normalizedIds.length === 0) {
+    return;
+  }
+  let existing: Bookmark[] = [];
+  await runWriteTransaction(
+    dbInstance,
+    [
+      dbInstance.bookmarks,
+      dbInstance.tags,
+      dbInstance.comments,
+      dbInstance.readLater,
+      dbInstance.bookmarkMappings,
+    ],
+    async () => {
+      existing = await dbInstance.bookmarks.where('id').anyOf(normalizedIds).toArray();
+      await dbInstance.bookmarks.bulkDelete(normalizedIds);
+      await dbInstance.comments.where('bookmarkId').anyOf(normalizedIds).delete();
+      await dbInstance.readLater.bulkDelete(normalizedIds);
+      await dbInstance.bookmarkMappings.where('localId').anyOf(normalizedIds).delete();
+
+      const previousTags = existing.flatMap((bookmark) => normalizeTagList(bookmark.tags));
+      if (previousTags.length > 0) {
+        await updateTagUsageForDiff(dbInstance, previousTags, []);
+      }
+    },
+  );
+
+  const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+  if (syncSettings.enableBidirectional) {
+    await Promise.all(
+      existing.map(async (bookmark) => {
+        const category = bookmark.categoryId ? await dbInstance.categories.get(bookmark.categoryId) : undefined;
+        const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
+        enqueueBookmarkDelete({
+          bookmark,
+          category,
+          board,
+          database: dbInstance,
+          settings: syncSettings,
+        });
+      }),
+    );
+  }
+};
+
 export const deleteBookmark = async (
   id: string,
   database?: LinkOSaurusDB,
 ): Promise<void> => {
-  const dbInstance = withDatabase(database);
-  const trimmedId = id.trim();
-  if (!trimmedId) {
-    return;
-  }
-  let existing: Bookmark | undefined;
-  await runWriteTransaction(
-    dbInstance,
-    [dbInstance.bookmarks, dbInstance.tags, dbInstance.comments],
-    async () => {
-      existing = await dbInstance.bookmarks.get(trimmedId);
-      await dbInstance.bookmarks.delete(trimmedId);
-      await dbInstance.comments.where('bookmarkId').equals(trimmedId).delete();
-      if (existing) {
-        const previousTags = normalizeTagList(existing.tags);
-        if (previousTags.length) {
-          await updateTagUsageForDiff(dbInstance, previousTags, []);
-        }
-      }
-    },
-  );
-  if (existing) {
-    const syncSettings = await getSyncSettingsSnapshot(dbInstance);
-    if (syncSettings.enableBidirectional) {
-      const category = existing.categoryId ? await dbInstance.categories.get(existing.categoryId) : undefined;
-      const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
-      enqueueBookmarkDelete({
-        bookmark: existing,
-        category,
-        board,
-        database: dbInstance,
-        settings: syncSettings,
-      });
-    }
-  }
+  await deleteBookmarks([id], database);
 };
 
 export const createComment = async (
