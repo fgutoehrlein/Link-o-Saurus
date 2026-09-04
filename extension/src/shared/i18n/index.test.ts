@@ -17,6 +17,8 @@ describe('i18n', () => {
 
   it('translates fixed and interpolated UI labels', () => {
     expect(translateText('Dashboard öffnen', 'en')).toBe('Open dashboard');
+    expect(translateText('Synchronisation & Regeln', 'en')).toBe('Synchronization & rules');
+    expect(translateText('Datensouveränität', 'en')).toBe('Data ownership');
     expect(translateText('Tag Projekt entfernen', 'en')).toBe('Remove tag Projekt');
     expect(translateText('33 Ergebnisse', 'en')).toBe('33 results');
     expect(translateText('Kacheln', 'en')).toBe('Tiles');

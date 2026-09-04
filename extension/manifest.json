@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Link-o-Saurus",
-  "version": "0.0.1",
-  "description": "Minimal scaffold for the Link-o-Saurus browser extension.",
+  "version": "0.1.0",
+  "description": "Offline-first bookmark manager for saving, organizing, searching, and restoring links.",
   "icons": {
     "16": "assets/link-o-saurus-icon.png",
     "48": "assets/link-o-saurus-icon.png",

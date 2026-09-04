@@ -115,6 +115,16 @@ pnpm graphify -- impacted extension/src/shared/db/index.ts
 
 Das Manifest ist auf Chrome und Firefox ausgelegt. Die Erweiterung verwendet keine `host_permissions`; optionale Rechte werden nur angefordert, wenn sie für konkrete Funktionen nötig sind.
 
+## Datenschutz
+
+Link-o-Saurus speichert Bookmarks, Tags, Kommentare, Sessions und Einstellungen
+lokal im Browser. Der MVP überträgt keine Nutzerdaten an einen Server und
+enthält kein Tracking oder Werbung. Details stehen in
+[PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+
+Die Firefox-AMO-Klassifikation sowie reproduzierbare Quellcode- und
+Build-Anweisungen stehen in [FIREFOX_AMO_SUBMISSION.md](FIREFOX_AMO_SUBMISSION.md).
+
 ## Lizenz
 
-Die Lizenz ist noch nicht final festgelegt. Bitte vor einer Veröffentlichung ergänzen.
+Copyright (c) 2026 Link-o-Saurus contributors. Siehe [LICENSE](LICENSE).
