@@ -1,6 +1,6 @@
 import { wrap, releaseProxy } from 'comlink';
 import type { Remote } from 'comlink';
-import type { CSSProperties, FunctionalComponent, JSX } from 'preact';
+import type { CSSProperties, FunctionalComponent } from 'preact';
 import {
   useCallback,
   useEffect,
@@ -41,8 +41,6 @@ import { isDashboardMessage } from '../shared/messaging';
 import { translateText, useI18n } from '../shared/i18n';
 import {
   EMPTY_TAG_FILTER_STATE,
-  applyNegativeTagContextAction,
-  getTagFilterMode,
   matchesTagFilter,
   normalizeTagFilterState,
   toggleTagFilter,
@@ -58,15 +56,14 @@ import {
   toGridRows,
   type BookmarkViewMode,
 } from './view-mode';
-import type { BookmarkListData, BookmarkListEntry, BookmarkTileListData, VisibleRow } from './types';
+import type { BatchMoveState, BookmarkListData, BookmarkListEntry, BookmarkTileListData, DraftBookmark, VisibleRow } from './types';
 import { getParentIndex, getTreeKeyAction } from './tree-navigation';
 import {
-  BookmarkRowRenderer,
-  BookmarkTileRowRenderer,
-  DetailTagInput,
+  DashboardDetailPanel,
+  DashboardHeader,
+  DashboardSidebar,
+  BookmarkWorkspace,
   SessionDialog,
-  TileVirtualList,
-  VirtualList,
   type SessionDialogState,
 } from './components';
 import {
@@ -81,9 +78,8 @@ import {
 } from './utils/dashboard-route';
 import { createDragPayload } from './utils/drag';
 import { getFaviconUrl } from './utils/favicon';
-import { combineClassNames, formatTimestamp } from './utils/formatting';
-import { SIDEBAR_ACTIONS } from './ui-controls';
-import linkOSaurusIcon from '../../assets/link-o-saurus-icon.png';
+import { combineClassNames } from './utils/formatting';
+import { useDashboardPreferences } from './hooks/useDashboardPreferences';
 
 declare global {
   interface Window {
@@ -91,19 +87,6 @@ declare global {
     __LINKOSAURUS_DASHBOARD_READY_TIME?: number;
   }
 }
-
-type DraftBookmark = {
-  title: string;
-  url: string;
-  tags: string;
-  notes: string;
-  categoryId?: string;
-};
-
-type BatchMoveState = {
-  boardId: string;
-  categoryId: string;
-};
 
 type ActiveFilterChip = {
   readonly id: string;
@@ -129,58 +112,8 @@ type SelectionChange = {
 const DEFAULT_FOLDER_ROW_HEIGHT = 42;
 const DEFAULT_BOOKMARK_ROW_HEIGHT = 68;
 const DEFAULT_TILE_ROW_HEIGHT = 248;
-const TILE_VIEW_TOP_GAP = 24;
 const MAX_QUERY_RESULTS = 600;
 const ROW_HEIGHT_UPDATE_THRESHOLD = 1;
-
-type ViewModeOption = {
-  readonly value: BookmarkViewMode;
-  readonly label: string;
-  readonly description: string;
-  readonly icon: JSX.Element;
-};
-
-const ListViewIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M4 6.75h16M4 12h16M4 17.25h16" />
-  </svg>
-);
-
-const TileViewIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <rect x="4" y="4" width="6.5" height="6.5" rx="1.25" />
-    <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.25" />
-    <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.25" />
-    <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.25" />
-  </svg>
-);
-
-const SearchIcon: FunctionalComponent = () => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <circle cx="11" cy="11" r="6.5" />
-    <path d="m16 16 4 4" />
-  </svg>
-);
-
-const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly style?: 'regular' | 'solid' }> = ({
-  name,
-  style = 'solid',
-}) => <i className={`fa-${style} ${name}`} aria-hidden="true" />;
-
-const VIEW_MODE_OPTIONS: readonly ViewModeOption[] = [
-  {
-    value: 'list',
-    label: 'Liste',
-    description: 'Detaillierte Zeilenansicht mit Metadaten zum schnellen Scannen.',
-    icon: <ListViewIcon />,
-  },
-  {
-    value: 'tiles',
-    label: 'Kacheln',
-    description: 'Visueller Überblick mit Fokus auf Titel, Icons und schnelle Orientierung.',
-    icon: <TileViewIcon />,
-  },
-];
 const MIN_RESIZE_WIDTH = 320;
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
@@ -422,6 +355,11 @@ const DashboardApp: FunctionalComponent = () => {
   const [isDetailPanelOpen, setDetailPanelOpen] = useState<boolean>(false);
   const [isDetailAutoOpenEnabled, setDetailAutoOpenEnabled] = useState<boolean>(true);
   const [showFilterDetails, setShowFilterDetails] = useState<boolean>(false);
+  const { handleThemeChange, handleOpenSettings, handleViewModeChange } = useDashboardPreferences({
+    setBookmarkViewMode,
+    setStatusMessage,
+    setThemeChoice,
+  });
   const [sidebarTooltip, setSidebarTooltip] = useState<SidebarTooltipState>({
     label: '',
     x: 0,
@@ -1742,49 +1680,6 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, [locale]);
 
-  const handleThemeChange = useCallback(async (theme: ThemeChoice) => {
-    setThemeChoice(theme);
-    document.documentElement.dataset.theme = theme;
-    try {
-      await saveUserSettings({ theme });
-      setStatusMessage('Theme gespeichert.');
-    } catch (error) {
-      console.error('Failed to save theme', error);
-      setStatusMessage('Theme konnte nicht gespeichert werden.');
-    }
-  }, []);
-
-  const handleOpenSettings = useCallback(() => {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
-      chrome.runtime.openOptionsPage(() => {
-        const error = chrome.runtime?.lastError;
-        if (error) {
-          console.error('Failed to open options page', error);
-          setStatusMessage('Einstellungen konnten nicht geöffnet werden.');
-        }
-      });
-      return;
-    }
-
-    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL && typeof window !== 'undefined') {
-      window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    setStatusMessage('Einstellungen konnten nicht geöffnet werden.');
-  }, []);
-
-  const handleViewModeChange = useCallback(async (mode: BookmarkViewMode) => {
-    setBookmarkViewMode(mode);
-    try {
-      await saveUserSettings({ dashboardViewMode: mode });
-      setStatusMessage(`Ansicht auf ${mode === 'list' ? 'Liste' : 'Kacheln'} gestellt.`);
-    } catch (error) {
-      console.error('Failed to save view mode', error);
-      setStatusMessage('Ansicht konnte nicht gespeichert werden.');
-    }
-  }, []);
-
   const hasActiveDetailContext = draft !== null || selectedIds.length > 0;
 
   useEffect(() => {
@@ -1908,277 +1803,7 @@ const DashboardApp: FunctionalComponent = () => {
     }
   }, [hasActiveFilters]);
 
-  const detailPanel = () => {
-    if (draft) {
-      return (
-        <div className="detail-panel" aria-live="polite">
-          <header className="detail-panel-head">
-            <h2>Neues Lesezeichen</h2>
-            <p className="detail-panel-subtitle">Füge Kerninformationen hinzu. Weitere Angaben sind optional.</p>
-          </header>
-          <section className="detail-section" aria-label="Allgemeine Informationen">
-            <h3>Allgemeine Informationen</h3>
-            <label>
-              <span>Titel</span>
-              <input type="text" value={detailState?.title ?? ''} onInput={handleDetailChange('title')} />
-            </label>
-            <label>
-              <span>URL</span>
-              <input type="url" value={detailState?.url ?? ''} onInput={handleDetailChange('url')} />
-            </label>
-            <label>
-              <span>Kategorie</span>
-              <select value={detailState?.categoryId ?? ''} onChange={handleDetailCategoryChange}>
-                <option value="">Ohne Kategorie</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
-          <section className="detail-section" aria-label="Tags und Notizen">
-            <h3>Tags</h3>
-            <label>
-              <span id="new-bookmark-tags-label">Tags</span>
-              <DetailTagInput id="new-bookmark-tags" tagsText={detailState?.tags ?? ''} onChange={handleDetailTagsChange} />
-            </label>
-            <label>
-              <span>Notizen</span>
-              <textarea value={detailState?.notes ?? ''} onInput={handleDetailChange('notes')} />
-            </label>
-          </section>
-          <div className="detail-actions">
-            <button type="button" className="primary" onClick={handleSaveDetail}>
-              Speichern
-            </button>
-            <button type="button" onClick={() => setDraft(null)}>
-              Abbrechen
-            </button>
-          </div>
-        </div>
-      );
-    }
 
-    if (selectedIds.length === 1 && detailState) {
-      const entry = selectedEntries[0];
-      return (
-        <div className="detail-panel" aria-live="polite">
-          <header className="detail-panel-head">
-            <h2>{detailState.title.trim() || 'Unbenanntes Lesezeichen'}</h2>
-            <p className="detail-meta">Zuletzt aktualisiert {formatTimestamp(entry?.bookmark.updatedAt, locale)}</p>
-          </header>
-          <section className="detail-section" aria-label="Allgemeine Informationen">
-            <h3>Allgemeine Informationen</h3>
-            <label>
-              <span>Titel</span>
-              <input type="text" value={detailState.title} onInput={handleDetailChange('title')} />
-            </label>
-            <label>
-              <span>URL</span>
-              <input type="url" value={detailState.url} onInput={handleDetailChange('url')} />
-            </label>
-            <label>
-              <span>Kategorie</span>
-              <select value={detailState.categoryId ?? ''} onChange={handleDetailCategoryChange}>
-                <option value="">Ohne Kategorie</option>
-                {activeBoardCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {boardById.get(category.boardId)?.title ?? 'Board'} · {category.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="detail-actions">
-              <button
-                type="button"
-                onClick={() => entry?.bookmark && handleOpenBookmark(entry.bookmark)}
-                disabled={!entry?.bookmark?.url}
-              >
-                Link im neuen Tab öffnen
-              </button>
-            </div>
-          </section>
-          <section className="detail-section" aria-label="Tags und Notizen">
-            <h3>Tags</h3>
-            <label>
-              <span id="bookmark-detail-tags-label">Tags</span>
-              <DetailTagInput id="bookmark-detail-tags" tagsText={detailState.tags} onChange={handleDetailTagsChange} />
-            </label>
-            <h3>Notizen</h3>
-            <label>
-              <span>Notizen</span>
-              <textarea value={detailState.notes} onInput={handleDetailChange('notes')} />
-            </label>
-          </section>
-          <details className="detail-section detail-section-collapsible">
-            <summary>Metadaten &amp; Icon</summary>
-            <div className="detail-meta-grid">
-              <p>
-                <span>Erstellt</span>
-                <strong>{formatTimestamp(entry.bookmark.createdAt, locale)}</strong>
-              </p>
-              <p>
-                <span>Besuche</span>
-                <strong>{entry.bookmark.visitCount}</strong>
-              </p>
-            </div>
-            <section className="detail-icon-section" aria-label="Icon">
-              <div className="detail-actions">
-                <button
-                  type="button"
-                  onClick={() => entry?.bookmark && void handleRefreshFavicon(entry.bookmark)}
-                  disabled={!entry?.bookmark?.url || isRefreshingFavicon || isUploadingIcon}
-                >
-                  {isRefreshingFavicon ? 'Favicon wird aktualisiert…' : 'Favicon aktualisieren'}
-                </button>
-              </div>
-              <input
-                ref={manualIconInputRef}
-                className="visually-hidden"
-                type="file"
-                accept="image/*"
-                onChange={(event) => handleManualIconInputChange(event, entry?.bookmark)}
-              />
-              <div
-                className={`icon-upload-dropzone${isIconDropActive ? ' is-active' : ''}`}
-                role="button"
-                tabIndex={0}
-                aria-label="Icon hochladen"
-                onClick={() => manualIconInputRef.current?.click()}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    manualIconInputRef.current?.click();
-                  }
-                }}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setIconDropActive(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer!.dropEffect = 'copy';
-                  setIconDropActive(true);
-                }}
-                onDragLeave={(event) => {
-                  event.preventDefault();
-                  const relatedTarget = event.relatedTarget as Node | null;
-                  if (!relatedTarget || !(event.currentTarget as HTMLElement).contains(relatedTarget)) {
-                    setIconDropActive(false);
-                  }
-                }}
-                onDrop={(event) => handleIconDrop(event, entry?.bookmark)}
-              >
-                <strong>{isUploadingIcon ? 'Icon wird hochgeladen…' : 'Icon hier ablegen'}</strong>
-                <span>oder klicken, um eine Bilddatei auszuwählen.</span>
-              </div>
-            </section>
-          </details>
-          <div className="detail-actions">
-            <button type="button" className="primary" onClick={handleSaveDetail}>
-              Speichern
-            </button>
-            <button type="button" onClick={handleBatchDelete}>
-              Löschen
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (selectedIds.length > 1) {
-      return (
-        <div className="detail-panel" aria-live="polite">
-          <header className="detail-panel-head">
-            <h2>{selectedIds.length} Lesezeichen ausgewählt</h2>
-            <p className="detail-panel-subtitle">Batch-Aktionen werden auf die gesamte Auswahl angewendet.</p>
-          </header>
-          <section className="detail-section" aria-label="Tags">
-            <h3>Tags</h3>
-            <label>
-              <span>Tags hinzufügen/entfernen</span>
-              <input
-                type="text"
-                value={detailState?.tags ?? ''}
-                onInput={handleDetailChange('tags')}
-                placeholder="tag-a, tag-b"
-              />
-            </label>
-            <div className="detail-actions">
-              <button type="button" onClick={handleBatchAddTags}>
-                Tags hinzufügen
-              </button>
-              <button type="button" onClick={handleBatchRemoveTags}>
-                Tags entfernen
-              </button>
-            </div>
-          </section>
-          <details className="detail-section detail-section-collapsible">
-            <summary>Mehr Aktionen</summary>
-            <form className="batch-move" onSubmit={handleBatchMove}>
-              <label>
-                <span>Board</span>
-                <select
-                  value={batchMove.boardId}
-                  onChange={(event) =>
-                    setBatchMove((previous) => ({ ...previous, boardId: (event.currentTarget as HTMLSelectElement).value }))
-                  }
-                >
-                  <option value="">Board wählen</option>
-                  {boards.map((board) => (
-                    <option key={board.id} value={board.id}>
-                      {board.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Kategorie</span>
-                <select
-                  value={batchMove.categoryId}
-                  onChange={(event) =>
-                    setBatchMove((previous) => ({ ...previous, categoryId: (event.currentTarget as HTMLSelectElement).value }))
-                  }
-                >
-                  <option value="">Auto</option>
-                  {categories
-                    .filter((category) => !batchMove.boardId || category.boardId === batchMove.boardId)
-                    .map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.title}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <button type="submit" className="primary">
-                Verschieben
-              </button>
-            </form>
-            <button type="button" className="danger" onClick={handleBatchDelete}>
-              Ausgewählte löschen
-            </button>
-          </details>
-        </div>
-      );
-    }
-
-    return (
-      <div className="detail-panel" aria-live="polite">
-        <h2>Aktionen</h2>
-        <p>Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.</p>
-        <div className="detail-actions">
-          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
-            Neues Lesezeichen
-          </button>
-          <button type="button" onClick={clearSelection}>
-            Auswahl löschen
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div
@@ -2189,368 +1814,74 @@ const DashboardApp: FunctionalComponent = () => {
         isSidebarCompact && canUseCompactSidebar && 'sidebar-compact-mode',
       )}
     >
-      <header className="dashboard-header" role="banner">
-        <div className="header-brand" aria-hidden="true">
-          <img src={linkOSaurusIcon} alt="" />
-        </div>
-        <div className="header-titles">
-          <h1>Link-O-Saurus</h1>
-        </div>
-        <div className="header-actions">
-          <label
-            className={combineClassNames(
-              'search-field',
-              'prominent-search',
-              isSearchFocused && 'is-focused',
-              searchQuery.trim().length > 0 && 'is-typing',
-              isSearchActive && 'is-active',
-            )}
-          >
-            <br></br>
-            <span className="search-field-label">Dashboard durchsuchen</span>
-            <span className="search-input-shell">
-              <span className="search-input-icon" aria-hidden="true">
-                <SearchIcon />
-              </span>
-              <input
-                ref={searchInputRef}
-                type="search"
-                value={searchQuery}
-                onInput={handleSearchChange}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                placeholder="Suche nach Titeln, URLs, Tags oder Notizen…"
-                aria-label="Dashboard durchsuchen"
-              />
-              <kbd className="search-shortcut-hint" aria-hidden="true">
-                {shortcutHint}
-              </kbd>
-            </span>
-          </label>
-        </div>
-        <div className="header-utility-actions" role="group" aria-label="Darstellung und Einstellungen">
-          <div className="header-theme-toggle-group" role="group" aria-label="Theme auswählen">
-            <button
-              type="button"
-              className={combineClassNames('header-icon-button', themeChoice === 'light' && 'active')}
-              onClick={() => {
-                void handleThemeChange('light');
-              }}
-              aria-label="Light-Mode aktivieren"
-              title="Light-Mode"
-            >
-              <FontAwesomeIcon name="fa-sun" style="regular" />
-            </button>
-            <button
-              type="button"
-              className={combineClassNames('header-icon-button', themeChoice === 'dark' && 'active')}
-              onClick={() => {
-                void handleThemeChange('dark');
-              }}
-              aria-label="Dark-Mode aktivieren"
-              title="Dark-Mode"
-            >
-              <FontAwesomeIcon name="fa-moon" />
-            </button>
-          </div>
-          <button
-            type="button"
-            className="header-icon-button"
-            onClick={handleOpenSettings}
-            aria-label="Einstellungen öffnen"
-            title="Einstellungen"
-          >
-            <FontAwesomeIcon name="fa-gear" />
-          </button>
-        </div>
-      </header>
+      <DashboardHeader
+        isSearchActive={isSearchActive}
+        isSearchFocused={isSearchFocused}
+        onOpenSettings={handleOpenSettings}
+        onSearchBlur={() => setIsSearchFocused(false)}
+        onSearchChange={handleSearchChange}
+        onSearchFocus={() => setIsSearchFocused(true)}
+        onThemeChange={handleThemeChange}
+        searchInputRef={searchInputRef}
+        searchQuery={searchQuery}
+        shortcutHint={shortcutHint}
+        themeChoice={themeChoice}
+      />
+
       <br></br>
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
       <div className={combineClassNames('dashboard-main', isDetailPanelOpen && 'detail-panel-open')}>
-        <aside
-          className={combineClassNames(
-            'dashboard-sidebar',
-            sidebarOpen && 'open',
-            isSidebarCompact && canUseCompactSidebar && 'compact',
-          )}
-        >
-          <section className="sidebar-tags-section">
-            <header className="sidebar-section-header sidebar-tags-header">
-              <h2>
-                {canUseCompactSidebar ? (
-                  <button
-                    type="button"
-                    className={combineClassNames('sidebar-tags-title-toggle', isSidebarCompact && 'is-compact')}
-                    aria-pressed={isSidebarCompact}
-                    aria-label={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
-                    title={isSidebarCompact ? 'Tags-Leiste erweitern' : 'Tags-Leiste einklappen'}
-                    onClick={() => updateSidebarCompact(!isSidebarCompact)}
-                  >
-                    <span className="sidebar-tags-title-text">Tags</span>
-                    <span aria-hidden="true" className="sidebar-tags-collapse-arrow">
-                      {isSidebarCompact ? '→' : '←'}
-                    </span>
-                  </button>
-                ) : (
-                  'Tags'
-                )}
-              </h2>
-            </header>
-            {!isSidebarCompact || !canUseCompactSidebar ? (
-              <ul id="tag-list" className="sidebar-tag-list">
-                {tags.map((tag) => {
-                  const mode = getTagFilterMode(activeTagFilterState, tag.path);
-                  return (
-                  <li key={tag.id}>
-                    <button
-                      type="button"
-                      className={combineClassNames(
-                        'tag-item',
-                        mode === 'include' && 'active',
-                        mode === 'exclude' && 'active-negative',
-                      )}
-                      aria-pressed={mode !== null}
-                      title={isSidebarCompact && canUseCompactSidebar ? tag.path : undefined}
-                      aria-label={`${tag.path} filtern (${mode === 'exclude' ? 'negativ' : mode === 'include' ? 'positiv' : 'inaktiv'})`}
-                      onClick={() => handleSelectTag(tag.path, 'include')}
-                      onContextMenu={(event) => {
-                        applyNegativeTagContextAction(event, () => {
-                          handleSelectTag(tag.path, 'exclude');
-                        });
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key.toLowerCase() === 'n') {
-                          event.preventDefault();
-                          handleSelectTag(tag.path, 'exclude');
-                        }
-                      }}
-                    >
-                      <span className="tag-item-label">
-                        <span className="tag-state-indicator" aria-hidden="true">
-                          {mode === 'exclude' ? '−' : mode === 'include' ? '+' : '#'}
-                        </span>
-                        <span>{tag.path}</span>
-                      </span>
-                      <span className="usage">{tag.usageCount}</span>
-                    </button>
-                  </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-          </section>
-          {!isSidebarCompact || !canUseCompactSidebar ? (
-          <section className="sidebar-actions">
-            <button type="button" onClick={handleOpenSettings} title={SIDEBAR_ACTIONS.importExport.description}>
-              {SIDEBAR_ACTIONS.importExport.label}
-            </button>
-            <button type="button" onClick={() => setSessionDialogOpen(true)}>
-              Sessions
-            </button>
-          </section>
-          ) : null}
-        </aside>
-        <section className="bookmark-list" role="tree" aria-multiselectable="true" aria-label="Bookmark-Hierarchie">
-          <div className="list-header">
-            <h2>{bookmarkCountLabel}</h2>
-            <div className="list-actions">
-              <label className="toolbar-select">
-                <span>Sortierung</span>
-                <select value={bookmarkSortMode} onChange={handleSortModeChange}>
-                  <option value="relevance">Relevanz</option>
-                  <option value="alphabetical">Alphabetisch</option>
-                  <option value="newest">Neueste</option>
-                </select>
-              </label>
-              <fieldset className="view-mode-group compact">
-                <legend className="sr-only">Darstellung der Bookmark-Liste</legend>
-                {VIEW_MODE_OPTIONS.map((option) => {
-                  const isActive = bookmarkViewMode === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      className={combineClassNames('view-toggle-option', isActive && 'active')}
-                      title={option.description}
-                    >
-                      <input
-                        type="radio"
-                        name="bookmark-view-mode"
-                        value={option.value}
-                        checked={isActive}
-                        onChange={() => {
-                          void handleViewModeChange(option.value);
-                        }}
-                      />
-                      <span className="view-toggle-icon">{option.icon}</span>
-                      <span className="view-toggle-copy">
-                        <strong>{option.label}</strong>
-                      </span>
-                    </label>
-                  );
-                })}
-              </fieldset>
-              <div className={combineClassNames('selection-indicator', selectedIds.length === 0 && 'is-empty')}>
-                <span>{selectedCountLabel}</span>
-                <button
-                  type="button"
-                  className="selection-indicator-clear"
-                  onClick={clearSelection}
-                  disabled={selectedIds.length === 0}
-                  aria-label="Auswahl entfernen"
-                  title="Auswahl entfernen"
-                >
-                  ×
-                </button>
-              </div>
-              <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>
-                Neu
-              </button>
-            </div>
-          </div>
-          <div className="active-tag-filters" role="status" aria-live="polite">
-            <div className="active-tag-filters-header">
-              {isSidebarCompact && canUseCompactSidebar ? (
-                <button
-                  type="button"
-                  className="sidebar-tags-title-toggle in-filter-row"
-                  aria-pressed={isSidebarCompact}
-                  aria-label="Tags-Leiste erweitern"
-                  title="Tags-Leiste erweitern"
-                  onClick={() => updateSidebarCompact(false)}
-                >
-                  <span className="sidebar-tags-title-text">Tags</span>
-                  <span aria-hidden="true" className="sidebar-tags-collapse-arrow">→</span>
-                </button>
-              ) : null}
-              <div className="active-filter-copy">
-                <p className="active-tag-filters-title">Aktive Filter</p>
-                <div className="active-filter-summary">{searchResultLabel}</div>
-                <button
-                  type="button"
-                  className="active-filter-disclosure"
-                  aria-expanded={showFilterDetails}
-                  onClick={() => setShowFilterDetails((value) => !value)}
-                >
-                  {showFilterDetails ? 'Details ausblenden' : 'Details anzeigen'}
-                </button>
-              </div>
-              {!isDetailPanelOpen ? (
-                <button
-                  type="button"
-                  className="detail-toggle-button in-filter-row"
-                  aria-expanded={isDetailPanelOpen}
-                  aria-label="Detailbereich öffnen"
-                  title="Detailbereich öffnen"
-                  onClick={() => updateDetailPanelVisibility(true)}
-                >
-                  <span aria-hidden="true">←</span> Details
-                </button>
-              ) : null}
-            </div>
-            {showFilterDetails ? (
-              <>
-                {hasActiveFilters ? (
-                  <ul className="active-tag-chip-list" aria-label="Aktive Filter">
-                    {activeFilterChips.map((chip) => (
-                      <li key={chip.id}>
-                        <button
-                          type="button"
-                          className={combineClassNames('active-tag-chip', chip.tone === 'include' && 'include', chip.tone === 'exclude' && 'exclude')}
-                          onClick={chip.remove}
-                          title={`${chip.label} entfernen`}
-                        >
-                          {chip.label} <span aria-hidden="true">×</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="active-filter-empty">Keine aktiven Filter – alle Bookmarks sichtbar.</p>
-                )}
-                <button
-                  type="button"
-                  className="active-filter-reset"
-                  onClick={handleResetAllFilters}
-                  disabled={!hasActiveFilters}
-                >
-                  Alle Filter entfernen
-                </button>
-              </>
-            ) : null}
-          </div>
-          <div
-            ref={listContainerRef}
-            className="list-viewport"
-            role="group"
-            aria-busy={isSearching}
-          >
-            {(bookmarkViewMode === 'tiles' ? tileRows.length === 0 : treeRows.length === 0) ? (
-              <div className="empty-state">
-                {bookmarkViewMode === 'list' && isSearching
-                  ? 'Suche…'
-                  : searchQuery.trim() || hasActiveFilters
-                    ? (
-                      <>
-                        <strong>Keine passenden Bookmarks gefunden.</strong>
-                        <span>Entferne Suchbegriffe oder Filter, oder erstelle ein neues Bookmark.</span>
-                        <div className="empty-state-actions">
-                          <button type="button" onClick={handleResetAllFilters}>Filter zurücksetzen</button>
-                          <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>Neues Bookmark</button>
-                        </div>
-                      </>
-                    )
-                    : (
-                      <>
-                        <strong>Noch keine Bookmarks.</strong>
-                        <span>Speichere einen Link im Popup oder lege hier dein erstes Bookmark an.</span>
-                        <button type="button" onClick={() => setDraft({ title: '', url: '', tags: '', notes: '' })}>Neues Bookmark</button>
-                      </>
-                    )}
-              </div>
-            ) : listHeight > 0 ? (
-              <div className={combineClassNames('view-mode-stage', bookmarkViewMode === 'tiles' && 'is-tiles')}>
-                {bookmarkViewMode === 'list' ? (
-                  <VirtualList
-                    key="bookmark-list-view"
-                    height={listHeight}
-                    width="100%"
-                    itemCount={treeRows.length}
-                    itemSize={getRowHeight}
-                    estimatedItemSize={DEFAULT_BOOKMARK_ROW_HEIGHT}
-                    overscanCount={6}
-                    itemData={listData}
-                    ref={(instance) => {
-                      listRef.current = instance as VariableSizeListHandle<BookmarkListData> | null;
-                    }}
-                  >
-                    {BookmarkRowRenderer}
-                  </VirtualList>
-                ) : (
-                  <div className="tile-mode-offset">
-                    <TileVirtualList
-                      key="bookmark-tile-view"
-                      height={Math.max(0, listHeight - TILE_VIEW_TOP_GAP)}
-                      width="100%"
-                      itemCount={tileRows.length}
-                      itemSize={getTileRowHeight}
-                      estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
-                      overscanCount={4}
-                      itemData={tileListData}
-                      className="bookmark-tiles-list"
-                      ref={(instance) => {
-                        tileListRef.current = instance as VariableSizeListHandle<BookmarkTileListData> | null;
-                      }}
-                    >
-                      {BookmarkTileRowRenderer}
-                    </TileVirtualList>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </section>
+        <DashboardSidebar
+          activeTagFilterState={activeTagFilterState}
+          canUseCompactSidebar={canUseCompactSidebar}
+          isSidebarCompact={isSidebarCompact}
+          onOpenSessions={() => setSessionDialogOpen(true)}
+          onOpenSettings={handleOpenSettings}
+          onSelectTag={handleSelectTag}
+          onUpdateSidebarCompact={updateSidebarCompact}
+          sidebarOpen={sidebarOpen}
+          tags={tags}
+        />
+        <BookmarkWorkspace
+          activeFilterChips={activeFilterChips}
+          bookmarkCountLabel={bookmarkCountLabel}
+          bookmarkSortMode={bookmarkSortMode}
+          bookmarkViewMode={bookmarkViewMode}
+          canUseCompactSidebar={canUseCompactSidebar}
+          getRowHeight={getRowHeight}
+          getTileRowHeight={getTileRowHeight}
+          hasActiveFilters={hasActiveFilters}
+          isDetailPanelOpen={isDetailPanelOpen}
+          isSearching={isSearching}
+          isSidebarCompact={isSidebarCompact}
+          listContainerRef={listContainerRef}
+          listData={listData}
+          listHeight={listHeight}
+          onClearSelection={clearSelection}
+          onCreateBookmark={() => setDraft({ title: '', url: '', tags: '', notes: '' })}
+          onListRef={(instance) => {
+            listRef.current = instance;
+          }}
+          onOpenDetailPanel={() => updateDetailPanelVisibility(true)}
+          onResetAllFilters={handleResetAllFilters}
+          onSortModeChange={handleSortModeChange}
+          onTileListRef={(instance) => {
+            tileListRef.current = instance;
+          }}
+          onToggleFilterDetails={() => setShowFilterDetails((value) => !value)}
+          onUpdateSidebarCompact={updateSidebarCompact}
+          onViewModeChange={handleViewModeChange}
+          searchQuery={searchQuery}
+          searchResultLabel={searchResultLabel}
+          selectedCount={selectedIds.length}
+          selectedCountLabel={selectedCountLabel}
+          showFilterDetails={showFilterDetails}
+          tileListData={tileListData}
+          tileRowCount={tileRows.length}
+          treeRowCount={treeRows.length}
+        />
         {isDetailPanelOpen ? (
           <aside
             className={combineClassNames(
@@ -2578,7 +1909,39 @@ const DashboardApp: FunctionalComponent = () => {
                 Details <span aria-hidden="true">→</span>
               </button>
             </div>
-            {detailPanel()}
+            <DashboardDetailPanel
+              activeBoardCategories={activeBoardCategories}
+              batchMove={batchMove}
+              boardById={boardById}
+              boards={boards}
+              categories={categories}
+              detailState={detailState}
+              draft={draft}
+              isIconDropActive={isIconDropActive}
+              isRefreshingFavicon={isRefreshingFavicon}
+              isUploadingIcon={isUploadingIcon}
+              locale={locale}
+              manualIconInputRef={manualIconInputRef}
+              onBatchAddTags={handleBatchAddTags}
+              onBatchDelete={handleBatchDelete}
+              onBatchMove={handleBatchMove}
+              onBatchMoveChange={(field, value) => setBatchMove((previous) => ({ ...previous, [field]: value }))}
+              onBatchRemoveTags={handleBatchRemoveTags}
+              onCancelDraft={() => setDraft(null)}
+              onClearSelection={clearSelection}
+              onCreateDraft={() => setDraft({ title: '', url: '', tags: '', notes: '' })}
+              onDetailCategoryChange={handleDetailCategoryChange}
+              onDetailChange={handleDetailChange}
+              onDetailTagsChange={handleDetailTagsChange}
+              onIconDrop={handleIconDrop}
+              onIconDropActiveChange={setIconDropActive}
+              onManualIconInputChange={handleManualIconInputChange}
+              onOpenBookmark={handleOpenBookmark}
+              onRefreshFavicon={handleRefreshFavicon}
+              onSaveDetail={handleSaveDetail}
+              selectedEntries={selectedEntries}
+              selectedIds={selectedIds}
+            />
           </aside>
         ) : null}
       </div>

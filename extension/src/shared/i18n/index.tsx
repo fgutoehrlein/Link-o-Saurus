@@ -6,7 +6,7 @@ import { getUserSettings, saveUserSettings } from '../db';
 import { sendBackgroundMessage } from '../messaging';
 import type { LanguagePreference } from '../types';
 
-export type AppLocale = 'de' | 'en';
+export type AppLocale = Exclude<LanguagePreference, 'auto'>;
 
 type I18nContextValue = {
   locale: AppLocale;
@@ -111,6 +111,7 @@ const translations: Record<string, string> = {
   'Mehr Aktionen': 'More actions',
   'Board': 'Board',
   'Board wählen': 'Choose board',
+  'Verschieben': 'Move',
   'Auto': 'Automatic',
   'Wähle ein Lesezeichen aus, um Details zu bearbeiten oder Batch-Aktionen auszuführen.': 'Select a bookmark to edit its details or run batch actions.',
   'Dashboard durchsuchen': 'Search dashboard',
@@ -336,11 +337,118 @@ const translations: Record<string, string> = {
   'Unbekannter Fehler beim Session-Handling.': 'Unknown error while handling the session.',
   'Datei konnte nicht gelesen werden.': 'Could not read file.',
   'Ungültige Dateidaten.': 'Invalid file payload',
+  'Side panel konnte nicht geöffnet werden.': 'Could not open side panel.',
+  'Side panel konnte nicht geschlossen werden.': 'Could not close side panel.',
+  'Kein URL-Kontext für Bookmark vorhanden.': 'No URL context available for bookmark.',
+  'Speichern über Kontextmenü fehlgeschlagen': 'Saving through context menu failed',
+  'Kontextmenü konnte nicht erstellt werden:': 'Could not create context menu:',
+  'Sidepanel-Kontextmenü konnte nicht erstellt werden:': 'Could not create side-panel context menu:',
+  'Ungültige Tab-URL übersprungen': 'Skipped invalid tab URL',
+  'Tab konnte nicht in neuem Fenster wiederhergestellt werden.': 'Could not restore tab in new window.',
+  'Tab konnte im aktuellen Fenster nicht wiederhergestellt werden.': 'Could not restore tab in current window.',
+  'Sessions konnten nicht geladen werden': 'Could not load sessions',
+  'Session konnte nicht gespeichert werden': 'Could not save session',
+  'Session konnte nicht geöffnet werden': 'Could not open session',
+  'Auswahl konnte nicht geöffnet werden': 'Could not open selection',
+  'Session konnte nicht gelöscht werden': 'Could not delete session',
 };
 
 const reverseTranslations = Object.fromEntries(
   Object.entries(translations).map(([german, english]) => [english, german]),
 ) as Record<string, string>;
+
+const localizedTranslations: Partial<Record<AppLocale, Record<string, string>>> = {
+  es: {
+    'Allgemein': 'General', 'Daten': 'Datos', 'Sprache': 'Idioma', 'Einstellungen': 'Configuración',
+    'Automatisch (Browser-Sprache)': 'Automático (idioma del navegador)', 'Deutsch': 'Alemán', 'English': 'Inglés',
+    'Dashboard öffnen': 'Abrir panel', 'Einstellungen öffnen': 'Abrir configuración', 'Speichern': 'Guardar',
+    'Löschen': 'Eliminar', 'Öffnen': 'Abrir', 'Schließen': 'Cerrar', 'Suchen & öffnen': 'Buscar y abrir',
+    'Neueste': 'Más recientes', 'Alphabetisch': 'Alfabético', 'Keine Auswahl': 'Ninguna selección',
+    'Keine Einträge gefunden.': 'No se encontraron entradas.', 'Keine Tags': 'Sin etiquetas',
+    'Tag hinzufügen': 'Añadir etiqueta', 'Tags hinzufügen': 'Añadir etiquetas', 'Kategorie': 'Categoría',
+    'Ohne Kategorie': 'Sin categoría', 'Neues Lesezeichen': 'Nuevo marcador', 'Bookmark speichern': 'Guardar marcador',
+    'Aktualisieren': 'Actualizar', 'Filter zurücksetzen': 'Restablecer filtros', 'Import': 'Importar', 'Export': 'Exportar',
+    'Session geöffnet.': 'Sesión abierta.', 'Session gelöscht.': 'Sesión eliminada.',
+    'Session konnte nicht geöffnet werden.': 'No se pudo abrir la sesión.', 'Session konnte nicht gelöscht werden.': 'No se pudo eliminar la sesión.',
+    'Bitte eine gültige URL eingeben.': 'Introduce una URL válida.', 'Keine Tabs ausgewählt.': 'No hay pestañas seleccionadas.',
+    'Could not open side panel.': 'No se pudo abrir el panel lateral.',
+  },
+  fr: {
+    'Allgemein': 'Général', 'Daten': 'Données', 'Sprache': 'Langue', 'Einstellungen': 'Paramètres',
+    'Automatisch (Browser-Sprache)': 'Automatique (langue du navigateur)', 'Deutsch': 'Allemand', 'English': 'Anglais',
+    'Dashboard öffnen': 'Ouvrir le tableau de bord', 'Einstellungen öffnen': 'Ouvrir les paramètres', 'Speichern': 'Enregistrer',
+    'Löschen': 'Supprimer', 'Öffnen': 'Ouvrir', 'Schließen': 'Fermer', 'Suchen & öffnen': 'Rechercher et ouvrir',
+    'Neueste': 'Plus récent', 'Alphabetisch': 'Alphabétique', 'Keine Auswahl': 'Aucune sélection',
+    'Keine Einträge gefunden.': 'Aucune entrée trouvée.', 'Keine Tags': 'Aucun tag',
+    'Tag hinzufügen': 'Ajouter un tag', 'Tags hinzufügen': 'Ajouter des tags', 'Kategorie': 'Catégorie',
+    'Ohne Kategorie': 'Sans catégorie', 'Neues Lesezeichen': 'Nouveau favori', 'Bookmark speichern': 'Enregistrer le favori',
+    'Aktualisieren': 'Actualiser', 'Filter zurücksetzen': 'Réinitialiser les filtres', 'Import': 'Importer', 'Export': 'Exporter',
+    'Session geöffnet.': 'Session ouverte.', 'Session gelöscht.': 'Session supprimée.',
+    'Session konnte nicht geöffnet werden.': 'Impossible d’ouvrir la session.', 'Session konnte nicht gelöscht werden.': 'Impossible de supprimer la session.',
+    'Bitte eine gültige URL eingeben.': 'Saisissez une URL valide.', 'Keine Tabs ausgewählt.': 'Aucun onglet sélectionné.',
+    'Could not open side panel.': 'Impossible d’ouvrir le panneau latéral.',
+  },
+  'pt-BR': {
+    'Allgemein': 'Geral', 'Daten': 'Dados', 'Sprache': 'Idioma', 'Einstellungen': 'Configurações',
+    'Automatisch (Browser-Sprache)': 'Automático (idioma do navegador)', 'Deutsch': 'Alemão', 'English': 'Inglês',
+    'Dashboard öffnen': 'Abrir painel', 'Einstellungen öffnen': 'Abrir configurações', 'Speichern': 'Salvar',
+    'Löschen': 'Excluir', 'Öffnen': 'Abrir', 'Schließen': 'Fechar', 'Suchen & öffnen': 'Pesquisar e abrir',
+    'Neueste': 'Mais recentes', 'Alphabetisch': 'Alfabético', 'Keine Auswahl': 'Nenhuma seleção',
+    'Keine Einträge gefunden.': 'Nenhuma entrada encontrada.', 'Keine Tags': 'Nenhuma tag',
+    'Tag hinzufügen': 'Adicionar tag', 'Tags hinzufügen': 'Adicionar tags', 'Kategorie': 'Categoria',
+    'Ohne Kategorie': 'Sem categoria', 'Neues Lesezeichen': 'Novo favorito', 'Bookmark speichern': 'Salvar favorito',
+    'Aktualisieren': 'Atualizar', 'Filter zurücksetzen': 'Redefinir filtros', 'Import': 'Importar', 'Export': 'Exportar',
+    'Session geöffnet.': 'Sessão aberta.', 'Session gelöscht.': 'Sessão excluída.',
+    'Session konnte nicht geöffnet werden.': 'Não foi possível abrir a sessão.', 'Session konnte nicht gelöscht werden.': 'Não foi possível excluir a sessão.',
+    'Bitte eine gültige URL eingeben.': 'Digite uma URL válida.', 'Keine Tabs ausgewählt.': 'Nenhuma aba selecionada.',
+    'Could not open side panel.': 'Não foi possível abrir o painel lateral.',
+  },
+  it: {
+    'Allgemein': 'Generale', 'Daten': 'Dati', 'Sprache': 'Lingua', 'Einstellungen': 'Impostazioni',
+    'Automatisch (Browser-Sprache)': 'Automatico (lingua del browser)', 'Deutsch': 'Tedesco', 'English': 'Inglese',
+    'Dashboard öffnen': 'Apri dashboard', 'Einstellungen öffnen': 'Apri impostazioni', 'Speichern': 'Salva',
+    'Löschen': 'Elimina', 'Öffnen': 'Apri', 'Schließen': 'Chiudi', 'Suchen & öffnen': 'Cerca e apri',
+    'Neueste': 'Più recenti', 'Alphabetisch': 'Alfabetico', 'Keine Auswahl': 'Nessuna selezione',
+    'Keine Einträge gefunden.': 'Nessuna voce trovata.', 'Keine Tags': 'Nessun tag',
+    'Tag hinzufügen': 'Aggiungi tag', 'Tags hinzufügen': 'Aggiungi tag', 'Kategorie': 'Categoria',
+    'Ohne Kategorie': 'Senza categoria', 'Neues Lesezeichen': 'Nuovo segnalibro', 'Bookmark speichern': 'Salva segnalibro',
+    'Aktualisieren': 'Aggiorna', 'Filter zurücksetzen': 'Reimposta filtri', 'Import': 'Importa', 'Export': 'Esporta',
+    'Session geöffnet.': 'Sessione aperta.', 'Session gelöscht.': 'Sessione eliminata.',
+    'Session konnte nicht geöffnet werden.': 'Impossibile aprire la sessione.', 'Session konnte nicht gelöscht werden.': 'Impossibile eliminare la sessione.',
+    'Bitte eine gültige URL eingeben.': 'Inserisci un URL valido.', 'Keine Tabs ausgewählt.': 'Nessuna scheda selezionata.',
+    'Could not open side panel.': 'Impossibile aprire il pannello laterale.',
+  },
+  ru: {
+    'Allgemein': 'Общие', 'Daten': 'Данные', 'Sprache': 'Язык', 'Einstellungen': 'Настройки',
+    'Automatisch (Browser-Sprache)': 'Автоматически (язык браузера)', 'Deutsch': 'Немецкий', 'English': 'Английский',
+    'Dashboard öffnen': 'Открыть панель', 'Einstellungen öffnen': 'Открыть настройки', 'Speichern': 'Сохранить',
+    'Löschen': 'Удалить', 'Öffnen': 'Открыть', 'Schließen': 'Закрыть', 'Suchen & öffnen': 'Найти и открыть',
+    'Neueste': 'Новые', 'Alphabetisch': 'По алфавиту', 'Keine Auswahl': 'Ничего не выбрано',
+    'Keine Einträge gefunden.': 'Записи не найдены.', 'Keine Tags': 'Нет тегов',
+    'Tag hinzufügen': 'Добавить тег', 'Tags hinzufügen': 'Добавить теги', 'Kategorie': 'Категория',
+    'Ohne Kategorie': 'Без категории', 'Neues Lesezeichen': 'Новая закладка', 'Bookmark speichern': 'Сохранить закладку',
+    'Aktualisieren': 'Обновить', 'Filter zurücksetzen': 'Сбросить фильтры', 'Import': 'Импорт', 'Export': 'Экспорт',
+    'Session geöffnet.': 'Сессия открыта.', 'Session gelöscht.': 'Сессия удалена.',
+    'Session konnte nicht geöffnet werden.': 'Не удалось открыть сессию.', 'Session konnte nicht gelöscht werden.': 'Не удалось удалить сессию.',
+    'Bitte eine gültige URL eingeben.': 'Введите действительный URL.', 'Keine Tabs ausgewählt.': 'Вкладки не выбраны.',
+    'Could not open side panel.': 'Не удалось открыть боковую панель.',
+  },
+  ja: {
+    'Allgemein': '一般', 'Daten': 'データ', 'Sprache': '言語', 'Einstellungen': '設定',
+    'Automatisch (Browser-Sprache)': '自動（ブラウザーの言語）', 'Deutsch': 'ドイツ語', 'English': '英語',
+    'Dashboard öffnen': 'ダッシュボードを開く', 'Einstellungen öffnen': '設定を開く', 'Speichern': '保存',
+    'Löschen': '削除', 'Öffnen': '開く', 'Schließen': '閉じる', 'Suchen & öffnen': '検索して開く',
+    'Neueste': '新しい順', 'Alphabetisch': 'アルファベット順', 'Keine Auswahl': '選択なし',
+    'Keine Einträge gefunden.': '項目が見つかりません。', 'Keine Tags': 'タグなし',
+    'Tag hinzufügen': 'タグを追加', 'Tags hinzufügen': 'タグを追加', 'Kategorie': 'カテゴリ',
+    'Ohne Kategorie': 'カテゴリなし', 'Neues Lesezeichen': '新しいブックマーク', 'Bookmark speichern': 'ブックマークを保存',
+    'Aktualisieren': '更新', 'Filter zurücksetzen': 'フィルターをリセット', 'Import': 'インポート', 'Export': 'エクスポート',
+    'Session geöffnet.': 'セッションを開きました。', 'Session gelöscht.': 'セッションを削除しました。',
+    'Session konnte nicht geöffnet werden.': 'セッションを開けませんでした。', 'Session konnte nicht gelöscht werden.': 'セッションを削除できませんでした。',
+    'Bitte eine gültige URL eingeben.': '有効なURLを入力してください。', 'Keine Tabs ausgewählt.': 'タブが選択されていません。',
+    'Could not open side panel.': 'サイドパネルを開けませんでした。',
+  },
+};
 
 const dynamicTranslations = (value: string): string | undefined => {
   const patterns: Array<[RegExp, (...parts: string[]) => string]> = [
@@ -430,9 +538,74 @@ const reverseDynamicTranslations = (value: string): string | undefined => {
   return undefined;
 };
 
+const localizedDynamicTranslations: Partial<Record<AppLocale, (value: string) => string | undefined>> = {
+  es: (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `Se abrieron ${tabs[1]} pestañas.`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]} resultados`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `${selected[1]} seleccionados`;
+    return undefined;
+  },
+  fr: (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `${tabs[1]} onglets ouverts.`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]} résultats`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `${tabs?.[1] ?? selected[1]} sélectionnés`;
+    return undefined;
+  },
+  'pt-BR': (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `${tabs[1]} abas abertas.`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]} resultados`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `${selected[1]} selecionados`;
+    return undefined;
+  },
+  it: (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `${tabs[1]} schede aperte.`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]} risultati`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `${selected[1]} selezionati`;
+    return undefined;
+  },
+  ru: (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `Открыто вкладок: ${tabs[1]}.`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]} результата`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `Выбрано: ${selected[1]}`;
+    return undefined;
+  },
+  ja: (value) => {
+    const tabs = value.match(/^(\d+) Tabs geöffnet\.$/);
+    if (tabs) return `${tabs[1]}個のタブを開きました。`;
+    const results = value.match(/^(\d+) Ergebnisse$/);
+    if (results) return `${results[1]}件の結果`;
+    const selected = value.match(/^(\d+) ausgewählt$/);
+    if (selected) return `${selected[1]}件選択中`;
+    return undefined;
+  },
+};
+
 export const resolveLocale = (preference: LanguagePreference | undefined, browserLanguage?: string): AppLocale => {
-  if (preference === 'de' || preference === 'en') return preference;
-  return browserLanguage?.toLowerCase().startsWith('de') ? 'de' : 'en';
+  if (preference && preference !== 'auto') return preference;
+  const language = browserLanguage?.toLowerCase() ?? '';
+  if (language.startsWith('de')) return 'de';
+  if (language.startsWith('es')) return 'es';
+  if (language.startsWith('fr')) return 'fr';
+  if (language.startsWith('pt')) return 'pt-BR';
+  if (language.startsWith('it')) return 'it';
+  if (language.startsWith('ru')) return 'ru';
+  if (language.startsWith('ja')) return 'ja';
+  return 'en';
 };
 
 export const getBrowserLanguage = (): string => {
@@ -443,13 +616,21 @@ export const getBrowserLanguage = (): string => {
   }
 };
 
+export const getUserLocale = async (): Promise<AppLocale> => {
+  const settings = await getUserSettings();
+  return resolveLocale(settings.language, getBrowserLanguage());
+};
+
 export const translateText = (value: string, locale: AppLocale): string => {
   const leadingWhitespace = value.match(/^\s*/)?.[0] ?? '';
   const trailingWhitespace = value.match(/\s*$/)?.[0] ?? '';
   const normalized = value.trim().replace(/\s+/g, ' ');
   const translated = locale === 'de'
     ? reverseTranslations[normalized] ?? reverseDynamicTranslations(normalized)
-    : translations[normalized] ?? dynamicTranslations(normalized);
+    : localizedTranslations[locale]?.[normalized]
+      ?? localizedDynamicTranslations[locale]?.(normalized)
+      ?? translations[normalized]
+      ?? dynamicTranslations(normalized);
   return translated ? `${leadingWhitespace}${translated}${trailingWhitespace}` : value;
 };
 

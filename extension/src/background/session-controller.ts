@@ -1,5 +1,6 @@
 import { createSession, deleteSession, getSession } from '../shared/db';
 import type { CreateSessionInput } from '../shared/db';
+import { getUserLocale, translateText, type AppLocale } from '../shared/i18n';
 import type { SessionPack } from '../shared/types';
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:', 'file:', 'ftp:']);
@@ -21,7 +22,7 @@ const emitSessionRestoreProgress = (progress: SessionRestoreProgress): void => {
   });
 };
 
-const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
+const resolveTabUrl = (tab: chrome.tabs.Tab, locale: AppLocale): string | undefined => {
   const url = tab.url ?? tab.pendingUrl;
   if (!url) {
     return undefined;
@@ -33,7 +34,7 @@ const resolveTabUrl = (tab: chrome.tabs.Tab): string | undefined => {
     }
     return parsed.toString();
   } catch (error) {
-    console.warn('[Link-o-Saurus] Ungültige Tab-URL übersprungen', error);
+    console.warn(`[Link-o-Saurus] ${translateText('Ungültige Tab-URL übersprungen', locale)}`, error);
     return undefined;
   }
 };
@@ -51,11 +52,12 @@ export const ensureTabsPermission = async (): Promise<void> => {
 };
 
 export const saveCurrentWindowAsSession = async (title?: string): Promise<SessionPack> => {
+  const locale = await getUserLocale();
   await ensureTabsPermission();
   const tabs = await chrome.tabs.query({ currentWindow: true });
   const sessionTabs = tabs
     .map((tab) => {
-      const url = resolveTabUrl(tab);
+      const url = resolveTabUrl(tab, locale);
       if (!url) {
         return undefined;
       }
@@ -91,7 +93,7 @@ export const saveCurrentWindowAsSession = async (title?: string): Promise<Sessio
   return session;
 };
 
-const openTabsInNewWindow = async (tabs: SessionPack['tabs']): Promise<void> => {
+const openTabsInNewWindow = async (tabs: SessionPack['tabs'], locale: AppLocale): Promise<void> => {
   if (!tabs.length) {
     return;
   }
@@ -121,7 +123,10 @@ const openTabsInNewWindow = async (tabs: SessionPack['tabs']): Promise<void> => 
         opened += 1;
       } else {
         failed += 1;
-        console.warn('[Link-o-Saurus] Tab konnte nicht in neuem Fenster wiederhergestellt werden.', result.reason);
+        console.warn(
+          `[Link-o-Saurus] ${translateText('Tab konnte nicht in neuem Fenster wiederhergestellt werden.', locale)}`,
+          result.reason,
+        );
       }
     }
 
@@ -129,7 +134,11 @@ const openTabsInNewWindow = async (tabs: SessionPack['tabs']): Promise<void> => 
   }
 };
 
-export const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promise<void> => {
+export const openTabsInCurrentWindow = async (
+  tabs: SessionPack['tabs'],
+  locale?: AppLocale,
+): Promise<void> => {
+  const resolvedLocale = locale ?? (await getUserLocale());
   if (!tabs.length) {
     return;
   }
@@ -137,7 +146,7 @@ export const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promis
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const windowId = activeTab?.windowId;
   if (!windowId) {
-    await openTabsInNewWindow(tabs);
+    await openTabsInNewWindow(tabs, resolvedLocale);
     return;
   }
 
@@ -162,7 +171,10 @@ export const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promis
         opened += 1;
       } else {
         failed += 1;
-        console.warn('[Link-o-Saurus] Tab konnte im aktuellen Fenster nicht wiederhergestellt werden.', result.reason);
+        console.warn(
+          `[Link-o-Saurus] ${translateText('Tab konnte im aktuellen Fenster nicht wiederhergestellt werden.', resolvedLocale)}`,
+          result.reason,
+        );
       }
     }
 
@@ -171,6 +183,7 @@ export const openTabsInCurrentWindow = async (tabs: SessionPack['tabs']): Promis
 };
 
 export const openAllSessionTabs = async (sessionId: string): Promise<number> => {
+  const locale = await getUserLocale();
   await ensureTabsPermission();
   const session = await getSession(sessionId);
   if (!session) {
@@ -180,7 +193,7 @@ export const openAllSessionTabs = async (sessionId: string): Promise<number> => 
   if (!tabs.length) {
     throw new Error('Diese Session enthält keine gültigen Tabs.');
   }
-  await openTabsInNewWindow(tabs);
+  await openTabsInNewWindow(tabs, locale);
   return tabs.length;
 };
 
@@ -188,6 +201,7 @@ export const openSelectedSessionTabs = async (
   sessionId: string,
   tabIndexes: number[],
 ): Promise<number> => {
+  const locale = await getUserLocale();
   await ensureTabsPermission();
   const session = await getSession(sessionId);
   if (!session) {
@@ -202,7 +216,7 @@ export const openSelectedSessionTabs = async (
   if (!tabs.length) {
     throw new Error('Bitte wähle mindestens einen Tab aus.');
   }
-  await openTabsInCurrentWindow(tabs);
+  await openTabsInCurrentWindow(tabs, locale);
   return tabs.length;
 };
 

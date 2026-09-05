@@ -1,4 +1,5 @@
 import { validateBackgroundRequest } from '../shared/messaging';
+import { getUserLocale, translateText } from '../shared/i18n';
 import { ensureReadLaterAlarm, registerBadgeController, updateReadLaterBadge } from './badge-controller';
 import { registerContextMenu, registerContextMenuController } from './context-menu-controller';
 import { handleBackgroundRequest } from './message-router';
@@ -53,24 +54,27 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  const validation = validateBackgroundRequest(message);
-  if (!validation.ok) {
-    sendResponse({
-      type: 'session.error',
-      error: validation.error,
-      code: validation.code,
-      details: validation.details,
-    });
-    return false;
-  }
-
   (async () => {
+    const locale = await getUserLocale();
+    const validation = validateBackgroundRequest(message);
+    if (!validation.ok) {
+      sendResponse({
+        type: 'session.error',
+        error: translateText(validation.error, locale),
+        code: validation.code,
+        details: validation.details,
+      });
+      return;
+    }
+
     try {
       const response = await handleBackgroundRequest(validation.value);
       sendResponse(response);
     } catch (error) {
-      const messageText =
-        error instanceof Error ? error.message : 'Unbekannter Fehler beim Session-Handling.';
+      const messageText = translateText(
+        error instanceof Error ? error.message : 'Unbekannter Fehler beim Session-Handling.',
+        locale,
+      );
       sendResponse({ type: 'session.error', error: messageText, code: 'INTERNAL_ERROR' });
     }
   })();

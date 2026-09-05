@@ -19,7 +19,7 @@ import type {
   ImportProgressHandler,
 } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress, ImportResult } from '../shared/import-export';
-import type { Rule } from '../shared/types';
+import type { LanguagePreference, Rule } from '../shared/types';
 import { useI18n } from '../shared/i18n';
 import './App.css';
 import { computeProgressRatio, formatPercent, stageLabel } from './utils/import-progress';
@@ -451,12 +451,18 @@ const App: FunctionalComponent = () => {
               <select
                 value={languagePreference}
                 onChange={(event) => {
-                  void setLanguagePreference(event.currentTarget.value as 'auto' | 'de' | 'en');
+                  void setLanguagePreference(event.currentTarget.value as LanguagePreference);
                 }}
               >
                 <option value="auto">Automatisch (Browser-Sprache)</option>
                 <option value="de">Deutsch</option>
                 <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+                <option value="pt-BR">Português (Brasil)</option>
+                <option value="it">Italiano</option>
+                <option value="ru">Русский</option>
+                <option value="ja">日本語</option>
               </select>
             </label>
           </section>

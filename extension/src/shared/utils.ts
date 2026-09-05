@@ -1,4 +1,5 @@
 import type { Message } from './messaging';
+import { getUserLocale, translateText } from './i18n';
 import { sendBackgroundMessage } from './messaging';
 import { normalizeUrl } from './url';
 
@@ -335,7 +336,8 @@ export async function closeSidePanel(windowId?: number): Promise<boolean> {
     const response = await sendBackgroundMessage({ type: 'sidePanel.close', ...(typeof windowId === 'number' ? { windowId } : {}) });
     return response.type === 'sidePanel.close.result' ? response.closed : false;
   } catch (error) {
-    console.warn('[Link-o-Saurus] Side panel konnte nicht geschlossen werden.', error);
+    const locale = await getUserLocale();
+    console.warn(`[Link-o-Saurus] ${translateText('Side panel konnte nicht geschlossen werden.', locale)}`, error);
     return false;
   }
 }
@@ -349,7 +351,8 @@ export async function openSidePanel(windowId?: number): Promise<boolean> {
     const response = await sendBackgroundMessage({ type: 'sidePanel.open', ...(typeof windowId === 'number' ? { windowId } : {}) });
     return response.type === 'sidePanel.open.result' ? response.opened : false;
   } catch (error) {
-    console.warn('[Link-o-Saurus] Side panel konnte nicht geöffnet werden.', error);
+    const locale = await getUserLocale();
+    console.warn(`[Link-o-Saurus] ${translateText('Side panel konnte nicht geöffnet werden.', locale)}`, error);
     return false;
   }
 }

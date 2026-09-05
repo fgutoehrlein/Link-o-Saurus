@@ -6,3 +6,7 @@ export { ImportExportDialog, type ImportDialogState } from './ImportExportDialog
 export { SessionDialog, type SessionDialogState } from './SessionDialog';
 export { AccessibleModal } from './AccessibleModal';
 export { DetailTagInput } from './DetailTagInput';
+export { DashboardDetailPanel } from './DashboardDetailPanel';
+export { DashboardHeader } from './DashboardHeader';
+export { DashboardSidebar } from './DashboardSidebar';
+export { BookmarkWorkspace } from './BookmarkWorkspace';

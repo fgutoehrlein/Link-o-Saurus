@@ -1,4 +1,5 @@
 import { createBookmark, getUserSettings, listCategories } from '../shared/db';
+import { getBrowserLanguage, resolveLocale, translateText, type AppLocale } from '../shared/i18n';
 import { presentLinkOSaurusQuickDialog, showLinkOSaurusToast } from './injected/quick-save-dialog';
 import { openSidePanelForWindow, rememberQuickSaveTab } from './side-panel-controller';
 
@@ -8,25 +9,18 @@ export const CONTEXT_MENU_OPEN_SIDE_PANEL_ID = 'link-o-saurus-context-open-side-
 const removeAllContextMenus = (): Promise<void> =>
   new Promise((resolve) => chrome.contextMenus.removeAll(() => resolve()));
 
-const resolveContextMenuLocale = (language: 'auto' | 'de' | 'en'): 'de' | 'en' => {
-  if (language === 'de' || language === 'en') return language;
-  return chrome.i18n.getUILanguage().toLowerCase().startsWith('de') ? 'de' : 'en';
-};
+const resolveContextMenuLocale = (language: Parameters<typeof resolveLocale>[0]): AppLocale =>
+  resolveLocale(language, getBrowserLanguage());
 
-const contextMenuText = (locale: 'de' | 'en') =>
-  locale === 'de'
-    ? {
-        save: 'Zu Link-o-Saurus speichern',
-        openSidePanel: 'Link-o-Saurus Seitenleiste öffnen',
-      }
-    : {
-        save: 'Save to Link-o-Saurus',
-        openSidePanel: 'Open Link-o-Saurus side panel',
-      };
+const contextMenuText = (locale: AppLocale) => ({
+  save: translateText('Zu Link-o-Saurus speichern', locale),
+  openSidePanel: translateText('Link-o-Saurus Seitenleiste öffnen', locale),
+});
 
 export const registerContextMenu = async (): Promise<void> => {
   const settings = await getUserSettings();
-  const labels = contextMenuText(resolveContextMenuLocale(settings.language));
+  const locale = resolveContextMenuLocale(settings.language);
+  const labels = contextMenuText(locale);
   await removeAllContextMenus();
   chrome.contextMenus.create(
     {
@@ -37,7 +31,7 @@ export const registerContextMenu = async (): Promise<void> => {
     () => {
       const lastError = chrome.runtime.lastError;
       if (lastError && !lastError.message?.includes('duplicate id')) {
-        console.error('[Link-o-Saurus] Kontextmenü konnte nicht erstellt werden:', lastError);
+        console.error(`[Link-o-Saurus] ${translateText('Kontextmenü konnte nicht erstellt werden:', locale)}`, lastError);
       }
     },
   );
@@ -50,7 +44,7 @@ export const registerContextMenu = async (): Promise<void> => {
     () => {
       const lastError = chrome.runtime.lastError;
       if (lastError && !lastError.message?.includes('duplicate id')) {
-        console.error('[Link-o-Saurus] Sidepanel-Kontextmenü konnte nicht erstellt werden:', lastError);
+        console.error(`[Link-o-Saurus] ${translateText('Sidepanel-Kontextmenü konnte nicht erstellt werden:', locale)}`, lastError);
       }
     },
   );
@@ -68,7 +62,7 @@ export const registerContextMenuController = (): void => {
       try {
         await openSidePanelForWindow(tab?.windowId);
       } catch (error) {
-        console.error('[Link-o-Saurus] Side panel konnte nicht geöffnet werden.', error);
+        console.error(`[Link-o-Saurus] ${translateText('Side panel konnte nicht geöffnet werden.', locale)}`, error);
       }
       return;
     }
@@ -79,10 +73,10 @@ export const registerContextMenuController = (): void => {
 
     const tabId = tab.id;
     const url = info.pageUrl ?? tab.url;
-    const title = tab.title ?? info.selectionText ?? url ?? (locale === 'de' ? 'Unbenannte Seite' : 'Untitled page');
+    const title = tab.title ?? info.selectionText ?? url ?? translateText('Unbenannte Seite', locale);
 
     if (!url) {
-      console.warn('[Link-o-Saurus] Kein URL-Kontext für Bookmark vorhanden.');
+      console.warn(`[Link-o-Saurus] ${translateText('Kein URL-Kontext für Bookmark vorhanden.', locale)}`);
       return;
     }
 
@@ -119,10 +113,10 @@ export const registerContextMenuController = (): void => {
       await chrome.scripting.executeScript({
         target: { tabId },
         func: showLinkOSaurusToast,
-        args: [locale === 'de' ? 'Bookmark gespeichert' : 'Bookmark saved', settings.theme],
+        args: [translateText('Bookmark gespeichert', locale), settings.theme],
       });
     } catch (error) {
-      console.error('[Link-o-Saurus] Speichern über Kontextmenü fehlgeschlagen', error);
+      console.error(`[Link-o-Saurus] ${translateText('Speichern über Kontextmenü fehlgeschlagen', locale)}`, error);
     }
   });
 };

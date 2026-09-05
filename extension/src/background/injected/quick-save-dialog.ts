@@ -1,3 +1,5 @@
+import type { AppLocale } from '../../shared/i18n';
+
 export function presentLinkOSaurusQuickDialog({
   title,
   url,
@@ -8,7 +10,7 @@ export function presentLinkOSaurusQuickDialog({
   title: string;
   url: string;
   categories: { id: string; title: string }[];
-  locale?: 'de' | 'en';
+  locale?: AppLocale;
   theme?: 'light' | 'dark' | 'system';
 }): Promise<{ action: 'save'; title: string; categoryId?: string; tags: string[] } | { action: 'cancel' }> {
   const existing = document.getElementById('link-o-saurus-quick-dialog-root');
@@ -23,7 +25,7 @@ export function presentLinkOSaurusQuickDialog({
     }
 
     const overlay = document.createElement('div');
-    const copy = locale === 'en'
+    const copy = locale !== 'de'
       ? {
           saveBookmark: 'Save bookmark',
           metadata: 'Metadata',

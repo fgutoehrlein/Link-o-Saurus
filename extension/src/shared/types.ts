@@ -36,7 +36,7 @@ export type Bookmark = {
 
 export type BookmarkSortMode = 'relevance' | 'alphabetical' | 'newest';
 
-export type LanguagePreference = 'auto' | 'de' | 'en';
+export type LanguagePreference = 'auto' | 'de' | 'en' | 'es' | 'fr' | 'pt-BR' | 'it' | 'ru' | 'ja';
 
 export type Comment = {
   id: EntityId;
