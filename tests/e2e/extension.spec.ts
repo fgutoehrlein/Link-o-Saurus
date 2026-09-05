@@ -214,12 +214,12 @@ test.describe('Link-O-Saurus extension', () => {
       [newBookmarkTitle, adjacentBookmarkTitle],
     );
 
-    const collapseDetailsButton = page.getByRole('button', { name: 'Weniger' });
+    const collapseDetailsButton = page.locator('.quick-save__actions .subtle-button');
     if (await collapseDetailsButton.isVisible()) {
       await collapseDetailsButton.click();
     }
 
-    const searchField = page.getByPlaceholder('Bookmarks durchsuchen (/)');
+    const searchField = page.getByRole('searchbox');
     await searchField.fill('Playwright');
     await expect(page.locator('.access-list')).toContainText(newBookmarkTitle);
     await expect(page.locator('.access-list')).toContainText(adjacentBookmarkTitle);
