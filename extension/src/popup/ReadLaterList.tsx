@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'preact/hooks';
 import { getBookmark, listDueReadLater, updateReadLater } from '../shared/db';
 import type { Bookmark, ReadLater } from '../shared/types';
 import { sendBackgroundMessage } from '../shared/messaging';
+import { useI18n } from '../shared/i18n';
 
 const SNOOZE_PRESETS = [
   { label: '15 Min', minutes: 15 },
@@ -11,14 +12,13 @@ const SNOOZE_PRESETS = [
   { label: 'Nächste Woche', minutes: 60 * 24 * 7 },
 ] as const;
 
-const relativeTimeFormatter =
-  typeof Intl !== 'undefined'
-    ? new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-    : undefined;
-
-const formatRelativeTime = (timestamp: number): string => {
+const formatRelativeTime = (timestamp: number, locale: string): string => {
+  const relativeTimeFormatter =
+    typeof Intl !== 'undefined'
+      ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+      : undefined;
   if (!relativeTimeFormatter) {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString(locale);
   }
 
   const now = Date.now();
@@ -63,6 +63,7 @@ const loadDueEntries = async (): Promise<ReadLaterRow[]> => {
 };
 
 const ReadLaterList: FunctionalComponent = () => {
+  const { locale } = useI18n();
   const [rows, setRows] = useState<ReadLaterRow[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,9 +163,9 @@ const ReadLaterList: FunctionalComponent = () => {
               <div class="read-later-item__meta">
                 <span
                   class="read-later-item__due"
-                  title={new Date(effectiveDueAt).toLocaleString()}
+                  title={new Date(effectiveDueAt).toLocaleString(locale)}
                 >
-                  {formatRelativeTime(effectiveDueAt)}
+                  {formatRelativeTime(effectiveDueAt, locale)}
                 </span>
                 {entry.priority ? (
                   <span class={`read-later-priority read-later-priority--${entry.priority}`}>

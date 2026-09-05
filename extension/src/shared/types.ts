@@ -36,6 +36,8 @@ export type Bookmark = {
 
 export type BookmarkSortMode = 'relevance' | 'alphabetical' | 'newest';
 
+export type LanguagePreference = 'auto' | 'de' | 'en' | 'es' | 'fr' | 'pt-BR' | 'it' | 'ru' | 'ja';
+
 export type Comment = {
   id: EntityId;
   bookmarkId: EntityId;
@@ -72,6 +74,7 @@ export type SessionPack = {
 
 export type UserSettings = {
   theme: 'light' | 'dark' | 'system';
+  language: LanguagePreference;
   dashboardViewMode: 'list' | 'tiles';
   bookmarkSortMode: BookmarkSortMode;
   newTabEnabled: boolean;

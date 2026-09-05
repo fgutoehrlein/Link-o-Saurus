@@ -6,3 +6,7 @@ playwright-report/
 test-results/
 
 .graphify/
+
+# Local agent and workflow state
+.agents/
+.superpowers/

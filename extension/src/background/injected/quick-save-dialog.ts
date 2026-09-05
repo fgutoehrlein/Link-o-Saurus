@@ -1,11 +1,17 @@
+import type { AppLocale } from '../../shared/i18n';
+
 export function presentLinkOSaurusQuickDialog({
   title,
   url,
   categories,
+  locale = 'de',
+  theme = 'system',
 }: {
   title: string;
   url: string;
   categories: { id: string; title: string }[];
+  locale?: AppLocale;
+  theme?: 'light' | 'dark' | 'system';
 }): Promise<{ action: 'save'; title: string; categoryId?: string; tags: string[] } | { action: 'cancel' }> {
   const existing = document.getElementById('link-o-saurus-quick-dialog-root');
   if (existing) {
@@ -19,30 +25,79 @@ export function presentLinkOSaurusQuickDialog({
     }
 
     const overlay = document.createElement('div');
+    const copy = locale !== 'de'
+      ? {
+          saveBookmark: 'Save bookmark',
+          metadata: 'Metadata',
+          title: 'Title',
+          category: 'Category',
+          chooseCategory: 'Choose category',
+          noCategory: 'No categories available',
+          tags: 'Tags',
+          addTags: 'Add tags (press Enter)',
+          removeTag: (tag: string) => `Remove tag ${tag}`,
+          cancel: 'Cancel',
+          save: 'Save',
+        }
+      : {
+          saveBookmark: 'Bookmark speichern',
+          metadata: 'Metadaten',
+          title: 'Titel',
+          category: 'Kategorie',
+          chooseCategory: 'Kategorie auswählen',
+          noCategory: 'Keine Kategorie verfügbar',
+          tags: 'Tags',
+          addTags: 'Tags hinzufügen (Enter drücken)',
+          removeTag: (tag: string) => `Tag ${tag} entfernen`,
+          cancel: 'Abbrechen',
+          save: 'Speichern',
+        };
     overlay.id = 'link-o-saurus-quick-dialog-root';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.style.position = 'fixed';
     overlay.style.inset = '0';
-    overlay.style.background = 'rgba(15, 23, 42, 0.45)';
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    overlay.style.background = isDark ? 'rgba(2, 6, 23, 0.58)' : 'rgba(15, 23, 42, 0.32)';
     overlay.style.zIndex = '2147483647';
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
     overlay.style.padding = '16px';
 
-    const uiTokens = {
-      surface: '#0f172a',
-      panel: 'rgba(15, 23, 42, 0.92)',
-      panelStrong: 'rgba(21, 32, 58, 0.98)',
-      text: '#edf2ff',
-      muted: '#a3b0cb',
-      line: 'rgba(148, 163, 184, 0.24)',
-      accent: '#4f7cff',
-      accentStrong: '#2d63ff',
-      chip: 'rgba(79, 124, 255, 0.3)',
-      danger: '#ff8e8e',
-    };
+    const uiTokens = isDark
+      ? {
+          panel: 'rgba(15, 23, 42, 0.84)',
+          panelStrong: 'rgba(21, 32, 58, 0.95)',
+          text: '#edf2ff',
+          muted: '#a3b0cb',
+          line: 'rgba(148, 163, 184, 0.2)',
+          accent: '#4f7cff',
+          accentStrong: '#2d63ff',
+          chip: 'rgba(79, 124, 255, 0.3)',
+          danger: '#ff8e8e',
+          subtle: 'rgba(148, 163, 184, 0.14)',
+          subtleHover: 'rgba(148, 163, 184, 0.22)',
+          focusRing: 'rgba(79, 124, 255, 0.34)',
+          shadow: 'rgba(15, 23, 42, 0.35)',
+          background: 'linear-gradient(160deg, rgba(8, 13, 27, 0.98), rgba(12, 20, 39, 0.95))',
+        }
+      : {
+          panel: 'rgba(255, 255, 255, 0.92)',
+          panelStrong: 'rgba(241, 245, 249, 0.96)',
+          text: '#0f172a',
+          muted: '#475569',
+          line: 'rgba(148, 163, 184, 0.35)',
+          accent: '#2563eb',
+          accentStrong: '#1d4ed8',
+          chip: 'rgba(37, 99, 235, 0.14)',
+          danger: '#dc2626',
+          subtle: 'rgba(148, 163, 184, 0.14)',
+          subtleHover: 'rgba(148, 163, 184, 0.22)',
+          focusRing: 'rgba(37, 99, 235, 0.25)',
+          shadow: 'rgba(15, 23, 42, 0.18)',
+          background: 'linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.96))',
+        };
 
     const applyStyles = (element: HTMLElement, styles: Record<string, string>): void => {
       Object.assign(element.style, styles);
@@ -50,14 +105,16 @@ export function presentLinkOSaurusQuickDialog({
 
     const container = document.createElement('form');
     applyStyles(container, {
-      background:
-        'linear-gradient(160deg, rgba(8, 13, 27, 0.98), rgba(12, 20, 39, 0.95))',
+      background: uiTokens.background,
       color: uiTokens.text,
-      width: 'min(360px, 100%)',
+      width: 'min(380px, 100%)',
       border: `1px solid ${uiTokens.line}`,
       borderRadius: '14px',
-      boxShadow: '0 16px 40px rgba(15, 23, 42, 0.35)',
+      boxShadow: `0 16px 40px ${uiTokens.shadow}`,
       padding: '16px',
+      boxSizing: 'border-box',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
     });
     container.style.fontFamily = `'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     container.style.display = 'grid';
@@ -81,7 +138,7 @@ export function presentLinkOSaurusQuickDialog({
     });
 
     const titleLabel = document.createElement('h2');
-    titleLabel.textContent = 'Bookmark speichern';
+    titleLabel.textContent = copy.saveBookmark;
     applyStyles(titleLabel, {
       margin: '0',
       fontSize: '15px',
@@ -93,7 +150,7 @@ export function presentLinkOSaurusQuickDialog({
     container.appendChild(header);
 
     const metadata = document.createElement('section');
-    metadata.setAttribute('aria-label', 'Metadaten');
+    metadata.setAttribute('aria-label', copy.metadata);
     applyStyles(metadata, {
       background: uiTokens.panel,
       border: `1px solid ${uiTokens.line}`,
@@ -121,8 +178,8 @@ export function presentLinkOSaurusQuickDialog({
     titleInput.type = 'text';
     titleInput.value = title;
     titleInput.required = true;
-    titleInput.setAttribute('aria-label', 'Titel');
-    titleField.append(makeLabel('Titel'), titleInput);
+    titleInput.setAttribute('aria-label', copy.title);
+    titleField.append(makeLabel(copy.title), titleInput);
 
     const urlField = document.createElement('div');
     applyStyles(urlField, { display: 'grid', gap: '4px' });
@@ -148,6 +205,7 @@ export function presentLinkOSaurusQuickDialog({
     applyStyles(formSection, { display: 'grid', gap: '12px' });
 
     const baseInputStyles = {
+      boxSizing: 'border-box',
       width: '100%',
       borderRadius: '9px',
       border: `1px solid ${uiTokens.line}`,
@@ -155,14 +213,19 @@ export function presentLinkOSaurusQuickDialog({
       color: uiTokens.text,
       padding: '8px 10px',
       fontSize: '13px',
+      fontFamily: 'inherit',
+      lineHeight: '1.35',
+      outline: 'none',
       transition: 'border-color 180ms ease, box-shadow 180ms ease, background 180ms ease',
     };
+
+    applyStyles(titleInput, baseInputStyles);
 
     const applyFocusableInputBehavior = (element: HTMLElement): void => {
       element.style.outline = 'none';
       element.addEventListener('focus', () => {
         element.style.borderColor = uiTokens.accent;
-        element.style.boxShadow = '0 0 0 2px rgba(130, 168, 255, 0.3)';
+        element.style.boxShadow = `0 0 0 2px ${uiTokens.focusRing}`;
       });
       element.addEventListener('blur', () => {
         element.style.borderColor = uiTokens.line;
@@ -170,7 +233,7 @@ export function presentLinkOSaurusQuickDialog({
       });
       element.addEventListener('mouseenter', () => {
         if (document.activeElement !== element) {
-          element.style.borderColor = 'rgba(130, 168, 255, 0.45)';
+          element.style.borderColor = uiTokens.accent;
         }
       });
       element.addEventListener('mouseleave', () => {
@@ -181,104 +244,42 @@ export function presentLinkOSaurusQuickDialog({
     };
 
     let selectedCategoryId = '';
-    let dropdownOpen = false;
 
     const categoryBlock = document.createElement('label');
     applyStyles(categoryBlock, { display: 'grid', gap: '4px' });
-    categoryBlock.appendChild(makeLabel('Kategorie'));
+    categoryBlock.appendChild(makeLabel(copy.category));
 
-    const selectRoot = document.createElement('div');
-    applyStyles(selectRoot, { position: 'relative' });
-    const selectButton = document.createElement('button');
-    selectButton.type = 'button';
-    selectButton.textContent = 'Kategorie auswählen';
-    applyStyles(selectButton, {
+    const categorySelect = document.createElement('select');
+    categorySelect.setAttribute('aria-label', copy.category);
+    applyStyles(categorySelect, {
       ...baseInputStyles,
-      textAlign: 'left',
       cursor: 'pointer',
     });
-    selectButton.setAttribute('aria-haspopup', 'listbox');
-    selectButton.setAttribute('aria-expanded', 'false');
-    applyFocusableInputBehavior(selectButton);
-
-    const optionsList = document.createElement('div');
-    applyStyles(optionsList, {
-      position: 'absolute',
-      top: 'calc(100% + 6px)',
-      left: '0',
-      right: '0',
-      maxHeight: '176px',
-      overflowY: 'auto',
-      display: 'none',
-      borderRadius: '10px',
-      background: uiTokens.panelStrong,
-      border: `1px solid ${uiTokens.line}`,
-      boxShadow: '0 10px 24px rgba(2, 6, 23, 0.45)',
-      zIndex: '3',
-      padding: '4px',
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = categories.length > 0 ? copy.chooseCategory : copy.noCategory;
+    categorySelect.appendChild(placeholderOption);
+    categories.forEach((category) => {
+      const option = document.createElement('option');
+      option.value = category.id;
+      option.textContent = category.title;
+      categorySelect.appendChild(option);
     });
-
-    const closeDropdown = (): void => {
-      dropdownOpen = false;
-      optionsList.style.display = 'none';
-      selectButton.setAttribute('aria-expanded', 'false');
+    categorySelect.disabled = categories.length === 0;
+    const syncCategoryColor = (): void => {
+      categorySelect.style.color = categorySelect.value ? uiTokens.text : uiTokens.muted;
     };
-    const openDropdown = (): void => {
-      dropdownOpen = true;
-      optionsList.style.display = 'grid';
-      selectButton.setAttribute('aria-expanded', 'true');
-    };
-
-    const setCategory = (id: string, label: string): void => {
-      selectedCategoryId = id;
-      selectButton.textContent = label;
-      selectButton.style.color = id ? uiTokens.text : uiTokens.muted;
-      closeDropdown();
-    };
-
-    const selectOptions: Array<{ id: string; title: string }> = [
-      { id: '', title: 'Kategorie auswählen' },
-      ...categories.map((category) => ({ id: category.id, title: category.title })),
-    ];
-
-    selectOptions.forEach((option) => {
-      const optionButton = document.createElement('button');
-      optionButton.type = 'button';
-      optionButton.textContent = option.title;
-      applyStyles(optionButton, {
-        border: 'none',
-        background: 'transparent',
-        color: uiTokens.text,
-        textAlign: 'left',
-        borderRadius: '8px',
-        padding: '8px',
-        cursor: 'pointer',
-        fontSize: '13px',
-        transition: 'background 170ms ease',
-      });
-      optionButton.addEventListener('mouseenter', () => {
-        optionButton.style.background = 'rgba(148, 163, 184, 0.15)';
-      });
-      optionButton.addEventListener('mouseleave', () => {
-        optionButton.style.background = 'transparent';
-      });
-      optionButton.addEventListener('click', () => setCategory(option.id, option.title));
-      optionsList.appendChild(optionButton);
+    syncCategoryColor();
+    categorySelect.addEventListener('change', () => {
+      selectedCategoryId = categorySelect.value;
+      syncCategoryColor();
     });
-
-    selectButton.addEventListener('click', () => {
-      if (dropdownOpen) {
-        closeDropdown();
-        return;
-      }
-      openDropdown();
-    });
-    selectRoot.append(selectButton, optionsList);
-    categoryBlock.appendChild(selectRoot);
+    applyFocusableInputBehavior(categorySelect);
+    categoryBlock.appendChild(categorySelect);
 
     const tagField = document.createElement('label');
     applyStyles(tagField, { display: 'grid', gap: '4px' });
-    tagField.appendChild(makeLabel('Tags'));
+    tagField.appendChild(makeLabel(copy.tags));
 
     const tagRoot = document.createElement('div');
     applyStyles(tagRoot, {
@@ -292,7 +293,7 @@ export function presentLinkOSaurusQuickDialog({
     });
     const tagInput = document.createElement('input');
     tagInput.type = 'text';
-    tagInput.placeholder = 'Tags hinzufügen (Enter drücken)';
+    tagInput.placeholder = copy.addTags;
     applyStyles(tagInput, {
       flex: '1',
       minWidth: '120px',
@@ -326,7 +327,7 @@ export function presentLinkOSaurusQuickDialog({
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
         removeButton.textContent = '×';
-        removeButton.setAttribute('aria-label', `Tag ${tag} entfernen`);
+        removeButton.setAttribute('aria-label', copy.removeTag(tag));
         applyStyles(removeButton, {
           border: 'none',
           background: 'transparent',
@@ -383,24 +384,15 @@ export function presentLinkOSaurusQuickDialog({
     applyStyles(divider, { height: '1px', background: uiTokens.line });
     container.appendChild(divider);
 
-    if (categories.length > 0) {
-      setCategory('', 'Kategorie auswählen');
-    } else {
-      selectButton.disabled = true;
-      selectButton.textContent = 'Keine Kategorie verfügbar';
-      selectButton.style.color = uiTokens.muted;
-      selectButton.style.cursor = 'not-allowed';
-    }
-
     const actionRow = document.createElement('div');
     applyStyles(actionRow, { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
 
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
-    cancelButton.textContent = 'Abbrechen';
+    cancelButton.textContent = copy.cancel;
     applyStyles(cancelButton, {
       border: `1px solid ${uiTokens.line}`,
-      background: 'rgba(148, 163, 184, 0.12)',
+      background: uiTokens.subtle,
       color: uiTokens.text,
       borderRadius: '10px',
       fontSize: '13px',
@@ -409,16 +401,16 @@ export function presentLinkOSaurusQuickDialog({
       transition: 'background 180ms ease, border-color 180ms ease',
     });
     cancelButton.addEventListener('mouseenter', () => {
-      cancelButton.style.background = 'rgba(148, 163, 184, 0.2)';
+      cancelButton.style.background = uiTokens.subtleHover;
     });
     cancelButton.addEventListener('mouseleave', () => {
-      cancelButton.style.background = 'rgba(148, 163, 184, 0.12)';
+      cancelButton.style.background = uiTokens.subtle;
     });
     cancelButton.addEventListener('click', () => cleanup({ action: 'cancel' }));
 
     const submitButton = document.createElement('button');
     submitButton.type = 'submit';
-    submitButton.textContent = 'Speichern';
+    submitButton.textContent = copy.save;
     applyStyles(submitButton, {
       border: 'none',
       background: `linear-gradient(140deg, ${uiTokens.accent}, ${uiTokens.accentStrong})`,
@@ -428,7 +420,7 @@ export function presentLinkOSaurusQuickDialog({
       borderRadius: '10px',
       padding: '8px 16px',
       cursor: 'pointer',
-      boxShadow: '0 8px 16px rgba(45, 99, 255, 0.35)',
+      boxShadow: `0 8px 16px ${uiTokens.focusRing}`,
       transition: 'transform 170ms ease, filter 170ms ease',
     });
     submitButton.addEventListener('mouseenter', () => {
@@ -449,6 +441,20 @@ export function presentLinkOSaurusQuickDialog({
       if (event.key === 'Escape') {
         event.preventDefault();
         cleanup({ action: 'cancel' });
+        return;
+      }
+      if (event.key === 'Tab') {
+        const focusable = Array.from(
+          container.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)'),
+        );
+        const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+        const nextIndex = event.shiftKey
+          ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+          : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+        if (focusable.length > 0 && currentIndex >= 0) {
+          event.preventDefault();
+          focusable[nextIndex]?.focus();
+        }
       }
     };
 
@@ -481,10 +487,6 @@ export function presentLinkOSaurusQuickDialog({
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) {
         cleanup({ action: 'cancel' });
-        return;
-      }
-      if (dropdownOpen && !selectRoot.contains(event.target as Node)) {
-        closeDropdown();
       }
     });
 
@@ -498,7 +500,7 @@ export function presentLinkOSaurusQuickDialog({
   });
 }
 
-export function showLinkOSaurusToast(message: string): void {
+export function showLinkOSaurusToast(message: string, theme: 'light' | 'dark' | 'system' = 'system'): void {
   if (!document.body) {
     return;
   }
@@ -509,13 +511,15 @@ export function showLinkOSaurusToast(message: string): void {
   }
 
   const toast = document.createElement('div');
+  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
   toast.id = 'link-o-saurus-toast';
   toast.textContent = message;
   toast.style.position = 'fixed';
   toast.style.bottom = '20px';
   toast.style.right = '20px';
-  toast.style.background = '#0f172a';
-  toast.style.color = 'white';
+  toast.style.background = isDark ? '#0f172a' : '#ffffff';
+  toast.style.color = isDark ? '#edf2ff' : '#0f172a';
+  toast.style.border = `1px solid ${isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)'}`;
   toast.style.padding = '10px 16px';
   toast.style.borderRadius = '999px';
   toast.style.fontSize = '13px';

@@ -370,7 +370,6 @@ const ensureCategory = (
 
 const toBookmarkRecord = (
   candidate: BookmarkCandidate,
-  board: Board,
   category: Category | undefined,
   normalizedUrl: string,
 ): Bookmark => {
@@ -484,7 +483,7 @@ const processBookmarkCandidate = (
     caches.categorySortCounters,
   );
 
-  const bookmark = toBookmarkRecord(candidate, board, category, normalized);
+  const bookmark = toBookmarkRecord(candidate, category, normalized);
   stats.createdBookmarks += 1;
   return bookmark;
 };

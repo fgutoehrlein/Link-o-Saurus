@@ -32,6 +32,7 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   theme: 'system',
+  language: 'auto',
   dashboardViewMode: 'list',
   bookmarkSortMode: 'relevance',
   newTabEnabled: false,
@@ -247,8 +248,38 @@ const applyTagDeltas = async (
   dbInstance: LinkOSaurusDB,
   deltas: Map<string, TagDelta>,
 ): Promise<void> => {
+  if (deltas.size === 0) {
+    return;
+  }
+
+  // Resolve the complete delta set before writing. Bulk-put keeps large
+  // imports inside one IndexedDB request batch instead of one request per tag.
+  const existingTags = await dbInstance.tags.toArray();
+  const byId = new Map(existingTags.map((tag) => [tag.id, tag]));
+  const byPath = new Map(existingTags.map((tag) => [tag.path, tag]));
+  const updates: Tag[] = [];
+
   for (const delta of deltas.values()) {
-    await changeTagUsage(dbInstance, delta.path, delta.delta);
+    const metadata = deriveTagMetadata(delta.path);
+    const existing = byId.get(metadata.canonicalId) ?? byPath.get(metadata.path);
+    if (!existing) {
+      if (delta.delta > 0) {
+        updates.push(createTagFromMetadata(metadata, { usageCount: delta.delta }));
+      }
+      continue;
+    }
+
+    updates.push({
+      ...existing,
+      name: delta.delta > 0 ? metadata.leafName : existing.name,
+      path: delta.delta > 0 ? metadata.path : existing.path,
+      slugParts: delta.delta > 0 ? metadata.slugParts : existing.slugParts,
+      usageCount: Math.max(0, existing.usageCount + delta.delta),
+    });
+  }
+
+  if (updates.length > 0) {
+    await dbInstance.tags.bulkPut(updates);
   }
 };
 
@@ -1065,6 +1096,16 @@ export type BookmarkListOptions = {
   categoryId?: string;
   includeArchived?: boolean;
   limit?: number;
+  sortBy?: BookmarkListSortField;
+  sortDirection?: 'asc' | 'desc';
+  cursor?: BookmarkListCursor;
+};
+
+export type BookmarkListSortField = 'createdAt' | 'updatedAt' | 'lastVisitedAt' | 'visitCount';
+
+export type BookmarkListCursor = {
+  readonly value: number;
+  readonly id: string;
 };
 
 export const listRecentBookmarks = async (
@@ -1232,20 +1273,39 @@ export const recordBookmarkVisit = async (
   database?: LinkOSaurusDB,
 ): Promise<Bookmark> => {
   const dbInstance = withDatabase(database);
-  const existing = await getBookmark(id, dbInstance);
-  if (!existing) {
-    throw new Error(`Bookmark ${id} not found`);
-  }
   const now = Date.now();
-  return updateBookmark(
-    id,
-    {
+  let updated: Bookmark | undefined;
+  await runWriteTransaction(dbInstance, [dbInstance.bookmarks], async () => {
+    const existing = await dbInstance.bookmarks.get(id);
+    if (!existing) {
+      throw new Error(`Bookmark ${id} not found`);
+    }
+    updated = {
+      ...existing,
       visitCount: Math.max(0, existing.visitCount ?? 0) + 1,
       lastVisitedAt: now,
       updatedAt: now,
-    },
-    dbInstance,
-  );
+    };
+    await dbInstance.bookmarks.put(updated);
+  });
+  if (!updated) {
+    throw new Error(`Bookmark ${id} not found after visit`);
+  }
+  const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+  if (syncSettings.enableBidirectional) {
+    const category = updated.categoryId ? await dbInstance.categories.get(updated.categoryId) : undefined;
+    const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
+    enqueueBookmarkUpdate({
+      bookmark: updated,
+      category,
+      board,
+      previousCategory: category,
+      previousBoard: board,
+      database: dbInstance,
+      settings: syncSettings,
+    });
+  }
+  return updated;
 };
 
 export const getBookmark = async (
@@ -1261,21 +1321,52 @@ export const listBookmarks = async (
   database?: LinkOSaurusDB,
 ): Promise<Bookmark[]> => {
   const dbInstance = withDatabase(database);
-  const { categoryId, includeArchived = false, limit } = options;
+  const {
+    categoryId,
+    includeArchived = false,
+    limit,
+    sortBy,
+    sortDirection = 'desc',
+    cursor,
+  } = options;
 
-  let collection = categoryId
-    ? dbInstance.bookmarks.where('categoryId').equals(categoryId)
-    : dbInstance.bookmarks.toCollection();
+  let collection = sortBy
+    ? sortDirection === 'desc'
+      ? dbInstance.bookmarks.orderBy(sortBy).reverse()
+      : dbInstance.bookmarks.orderBy(sortBy)
+    : categoryId
+      ? dbInstance.bookmarks.where('categoryId').equals(categoryId)
+      : dbInstance.bookmarks.toCollection();
+
+  if (sortBy && categoryId) {
+    collection = collection.filter((bookmark) => bookmark.categoryId === categoryId);
+  }
+
+  if (sortBy && cursor) {
+    collection = collection.filter((bookmark) => {
+      const value = Number(bookmark[sortBy] ?? 0);
+      return sortDirection === 'asc'
+        ? value > cursor.value || (value === cursor.value && bookmark.id > cursor.id)
+        : value < cursor.value || (value === cursor.value && bookmark.id > cursor.id);
+    });
+  }
 
   if (!includeArchived) {
     collection = collection.filter((bookmark) => !(bookmark.archived ?? false));
   }
 
-  if (typeof limit === 'number') {
-    return collection.limit(limit).toArray();
+  if (sortBy) {
+    const records = await collection.toArray();
+    records.sort((left, right) => {
+      const valueDifference = Number(left[sortBy] ?? 0) - Number(right[sortBy] ?? 0);
+      return (sortDirection === 'desc' ? -valueDifference : valueDifference) || left.id.localeCompare(right.id);
+    });
+    return typeof limit === 'number' ? records.slice(0, Math.max(0, Math.trunc(limit))) : records;
   }
 
-  return collection.toArray();
+  return typeof limit === 'number'
+    ? collection.limit(Math.max(0, Math.trunc(limit))).toArray()
+    : collection.toArray();
 };
 
 export const listPinnedBookmarks = async (
@@ -1299,45 +1390,62 @@ export const listPinnedBookmarks = async (
   return pinned;
 };
 
+export const deleteBookmarks = async (
+  ids: readonly string[],
+  database?: LinkOSaurusDB,
+): Promise<void> => {
+  const dbInstance = withDatabase(database);
+  const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (normalizedIds.length === 0) {
+    return;
+  }
+  let existing: Bookmark[] = [];
+  await runWriteTransaction(
+    dbInstance,
+    [
+      dbInstance.bookmarks,
+      dbInstance.tags,
+      dbInstance.comments,
+      dbInstance.readLater,
+      dbInstance.bookmarkMappings,
+    ],
+    async () => {
+      existing = await dbInstance.bookmarks.where('id').anyOf(normalizedIds).toArray();
+      await dbInstance.bookmarks.bulkDelete(normalizedIds);
+      await dbInstance.comments.where('bookmarkId').anyOf(normalizedIds).delete();
+      await dbInstance.readLater.bulkDelete(normalizedIds);
+      await dbInstance.bookmarkMappings.where('localId').anyOf(normalizedIds).delete();
+
+      const previousTags = existing.flatMap((bookmark) => normalizeTagList(bookmark.tags));
+      if (previousTags.length > 0) {
+        await updateTagUsageForDiff(dbInstance, previousTags, []);
+      }
+    },
+  );
+
+  const syncSettings = await getSyncSettingsSnapshot(dbInstance);
+  if (syncSettings.enableBidirectional) {
+    await Promise.all(
+      existing.map(async (bookmark) => {
+        const category = bookmark.categoryId ? await dbInstance.categories.get(bookmark.categoryId) : undefined;
+        const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
+        enqueueBookmarkDelete({
+          bookmark,
+          category,
+          board,
+          database: dbInstance,
+          settings: syncSettings,
+        });
+      }),
+    );
+  }
+};
+
 export const deleteBookmark = async (
   id: string,
   database?: LinkOSaurusDB,
 ): Promise<void> => {
-  const dbInstance = withDatabase(database);
-  const trimmedId = id.trim();
-  if (!trimmedId) {
-    return;
-  }
-  let existing: Bookmark | undefined;
-  await runWriteTransaction(
-    dbInstance,
-    [dbInstance.bookmarks, dbInstance.tags, dbInstance.comments],
-    async () => {
-      existing = await dbInstance.bookmarks.get(trimmedId);
-      await dbInstance.bookmarks.delete(trimmedId);
-      await dbInstance.comments.where('bookmarkId').equals(trimmedId).delete();
-      if (existing) {
-        const previousTags = normalizeTagList(existing.tags);
-        if (previousTags.length) {
-          await updateTagUsageForDiff(dbInstance, previousTags, []);
-        }
-      }
-    },
-  );
-  if (existing) {
-    const syncSettings = await getSyncSettingsSnapshot(dbInstance);
-    if (syncSettings.enableBidirectional) {
-      const category = existing.categoryId ? await dbInstance.categories.get(existing.categoryId) : undefined;
-      const board = category ? await dbInstance.boards.get(category.boardId) : undefined;
-      enqueueBookmarkDelete({
-        bookmark: existing,
-        category,
-        board,
-        database: dbInstance,
-        settings: syncSettings,
-      });
-    }
-  }
+  await deleteBookmarks([id], database);
 };
 
 export const createComment = async (

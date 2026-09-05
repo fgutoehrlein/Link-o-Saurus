@@ -26,6 +26,7 @@ type SessionMessageType =
   | 'session.openSelected'
   | 'session.delete'
   | 'settings.applyNewTab'
+  | 'settings.refreshContextMenu'
   | 'readLater.refreshBadge'
   | 'sidePanel.open'
   | 'sidePanel.close';
@@ -37,6 +38,7 @@ type SessionResponseType =
   | 'session.openSelected.result'
   | 'session.delete.result'
   | 'settings.applyNewTab.result'
+  | 'settings.refreshContextMenu.result'
   | 'readLater.refreshBadge.result'
   | 'sidePanel.open.result'
   | 'sidePanel.close.result'
@@ -49,6 +51,7 @@ export type BackgroundRequest =
   | { type: 'session.openSelected'; sessionId: string; tabIndexes: number[] }
   | { type: 'session.delete'; sessionId: string }
   | { type: 'settings.applyNewTab'; enabled: boolean }
+  | { type: 'settings.refreshContextMenu' }
   | { type: 'readLater.refreshBadge' }
   | { type: 'sidePanel.open'; windowId?: number }
   | { type: 'sidePanel.close'; windowId?: number };
@@ -60,6 +63,7 @@ export type BackgroundResponse =
   | { type: 'session.openSelected.result'; opened: number }
   | { type: 'session.delete.result'; sessionId: string }
   | { type: 'settings.applyNewTab.result'; enabled: boolean }
+  | { type: 'settings.refreshContextMenu.result' }
   | { type: 'readLater.refreshBadge.result'; count: number }
   | { type: 'sidePanel.open.result'; opened: boolean }
   | { type: 'sidePanel.close.result'; closed: boolean }
@@ -88,6 +92,7 @@ const MESSAGE_TYPES: ReadonlySet<SessionMessageType> = new Set([
   'session.openSelected',
   'session.delete',
   'settings.applyNewTab',
+  'settings.refreshContextMenu',
   'readLater.refreshBadge',
   'sidePanel.open',
   'sidePanel.close',
@@ -101,6 +106,7 @@ const RESPONSE_TYPES: ReadonlySet<SessionResponseType> = new Set([
   'session.delete.result',
   'session.error',
   'settings.applyNewTab.result',
+  'settings.refreshContextMenu.result',
   'readLater.refreshBadge.result',
   'sidePanel.open.result',
   'sidePanel.close.result',
@@ -136,6 +142,7 @@ export const validateBackgroundRequest = (value: unknown): BackgroundRequestVali
   switch (type) {
     case 'quickSave.getActiveTab':
     case 'readLater.refreshBadge':
+    case 'settings.refreshContextMenu':
       return { ok: true, value: { type } };
     case 'session.saveCurrentWindow': {
       const { title } = value;

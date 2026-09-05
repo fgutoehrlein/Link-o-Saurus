@@ -21,8 +21,8 @@ import {
   createTag,
   deleteBoard,
   deleteBookmark,
+  deleteBookmarks,
   deleteCategory,
-  deleteComment,
   deleteReadLater,
   deleteSession,
   deleteTag,
@@ -222,6 +222,38 @@ describe('IndexedDB data layer', () => {
       'bookmark-2',
       'bookmark-1',
     ]);
+  });
+
+  it('supports deterministic indexed sorting and cursor pagination', async () => {
+    await createBookmarks(
+      [0, 1, 2, 3].map((index) => ({
+        id: `paged-${index}`,
+        url: `https://example.com/${index}`,
+        title: `Paged ${index}`,
+        tags: [],
+        createdAt: 100 + Math.floor(index / 2),
+        updatedAt: 100 + index,
+      })),
+      database,
+    );
+
+    const firstPage = await listBookmarks(
+      { includeArchived: true, sortBy: 'createdAt', sortDirection: 'desc', limit: 2 },
+      database,
+    );
+    expect(firstPage.map((bookmark) => bookmark.id)).toEqual(['paged-2', 'paged-3']);
+
+    const nextPage = await listBookmarks(
+      {
+        includeArchived: true,
+        sortBy: 'createdAt',
+        sortDirection: 'desc',
+        limit: 2,
+        cursor: { value: firstPage[1]!.createdAt, id: firstPage[1]!.id },
+      },
+      database,
+    );
+    expect(nextPage.map((bookmark) => bookmark.id)).toEqual(['paged-0', 'paged-1']);
   });
 
   it('adjusts tag usage counts when bookmark tags change', async () => {
@@ -467,6 +499,28 @@ describe('IndexedDB data layer', () => {
     expect(await listComments('bookmark-comments-2', database)).toHaveLength(0);
   });
 
+  it('deletes multiple bookmarks and their dependent data in one operation', async () => {
+    await createBookmark({ id: 'bulk-delete-1', url: 'https://one.example', title: 'One', tags: ['shared'] }, database);
+    await createBookmark({ id: 'bulk-delete-2', url: 'https://two.example', title: 'Two', tags: ['shared'] }, database);
+    await createComment({ bookmarkId: 'bulk-delete-1', author: 'A', body: 'Note' }, database);
+    await createComment({ bookmarkId: 'bulk-delete-2', author: 'B', body: 'Note' }, database);
+    await saveReadLater({ bookmarkId: 'bulk-delete-1', dueAt: Date.now() }, database);
+    await saveReadLater({ bookmarkId: 'bulk-delete-2', dueAt: Date.now() }, database);
+    await database.bookmarkMappings.bulkPut([
+      { nativeId: 'native-1', localId: 'bulk-delete-1', nodeType: 'bookmark', lastSyncAt: Date.now() },
+      { nativeId: 'native-2', localId: 'bulk-delete-2', nodeType: 'bookmark', lastSyncAt: Date.now() },
+    ]);
+
+    await deleteBookmarks(['bulk-delete-1', 'bulk-delete-2'], database);
+
+    expect(await listBookmarks({ includeArchived: true }, database)).toHaveLength(0);
+    expect(await listComments('bulk-delete-1', database)).toHaveLength(0);
+    expect(await listComments('bulk-delete-2', database)).toHaveLength(0);
+    expect(await listReadLater(database)).toHaveLength(0);
+    expect(await database.bookmarkMappings.toArray()).toHaveLength(0);
+    expect((await getTag('shared', database))?.usageCount).toBe(0);
+  });
+
   it('performs CRUD for sessions', async () => {
     const session: CreateSessionInput = {
       id: 'session-1',
@@ -493,17 +547,20 @@ describe('IndexedDB data layer', () => {
   it('saves and merges user settings', async () => {
     const defaults = await getUserSettings(database);
     expect(defaults.theme).toBe('system');
+    expect(defaults.language).toBe('auto');
     expect(defaults.dashboardViewMode).toBe('list');
     expect(defaults.bookmarkSortMode).toBe('relevance');
 
     await saveUserSettings({
       theme: 'dark',
+      language: 'en',
       dashboardViewMode: 'tiles',
       bookmarkSortMode: 'alphabetical',
       newTabEnabled: true,
     }, database);
     const stored = await getUserSettings(database);
     expect(stored.theme).toBe('dark');
+    expect(stored.language).toBe('en');
     expect(stored.dashboardViewMode).toBe('tiles');
     expect(stored.bookmarkSortMode).toBe('alphabetical');
     expect(stored.newTabEnabled).toBe(true);

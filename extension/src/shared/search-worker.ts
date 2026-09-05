@@ -27,7 +27,7 @@ export type SearchHit = {
 
 type SearchSource = Iterable<Bookmark> | AsyncIterable<Bookmark>;
 
-const DEFAULT_LIMIT = 50;
+export const DEFAULT_SEARCH_LIMIT = 50;
 const STREAM_BATCH_SIZE = 250;
 
 const FIELD_WEIGHTS: Record<string, number> = {
@@ -36,8 +36,6 @@ const FIELD_WEIGHTS: Record<string, number> = {
   url: 2,
   notes: 1,
 };
-
-const simpleEncode = (value: string): string[] => [value.trim().toLowerCase()].filter(Boolean);
 
 let index = createDocumentIndex();
 const documents = new Map<string, BookmarkDocument>();
@@ -50,10 +48,10 @@ function createDocumentIndex() {
       id: 'id',
       store: true,
       index: [
-        { field: 'title', tokenize: 'forward', encode: simpleEncode },
-        { field: 'url', tokenize: 'forward', encode: simpleEncode },
-        { field: 'notes', tokenize: 'forward', encode: simpleEncode },
-        { field: 'tags', tokenize: 'forward', encode: simpleEncode },
+        { field: 'title', tokenize: 'forward' },
+        { field: 'url', tokenize: 'forward' },
+        { field: 'notes', tokenize: 'forward' },
+        { field: 'tags', tokenize: 'forward' },
       ],
     },
   });
@@ -151,10 +149,17 @@ const matchesFilters = (doc: BookmarkDocument, filters?: SearchFilters): boolean
 const query = async (
   rawQuery: string,
   filters?: SearchFilters,
-  limit: number = DEFAULT_LIMIT,
+  limit: number = DEFAULT_SEARCH_LIMIT,
 ): Promise<SearchHit[]> => {
   const queryText = rawQuery.trim();
-  const effectiveLimit = Math.max(limit, DEFAULT_LIMIT);
+  // A caller-provided limit is a contract, not a lower bound. This also
+  // prevents an empty result request from scanning/sorting the index.
+  const effectiveLimit = Number.isFinite(limit)
+    ? Math.max(0, Math.trunc(limit))
+    : DEFAULT_SEARCH_LIMIT;
+  if (effectiveLimit === 0) {
+    return [];
+  }
 
   if (!queryText) {
     const results: SearchHit[] = [];
@@ -180,8 +185,7 @@ const query = async (
   for (const fieldResult of rawResults) {
     const weight = FIELD_WEIGHTS[fieldResult.field] ?? 1;
     fieldResult.result.forEach((entry, resultIndex) => {
-      const identifierList = entry.id as Id[];
-      const primaryId = identifierList[0];
+      const primaryId = Array.isArray(entry.id) ? (entry.id as Id[])[0] : entry.id;
       if (typeof primaryId === 'undefined') {
         return;
       }
@@ -204,7 +208,12 @@ const query = async (
   }
 
   return Array.from(aggregated.values())
-    .sort((a, b) => b.score - a.score || b.bookmark.updatedAt - a.bookmark.updatedAt)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.bookmark.updatedAt - a.bookmark.updatedAt ||
+        a.id.localeCompare(b.id),
+    )
     .slice(0, effectiveLimit);
 };
 

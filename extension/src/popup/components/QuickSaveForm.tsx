@@ -22,6 +22,8 @@ type QuickSaveFormProps = {
   readonly onAddSuggestedTag: (tag: string) => void;
   readonly onFolderChange: (categoryId: string) => void;
   readonly onQuickSave: () => void;
+  readonly onOpenDuplicate: () => void;
+  readonly onRefreshSuggestions: () => void;
   readonly onReload: () => void;
   readonly onTagsChange: (tags: string[]) => void;
   readonly onTitleChange: (title: string) => void;
@@ -45,6 +47,8 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
   onAddSuggestedTag,
   onFolderChange,
   onQuickSave,
+  onOpenDuplicate,
+  onRefreshSuggestions,
   onReload,
   onTagsChange,
   onTitleChange,
@@ -73,6 +77,15 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
       </button>
     </div>
 
+    {duplicateEntry ? (
+      <p className="duplicate-notice" role="status">
+        Diese URL ist bereits gespeichert.{' '}
+        <button type="button" className="inline-link" onClick={onOpenDuplicate}>
+          Vorhandenes öffnen
+        </button>
+      </p>
+    ) : null}
+
     {showDetails ? (
       <div className="quick-save__details">
         <label>
@@ -87,7 +100,7 @@ export const QuickSaveForm: FunctionalComponent<QuickSaveFormProps> = ({
           <span id="quick-tags-label">Tags</span>
           <TagInput id="quick-tags" tags={tags} onChange={onTagsChange} />
         </label>
-        <AiSuggestions suggestions={aiSuggestions} loading={loadingSuggestions} onAddTag={onAddSuggestedTag} />
+        <AiSuggestions suggestions={aiSuggestions} loading={loadingSuggestions} onAddTag={onAddSuggestedTag} onRefresh={onRefreshSuggestions} />
         <label>
           <span>Folder (Vorschlag)</span>
           <select value={selectedCategoryId} onChange={(event) => onFolderChange((event.currentTarget as HTMLSelectElement).value)}>

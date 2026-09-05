@@ -2,16 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('flexsearch', () => {
   class MockDocument<T> {
-    constructor(options?: unknown) {
-      const indexes = (options as { document?: { index?: Array<{ encode?: unknown }> } })
-        ?.document?.index;
-      indexes?.forEach((entry) => {
-        if (typeof entry.encode !== 'function') {
-          throw new Error('Encoder must be a function');
-        }
-      });
-    }
-
     add(_doc: T): void {}
     remove(_id: string): void {}
     search(): unknown[] {
@@ -49,8 +39,18 @@ describe('search worker tag filtering', () => {
     await rebuildIndex([]);
   });
 
-  it('rebuilds the index without throwing when encoder is provided', async () => {
+  it('rebuilds the index without a custom encoder', async () => {
     await expect(rebuildIndex([createBookmark()])).resolves.toBeUndefined();
+  });
+
+  it('respects an explicit zero and small result limit', async () => {
+    await rebuildIndex([
+      createBookmark({ id: 'limit-a', title: 'Limit alpha' }),
+      createBookmark({ id: 'limit-b', title: 'Limit beta' }),
+    ]);
+
+    expect(await query('', undefined, 0)).toEqual([]);
+    expect(await query('', undefined, 1)).toHaveLength(1);
   });
 
   it('returns only bookmarks that match all requested tags', async () => {

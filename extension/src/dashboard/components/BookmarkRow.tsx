@@ -7,6 +7,7 @@ import type { BookmarkListData } from '../types';
 import { combineClassNames, formatCompactTimestamp, formatTimestamp } from '../utils/formatting';
 import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
+import { translateText, useI18n } from '../../shared/i18n';
 
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const TREE_INDENT_STEP = 18;
@@ -24,6 +25,7 @@ const getTreeRowStyle = (style: BookmarkRowProps['style'], baseIndent: number, d
 });
 
 export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Element => {
+  const { locale } = useI18n();
   const row = data.rows[index];
   const id = row?.kind === 'bookmark' ? row.bookmarkId : row?.id;
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -125,7 +127,7 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
   const isSelected = data.selected.has(id);
   const domain = getBookmarkDomain(bookmark.url);
   const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
-  const updatedLabel = formatCompactTimestamp(bookmark.updatedAt);
+  const updatedLabel = formatCompactTimestamp(bookmark.updatedAt, locale);
   const handleClick = (event: MouseEvent) => {
     data.onRowClick(event, id);
   };
@@ -233,9 +235,20 @@ export const BookmarkRow = ({ index, style, data }: BookmarkRowProps): JSX.Eleme
           </ul>
         ) : null}
       </div>
-      <time className="bookmark-updated" dateTime={new Date(bookmark.updatedAt).toISOString()} title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt)}`}>
+      <time className="bookmark-updated" dateTime={new Date(bookmark.updatedAt).toISOString()} title={`Zuletzt aktualisiert ${formatTimestamp(bookmark.updatedAt, locale)}`}>
         {updatedLabel}
       </time>
+      <button
+        type="button"
+        className="bookmark-open-button"
+        onClick={(event) => {
+          event.stopPropagation();
+          data.onOpenBookmark(bookmark);
+        }}
+        aria-label={translateText(`Öffnen: ${bookmark.title || bookmark.url}`, locale)}
+      >
+        {translateText('Öffnen', locale)}
+      </button>
     </div>
   );
 };

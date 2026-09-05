@@ -1,25 +1,25 @@
-export const formatTimestamp = (timestamp: number | undefined): string => {
+export const formatTimestamp = (timestamp: number | undefined, locale?: string): string => {
   if (!timestamp) {
     return '';
   }
   try {
-    const formatter = new Intl.DateTimeFormat(undefined, {
+    const formatter = new Intl.DateTimeFormat(locale, {
       dateStyle: 'medium',
       timeStyle: 'short',
     });
     return formatter.format(timestamp);
   } catch {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString(locale);
   }
 };
 
-export const formatCompactTimestamp = (timestamp: number | undefined): string => {
+export const formatCompactTimestamp = (timestamp: number | undefined, locale?: string): string => {
   if (!timestamp) {
     return '';
   }
 
   try {
-    const formatter = new Intl.DateTimeFormat('de-DE', {
+    const formatter = new Intl.DateTimeFormat(locale, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

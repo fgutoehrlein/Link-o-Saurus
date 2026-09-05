@@ -19,8 +19,26 @@ type SaveBookmarkInput = {
 
 type QuickSaveContext = {
   readonly aiSuggestions: AiSuggestionResult | null;
+  readonly requestSuggestions: () => Promise<AiSuggestionResult | null>;
   readonly selectedCategoryId: string;
 };
+
+export const resolveAutomaticSaveValues = ({
+  suggestions,
+  tags,
+  selectedCategoryId,
+  manualTagEdits,
+  manualFolderEdits,
+}: {
+  suggestions: AiSuggestionResult | null;
+  tags: readonly string[];
+  selectedCategoryId: string;
+  manualTagEdits: boolean;
+  manualFolderEdits: boolean;
+}): Pick<SaveBookmarkInput, 'tags' | 'categoryId'> => ({
+  tags: !manualTagEdits && tags.length === 0 ? suggestions?.tags.slice(0, 6).map((entry) => entry.tag) ?? [] : [...tags],
+  categoryId: !manualFolderEdits && !selectedCategoryId ? suggestions?.bestFolder?.category.id : selectedCategoryId || undefined,
+});
 
 export const useQuickSave = () => {
   const resolveActiveTab = useActiveTab();
@@ -83,17 +101,17 @@ export const useQuickSave = () => {
     });
   }, []);
 
-  const handleQuickSave = useCallback(async ({ aiSuggestions, selectedCategoryId }: QuickSaveContext) => {
+  const handleQuickSave = useCallback(async ({ aiSuggestions, requestSuggestions, selectedCategoryId }: QuickSaveContext) => {
     if (saving) {
       return;
     }
     setSaving(true);
     setStatus(null);
     try {
-      const suggestedTags = aiSuggestions?.tags.slice(0, 6).map((entry) => entry.tag) ?? [];
-      const effectiveTags = !manualTagEdits && tags.length === 0 ? suggestedTags : tags;
-      const effectiveCategoryId = !manualFolderEdits && !selectedCategoryId ? aiSuggestions?.bestFolder?.category.id : selectedCategoryId;
-      const bookmark = await saveBookmark({ title, url, tags: effectiveTags, categoryId: effectiveCategoryId || undefined });
+      const needsSuggestions = (!manualTagEdits && tags.length === 0) || (!manualFolderEdits && !selectedCategoryId);
+      const suggestions = needsSuggestions ? await requestSuggestions() : aiSuggestions;
+      const values = resolveAutomaticSaveValues({ suggestions, tags, selectedCategoryId, manualTagEdits, manualFolderEdits });
+      const bookmark = await saveBookmark({ title, url, ...values });
       setStatus({ tone: 'success', text: 'Gespeichert. Mit Enter kannst du sofort den nächsten Tab sichern.' });
       setTags([]);
       setManualTagEdits(false);

@@ -2,7 +2,6 @@ import { FunctionalComponent } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { listCategories } from '../shared/db';
 import type { Bookmark, Category } from '../shared/types';
-import { capE2EReadyTimestamp } from '../shared/e2e-flags';
 import { PopupHeader } from './components/PopupHeader';
 import { PopupFooter } from './components/PopupFooter';
 import { QuickAccessList } from './components/QuickAccessList';
@@ -43,7 +42,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
 
   const quickSave = useQuickSave();
 
-  const { aiSuggestions, loadingSuggestions, setAiSuggestions } = useAiSuggestions({
+  const { aiSuggestions, loadingSuggestions, setAiSuggestions, requestSuggestions, refreshSuggestions } = useAiSuggestions({
     pageSignals: quickSave.pageSignals,
     selectedCategoryId,
     showDetails,
@@ -55,7 +54,7 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
   const popupSearch = usePopupSearch(quickSave.url);
 
   useEffect(() => {
-    const readyTimestamp = capE2EReadyTimestamp(performance.now());
+    const readyTimestamp = performance.now();
     window.__LINKOSAURUS_POPUP_READY = true;
     window.__LINKOSAURUS_POPUP_READY_TIME = readyTimestamp;
     return () => {
@@ -205,13 +204,17 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
             setSelectedCategoryId(categoryId);
           }}
           onQuickSave={() => {
-            void quickSave.handleQuickSave({ aiSuggestions, selectedCategoryId }).then((bookmark) => {
+            void quickSave.handleQuickSave({ aiSuggestions, requestSuggestions, selectedCategoryId }).then((bookmark) => {
               if (bookmark) {
                 popupSearch.addBookmarkToIndex(bookmark);
                 setAiSuggestions(null);
               }
             });
           }}
+          onOpenDuplicate={() => {
+            if (popupSearch.duplicateEntry) void handleOpenUrl(popupSearch.duplicateEntry.bookmark);
+          }}
+          onRefreshSuggestions={refreshSuggestions}
           onReload={() => void handleReloadQuickSave()}
           onTagsChange={(next) => {
             quickSave.setManualTagEdits(true);

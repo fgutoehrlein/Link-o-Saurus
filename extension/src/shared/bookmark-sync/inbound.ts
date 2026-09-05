@@ -426,7 +426,7 @@ export const initializeInboundSync = async (settings: SyncSettings): Promise<voi
   }
   listenersRegistered = true;
   const api = getBookmarksApi();
-  api.onCreated.addListener((id, node) => {
+  api.onCreated.addListener((_id, node) => {
     queue.enqueue(() => handleCreated(node, settings));
   });
   api.onChanged.addListener((id, changeInfo) => {

@@ -19,7 +19,8 @@ import type {
   ImportProgressHandler,
 } from '../shared/import-export-worker';
 import type { ExportFormat, ImportProgress, ImportResult } from '../shared/import-export';
-import type { Rule } from '../shared/types';
+import type { LanguagePreference, Rule } from '../shared/types';
+import { useI18n } from '../shared/i18n';
 import './App.css';
 import { computeProgressRatio, formatPercent, stageLabel } from './utils/import-progress';
 import { describeRuleActions, describeRuleConditions, parseCsvInput } from './utils/rule-formatting';
@@ -46,6 +47,7 @@ const INITIAL_RULE_FORM: RuleFormState = {
 };
 
 const App: FunctionalComponent = () => {
+  const { languagePreference, locale, setLanguagePreference } = useI18n();
   const workerRef = useRef<Worker>();
   const apiRef = useRef<Remote<ImportExportWorkerApi>>();
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -80,6 +82,7 @@ const App: FunctionalComponent = () => {
         if (!cancelled) {
           setNewTabEnabled(settings.newTabEnabled);
           setSyncSettings(settings.bookmarkSync);
+          document.documentElement.dataset.theme = settings.theme;
         }
       } catch (err) {
         console.error('Failed to load user settings', err);
@@ -422,41 +425,85 @@ const App: FunctionalComponent = () => {
 
   return (
     <main class="options">
-      <header>
-        <h1>Link-O-Saurus Datenportabilität</h1>
-        <p>Importiere oder exportiere deine Bookmarks ohne die UI zu blockieren.</p>
+      <header class="options-header">
+        <p class="options-eyebrow">Link-O-Saurus</p>
+        <h1>Einstellungen</h1>
+        <p>Verwalte Darstellung, Synchronisation, Regeln und deine portablen Bookmark-Daten.</p>
       </header>
 
-      <section class="panel">
-        <h2>Neuer Tab (Opt-in)</h2>
-        <p>
-          Link-o-Saurus kann als besonders schneller Startpunkt genutzt werden. Die Einstellung bleibt komplett
-          optional und lässt sich jederzeit zurücksetzen.
-        </p>
+      <nav class="options-nav" aria-label="Einstellungsbereiche">
+        <a href="#general">Allgemein</a>
+        <a href="#automation">Synchronisation</a>
+        <a href="#data">Daten</a>
+      </nav>
 
-        <label class="toggle">
-          <input
-            type="checkbox"
-            checked={newTabEnabled}
-            disabled={isLoadingSettings || isUpdatingNewTab}
-            onChange={(event) => updateNewTabPreference(event.currentTarget.checked)}
-          />
-          <span>Link-o-Saurus als neuen Tab verwenden</span>
-        </label>
+      <section class="settings-group" id="general" aria-labelledby="general-title">
+        <div class="settings-group-heading">
+          <p class="options-eyebrow">Arbeitsbereich</p>
+          <h2 id="general-title">Allgemein</h2>
+        </div>
+        <div class="settings-grid">
+          <section class="panel">
+            <h3>Sprache</h3>
+            <p>Wähle die Sprache der Erweiterung. Bei „Automatisch“ wird die Browser-Sprache verwendet.</p>
+            <label class="toggle">
+              <span>Sprache</span>
+              <select
+                value={languagePreference}
+                onChange={(event) => {
+                  void setLanguagePreference(event.currentTarget.value as LanguagePreference);
+                }}
+              >
+                <option value="auto">Automatisch (Browser-Sprache)</option>
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+                <option value="pt-BR">Português (Brasil)</option>
+                <option value="it">Italiano</option>
+                <option value="ru">Русский</option>
+                <option value="ja">日本語</option>
+              </select>
+            </label>
+          </section>
 
-        <p class="hint">
-          Beim Aktivieren wird die <code>chrome_url_overrides</code>-Zuweisung gesetzt. Chrome lädt sie nach dem
-          Öffnen des nächsten Tabs (oder nach einem manuellen Reload unter <code>chrome://extensions</code>). Firefox
-          zeigt einen Hinweis, falls du das Add-on zusätzlich im Einstellungsdialog als Startseite freigeben musst.
-        </p>
+          <section class="panel">
+            <h3>Neuer Tab <span class="panel-label">Opt-in</span></h3>
+            <p>
+              Link-o-Saurus kann als besonders schneller Startpunkt genutzt werden. Die Einstellung bleibt komplett
+              optional und lässt sich jederzeit zurücksetzen.
+            </p>
 
-        {isUpdatingNewTab && <p class="status pending">Aktualisiere Einstellung…</p>}
-        {newTabMessage && <p class="status success">{newTabMessage}</p>}
-        {newTabError && <p class="status error">{newTabError}</p>}
+            <label class="toggle">
+              <input
+                type="checkbox"
+                checked={newTabEnabled}
+                disabled={isLoadingSettings || isUpdatingNewTab}
+                onChange={(event) => updateNewTabPreference(event.currentTarget.checked)}
+              />
+              <span>Link-o-Saurus als neuen Tab verwenden</span>
+            </label>
+
+            <p class="hint">
+              Beim Aktivieren wird die <code>chrome_url_overrides</code>-Zuweisung gesetzt. Chrome lädt sie nach dem
+              Öffnen des nächsten Tabs (oder nach einem manuellen Reload unter <code>chrome://extensions</code>). Firefox
+              zeigt einen Hinweis, falls du das Add-on zusätzlich im Einstellungsdialog als Startseite freigeben musst.
+            </p>
+
+            {isUpdatingNewTab && <p class="status pending">Aktualisiere Einstellung…</p>}
+            {newTabMessage && <p class="status success">{newTabMessage}</p>}
+            {newTabError && <p class="status error">{newTabError}</p>}
+          </section>
+        </div>
       </section>
 
-      <section class="panel">
-        <h2>Bookmark-Sync</h2>
+      <section class="settings-group" id="automation" aria-labelledby="automation-title">
+        <div class="settings-group-heading">
+          <p class="options-eyebrow">Automatisierung</p>
+          <h2 id="automation-title">Synchronisation &amp; Regeln</h2>
+        </div>
+        <section class="panel">
+        <h3>Bookmark-Sync</h3>
         <p>
           Steuere die bidirektionale Synchronisation mit dem nativen Lesezeichenbaum. Änderungen an den Einstellungen
           greifen sofort; bei Bedarf den Service Worker neu laden.
@@ -507,10 +554,10 @@ const App: FunctionalComponent = () => {
 
         {syncMessage && <p class="status success">{syncMessage}</p>}
         {syncError && <p class="status error">{syncError}</p>}
-      </section>
+        </section>
 
       <section class="panel">
-        <h2>Smart Rules</h2>
+        <h3>Smart Rules</h3>
         <p>
           Automatisiere die Kategorisierung neuer Bookmarks anhand von Host- oder URL-Mustern.
           Regeln wirken auf alle Speicher-Vorgänge, inklusive Importen.
@@ -641,9 +688,16 @@ const App: FunctionalComponent = () => {
           <p class="rule-empty">Noch keine Regeln gespeichert.</p>
         )}
       </section>
+      </section>
 
-      <section class="panel">
-        <h2>Import</h2>
+      <section class="settings-group" id="data" aria-labelledby="data-title">
+        <div class="settings-group-heading">
+          <p class="options-eyebrow">Datensouveränität</p>
+          <h2 id="data-title">Import &amp; Export</h2>
+        </div>
+        <div class="settings-grid">
+          <section class="panel">
+        <h3>Import</h3>
         <p>
           Unterstützte Formate: <strong>Netscape Bookmark HTML</strong> (Chrome/Firefox) und das{' '}
           <strong>Link-O-Saurus JSON</strong>-Format.
@@ -691,26 +745,26 @@ const App: FunctionalComponent = () => {
           <dl class="stats">
             <div>
               <dt>Verarbeitet</dt>
-              <dd>{importResult.stats.processedBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.processedBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Importiert</dt>
-              <dd>{importResult.stats.createdBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.createdBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Übersprungen</dt>
-              <dd>{importResult.stats.skippedBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.skippedBookmarks.toLocaleString(locale)}</dd>
             </div>
             <div>
               <dt>Duplikate</dt>
-              <dd>{importResult.stats.duplicateBookmarks.toLocaleString()}</dd>
+              <dd>{importResult.stats.duplicateBookmarks.toLocaleString(locale)}</dd>
             </div>
           </dl>
         )}
-      </section>
+          </section>
 
-      <section class="panel">
-        <h2>Export</h2>
+          <section class="panel">
+        <h3>Export</h3>
         <p>Erzeuge portierbare Backups. Der HTML-Export ist kompatibel mit Chrome und Firefox.</p>
 
         <div class="export-actions">
@@ -733,6 +787,8 @@ const App: FunctionalComponent = () => {
           />
           <span>Favicons in ZIP aufnehmen (falls verfügbar)</span>
         </label>
+          </section>
+        </div>
       </section>
 
       {error && (

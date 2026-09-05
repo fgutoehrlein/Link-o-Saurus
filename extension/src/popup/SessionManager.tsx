@@ -3,13 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { listSessions } from '../shared/db';
 import type { SessionPack } from '../shared/types';
 import { sendBackgroundMessage } from '../shared/messaging';
+import { translateText, useI18n } from '../shared/i18n';
 
 type Feedback = { tone: 'info' | 'error'; message: string };
 
-const formatTimestamp = (timestamp: number): string =>
-  new Date(timestamp).toLocaleString();
+const formatTimestamp = (timestamp: number, locale: string): string =>
+  new Date(timestamp).toLocaleString(locale);
 
 const SessionManager: FunctionalComponent = () => {
+  const { locale } = useI18n();
   const [sessions, setSessions] = useState<SessionPack[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedTabIndexes, setSelectedTabIndexes] = useState<Set<number>>(new Set());
@@ -46,12 +48,12 @@ const SessionManager: FunctionalComponent = () => {
       );
       setFeedback((prev) => (prev?.tone === 'error' ? null : prev));
     } catch (error) {
-      console.error('[Link-o-Saurus] Sessions konnten nicht geladen werden', error);
-      setFeedback({ tone: 'error', message: 'Sessions konnten nicht geladen werden.' });
+      console.error(`[Link-o-Saurus] ${translateText('Sessions konnten nicht geladen werden', locale)}`, error);
+      setFeedback({ tone: 'error', message: translateText('Sessions konnten nicht geladen werden.', locale) });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     void refreshSessions();
@@ -84,28 +86,28 @@ const SessionManager: FunctionalComponent = () => {
           title: trimmedTitle.length ? trimmedTitle : undefined,
         });
         if (response.type !== 'session.saveCurrentWindow.result') {
-          throw new Error('Unerwartete Antwort beim Speichern.');
+          throw new Error(translateText('Unerwartete Antwort beim Speichern.', locale));
         }
         await refreshSessions(response.session.id);
         setTitleInput('');
         setFeedback({
           tone: 'info',
-          message: `Session mit ${response.session.tabs.length} Tabs gespeichert.`,
+          message: translateText(`Session mit ${response.session.tabs.length} Tabs gespeichert.`, locale),
         });
       } catch (error) {
-        console.error('[Link-o-Saurus] Session konnte nicht gespeichert werden', error);
+        console.error(`[Link-o-Saurus] ${translateText('Session konnte nicht gespeichert werden', locale)}`, error);
         setFeedback({
           tone: 'error',
           message:
             error instanceof Error
-              ? error.message
-              : 'Session konnte nicht gespeichert werden.',
+              ? translateText(error.message, locale)
+              : translateText('Session konnte nicht gespeichert werden.', locale),
         });
       } finally {
         setSaving(false);
       }
     },
-    [refreshSessions, saving, titleInput],
+    [locale, refreshSessions, saving, titleInput],
   );
 
   const handleSelectSession = useCallback(
@@ -142,22 +144,22 @@ const SessionManager: FunctionalComponent = () => {
         sessionId: selectedSession.id,
       });
       if (response.type !== 'session.openAll.result') {
-        throw new Error('Unerwartete Antwort beim Öffnen.');
+        throw new Error(translateText('Unerwartete Antwort beim Öffnen.', locale));
       }
-      setFeedback({ tone: 'info', message: `${response.opened} Tabs geöffnet.` });
+      setFeedback({ tone: 'info', message: translateText(`${response.opened} Tabs geöffnet.`, locale) });
     } catch (error) {
-      console.error('[Link-o-Saurus] Session konnte nicht geöffnet werden', error);
+      console.error(`[Link-o-Saurus] ${translateText('Session konnte nicht geöffnet werden', locale)}`, error);
       setFeedback({
         tone: 'error',
         message:
           error instanceof Error
-            ? error.message
-            : 'Tabs konnten nicht geöffnet werden.',
+            ? translateText(error.message, locale)
+            : translateText('Tabs konnten nicht geöffnet werden.', locale),
       });
     } finally {
       setWorking(false);
     }
-  }, [selectedSession, working]);
+  }, [locale, selectedSession, working]);
 
   const handleOpenSelection = useCallback(async () => {
     if (!selectedSession || working) {
@@ -165,7 +167,7 @@ const SessionManager: FunctionalComponent = () => {
     }
     const indexes = Array.from(selectedTabIndexes).sort((a, b) => a - b);
     if (!indexes.length) {
-      setFeedback({ tone: 'error', message: 'Keine Tabs ausgewählt.' });
+      setFeedback({ tone: 'error', message: translateText('Keine Tabs ausgewählt.', locale) });
       return;
     }
     setWorking(true);
@@ -177,22 +179,22 @@ const SessionManager: FunctionalComponent = () => {
         tabIndexes: indexes,
       });
       if (response.type !== 'session.openSelected.result') {
-        throw new Error('Unerwartete Antwort beim Öffnen.');
+        throw new Error(translateText('Unerwartete Antwort beim Öffnen.', locale));
       }
-      setFeedback({ tone: 'info', message: `${response.opened} Tabs geöffnet.` });
+      setFeedback({ tone: 'info', message: translateText(`${response.opened} Tabs geöffnet.`, locale) });
     } catch (error) {
-      console.error('[Link-o-Saurus] Auswahl konnte nicht geöffnet werden', error);
+      console.error(`[Link-o-Saurus] ${translateText('Auswahl konnte nicht geöffnet werden', locale)}`, error);
       setFeedback({
         tone: 'error',
         message:
           error instanceof Error
-            ? error.message
-            : 'Auswahl konnte nicht geöffnet werden.',
+            ? translateText(error.message, locale)
+            : translateText('Auswahl konnte nicht geöffnet werden.', locale),
       });
     } finally {
       setWorking(false);
     }
-  }, [selectedSession, selectedTabIndexes, working]);
+  }, [locale, selectedSession, selectedTabIndexes, working]);
 
   const handleDeleteSession = useCallback(async () => {
     if (!selectedSession || working) {
@@ -206,23 +208,23 @@ const SessionManager: FunctionalComponent = () => {
         sessionId: selectedSession.id,
       });
       if (response.type !== 'session.delete.result') {
-        throw new Error('Unerwartete Antwort beim Löschen.');
+        throw new Error(translateText('Unerwartete Antwort beim Löschen.', locale));
       }
       await refreshSessions();
-      setFeedback({ tone: 'info', message: 'Session gelöscht.' });
+      setFeedback({ tone: 'info', message: translateText('Session gelöscht.', locale) });
     } catch (error) {
-      console.error('[Link-o-Saurus] Session konnte nicht gelöscht werden', error);
+      console.error(`[Link-o-Saurus] ${translateText('Session konnte nicht gelöscht werden', locale)}`, error);
       setFeedback({
         tone: 'error',
         message:
           error instanceof Error
-            ? error.message
-            : 'Session konnte nicht gelöscht werden.',
+            ? translateText(error.message, locale)
+            : translateText('Session konnte nicht gelöscht werden.', locale),
       });
     } finally {
       setWorking(false);
     }
-  }, [refreshSessions, selectedSession, working]);
+  }, [locale, refreshSessions, selectedSession, working]);
 
   return (
     <section class="session-panel" aria-label="Tab-Sessions sichern und wiederherstellen">
@@ -272,7 +274,7 @@ const SessionManager: FunctionalComponent = () => {
                   <span class="session-item__meta">
                     <span>{session.tabs.length} Tabs</span>
                     <time dateTime={new Date(session.savedAt).toISOString()}>
-                      {formatTimestamp(session.savedAt)}
+                      {formatTimestamp(session.savedAt, locale)}
                     </time>
                   </span>
                 </button>

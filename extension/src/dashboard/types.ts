@@ -1,6 +1,19 @@
 import type { Bookmark, Board, Category } from '../shared/types';
 import type { TagFilterMode, TagFilterState } from '../shared/tag-filter';
 
+export type DraftBookmark = {
+  title: string;
+  url: string;
+  tags: string;
+  notes: string;
+  categoryId?: string;
+};
+
+export type BatchMoveState = {
+  boardId: string;
+  categoryId: string;
+};
+
 export type BookmarkListEntry = {
   readonly id: string;
   readonly bookmark: Bookmark;

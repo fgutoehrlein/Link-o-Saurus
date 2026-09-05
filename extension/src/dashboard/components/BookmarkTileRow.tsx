@@ -7,6 +7,7 @@ import type { BookmarkTileListData } from '../types';
 import { formatTimestamp, combineClassNames } from '../utils/formatting';
 import { getBookmarkDomain } from '../utils/bookmark-display';
 import { BookmarkAvatar } from './BookmarkAvatar';
+import { translateText, useI18n } from '../../shared/i18n';
 
 const MAX_VISIBLE_BOOKMARK_TAGS = 3;
 const MAX_VISIBLE_TILE_TITLE_LINES = 3;
@@ -15,6 +16,7 @@ const MAX_VISIBLE_TILE_DETAIL_LINES = 1;
 type BookmarkTileRowProps = ListChildComponentProps<BookmarkTileListData>;
 
 export const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): JSX.Element => {
+  const { locale } = useI18n();
   const row = data.rows[index] ?? [];
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -89,7 +91,7 @@ export const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): J
           '--tile-detail-line-clamp': String(MAX_VISIBLE_TILE_DETAIL_LINES),
         } as CSSProperties;
         const secondaryMeta = [category?.title, board?.title].filter(Boolean).join(' · ');
-        const updatedLabel = formatTimestamp(bookmark.updatedAt);
+        const updatedLabel = formatTimestamp(bookmark.updatedAt, locale);
         return (
           <article
             key={id}
@@ -178,6 +180,17 @@ export const BookmarkTileRow = ({ index, style, data }: BookmarkTileRowProps): J
             ) : (
               <div className="bookmark-tags bookmark-tags-empty">Keine Tags</div>
             )}
+            <button
+              type="button"
+              className="bookmark-open-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onOpenBookmark(bookmark);
+              }}
+              aria-label={translateText(`Öffnen: ${bookmark.title || bookmark.url}`, locale)}
+            >
+              {translateText('Öffnen', locale)}
+            </button>
           </article>
         );
       })}
