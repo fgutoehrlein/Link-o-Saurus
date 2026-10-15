@@ -25,6 +25,7 @@ import './App.css';
 import { computeProgressRatio, formatPercent, stageLabel } from './utils/import-progress';
 import { describeRuleActions, describeRuleConditions, parseCsvInput } from './utils/rule-formatting';
 import { downloadBlob } from './utils/download';
+import GitHubSyncPanel from './GitHubSyncPanel';
 
 const createWorker = (): Worker => new ImportExportWorker();
 
@@ -555,6 +556,8 @@ const App: FunctionalComponent = () => {
         {syncMessage && <p class="status success">{syncMessage}</p>}
         {syncError && <p class="status error">{syncError}</p>}
         </section>
+
+        <GitHubSyncPanel />
 
       <section class="panel">
         <h3>Smart Rules</h3>

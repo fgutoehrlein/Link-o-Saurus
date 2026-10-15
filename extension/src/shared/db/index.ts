@@ -1,6 +1,8 @@
 import Dexie, { Table } from 'dexie';
 import { enqueueBookmarkCreate, enqueueBookmarkDelete, enqueueBookmarkUpdate } from '../bookmark-sync/outbound';
 import type { Mapping, SyncSettings } from '../bookmark-sync/types';
+import { syncSnapshotsHaveSameData, validateSyncSnapshot } from '../github-sync/snapshot';
+import type { SyncSnapshotV1 } from '../github-sync/types';
 import type {
   Board,
   Bookmark,
@@ -58,6 +60,7 @@ export interface FaviconCache {
 }
 
 type UserSettingsRecord = UserSettings & { id: typeof USER_SETTINGS_KEY };
+type CloudSyncStateRecord = { id: string; snapshot: SyncSnapshotV1; fileSha: string };
 
 export type CreateBoardInput = Omit<Board, 'createdAt' | 'updatedAt'> & {
   createdAt?: number;
@@ -305,6 +308,7 @@ export class LinkOSaurusDB extends Dexie {
   tags!: Table<Tag, string>;
   rules!: Table<Rule, string>;
   bookmarkMappings!: Table<Mapping, string>;
+  cloudSyncState!: Table<CloudSyncStateRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -487,6 +491,21 @@ export class LinkOSaurusDB extends Dexie {
         await tagTable.clear();
         await tagTable.bulkPut(Array.from(merged.values()));
       });
+
+    this.version(9).stores({
+      boards: 'id, sortOrder, updatedAt',
+      categories: 'id, boardId, sortOrder',
+      bookmarks:
+        'id, categoryId, archived, pinned, createdAt, updatedAt, visitCount, lastVisitedAt, *tags',
+      comments: 'id, bookmarkId, createdAt',
+      sessions: 'id, savedAt',
+      userSettings: 'id',
+      tags: 'id, &path, usageCount, *slugParts, name',
+      rules: 'id, enabled, name',
+      readLater: 'bookmarkId, dueAt, snoozedUntil',
+      bookmarkMappings: '&nativeId, localId, nodeType',
+      cloudSyncState: 'id',
+    });
   }
 }
 
@@ -1851,6 +1870,7 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
       dbInstance.tags,
       dbInstance.rules,
       dbInstance.bookmarkMappings,
+      dbInstance.cloudSyncState,
     ],
     async () => {
       await Promise.all([
@@ -1863,9 +1883,90 @@ export const clearDatabase = async (database?: LinkOSaurusDB): Promise<void> => 
         dbInstance.tags.clear(),
         dbInstance.rules.clear(),
         dbInstance.bookmarkMappings.clear(),
+        dbInstance.cloudSyncState.clear(),
       ]);
     },
   );
+};
+
+export const applySyncSnapshot = async (
+  database: LinkOSaurusDB,
+  input: SyncSnapshotV1,
+  expectedCurrent?: SyncSnapshotV1,
+): Promise<void> => {
+  const snapshot = validateSyncSnapshot(input);
+  const snapshotTables: AnyTable[] = [
+    database.boards,
+    database.categories,
+    database.bookmarks,
+    database.tags,
+    database.comments,
+    database.readLater,
+    database.sessions,
+  ];
+  const tables: AnyTable[] = [
+    ...snapshotTables,
+    database.bookmarkMappings,
+  ];
+  await database.transaction('rw', tables, async () => {
+    if (expectedCurrent) {
+      const current = await Promise.all([
+        database.boards.toArray(),
+        database.categories.toArray(),
+        database.bookmarks.toArray(),
+        database.tags.toArray(),
+        database.comments.toArray(),
+        database.readLater.toArray(),
+        database.sessions.toArray(),
+      ]);
+      const [boards, categories, bookmarks, tags, comments, readLater, sessions] = current;
+      if (!syncSnapshotsHaveSameData(expectedCurrent, {
+        ...expectedCurrent, boards, categories, bookmarks, tags, comments, readLater, sessions,
+      })) throw new Error('Local data changed during sync. Retry the sync to include the latest edits.');
+    }
+    await Promise.all(snapshotTables.map((table) => table.clear()));
+    await Promise.all([
+      database.boards.bulkPut(snapshot.boards),
+      database.categories.bulkPut(snapshot.categories),
+      database.bookmarks.bulkPut(snapshot.bookmarks),
+      database.tags.bulkPut(snapshot.tags),
+      database.comments.bulkPut(snapshot.comments),
+      database.readLater.bulkPut(snapshot.readLater),
+      database.sessions.bulkPut(snapshot.sessions),
+    ]);
+    const boardIds = new Set(snapshot.boards.map((record) => record.id));
+    const categoryIds = new Set(snapshot.categories.map((record) => record.id));
+    const bookmarkIds = new Set(snapshot.bookmarks.map((record) => record.id));
+    const staleMappings = (await database.bookmarkMappings.toArray()).filter((mapping) =>
+      mapping.nodeType === 'bookmark'
+        ? !mapping.localId || !bookmarkIds.has(mapping.localId)
+        : (!!mapping.boardId && !boardIds.has(mapping.boardId))
+          || (!!mapping.categoryId && !categoryIds.has(mapping.categoryId)),
+    );
+    await database.bookmarkMappings.bulkDelete(staleMappings.map((mapping) => mapping.nativeId));
+  });
+};
+
+export const getSyncBaseline = async (
+  database?: LinkOSaurusDB,
+  targetKey = 'baseline',
+): Promise<{ snapshot: SyncSnapshotV1; fileSha: string } | undefined> => {
+  const record = await withDatabase(database).cloudSyncState.get(targetKey);
+  return record ? { snapshot: validateSyncSnapshot(record.snapshot), fileSha: record.fileSha } : undefined;
+};
+
+export const setSyncBaseline = async (
+  database: LinkOSaurusDB,
+  baseline: { snapshot: SyncSnapshotV1; fileSha: string },
+  targetKey = 'baseline',
+): Promise<void> => {
+  const snapshot = validateSyncSnapshot(baseline.snapshot);
+  if (!baseline.fileSha.trim()) throw new Error('Sync baseline file SHA must not be empty');
+  await database.cloudSyncState.put({ id: targetKey, snapshot, fileSha: baseline.fileSha.trim() });
+};
+
+export const clearSyncBaseline = async (database?: LinkOSaurusDB, targetKey = 'baseline'): Promise<void> => {
+  await withDatabase(database).cloudSyncState.delete(targetKey);
 };
 
 export const createDatabase = (name: string = DB_NAME): LinkOSaurusDB => new LinkOSaurusDB(name);

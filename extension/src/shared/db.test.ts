@@ -55,10 +55,32 @@ import {
   updateRule,
   updateSession,
   updateTag,
+  applySyncSnapshot,
+  clearSyncBaseline,
+  getSyncBaseline,
+  setSyncBaseline,
 } from './db';
 import { canonicalizeTagId } from './tag-utils';
+import type { SyncSnapshotV1 } from './github-sync/types';
+import { collectSyncSnapshot } from './github-sync/snapshot';
 
 const uniqueDbName = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const syncSnapshot: SyncSnapshotV1 = {
+  format: 'link-o-saurus-sync',
+  version: 1,
+  exportedAt: '2026-01-01T00:00:00.000Z',
+  boards: [{ id: 'sync-board', title: 'Sync', sortOrder: 0, createdAt: 1, updatedAt: 1 }],
+  categories: [{ id: 'sync-category', boardId: 'sync-board', title: 'Reading', sortOrder: 0 }],
+  bookmarks: [{
+    id: 'sync-bookmark', categoryId: 'sync-category', url: 'https://example.com/', title: 'Example',
+    tags: ['reading'], createdAt: 1, updatedAt: 1, visitCount: 0,
+  }],
+  tags: [{ id: 'reading', name: 'reading', path: 'reading', slugParts: ['reading'], usageCount: 1 }],
+  comments: [{ id: 'sync-comment', bookmarkId: 'sync-bookmark', author: 'Me', body: 'Useful', createdAt: 1 }],
+  readLater: [{ bookmarkId: 'sync-bookmark', dueAt: 2 }],
+  sessions: [{ id: 'sync-session', title: 'Research', savedAt: 1, tabs: [{ url: 'https://example.com/' }] }],
+};
 
 describe('IndexedDB data layer', () => {
   let database: LinkOSaurusDB;
@@ -69,6 +91,68 @@ describe('IndexedDB data layer', () => {
 
   afterEach(async () => {
     await database.delete();
+  });
+
+  it('applies a cloud snapshot atomically and preserves stable IDs', async () => {
+    await createBoard({ id: 'local-board', title: 'Local', sortOrder: 0 }, database);
+
+    await applySyncSnapshot(database, syncSnapshot);
+
+    expect(await database.boards.toArray()).toEqual(syncSnapshot.boards);
+    expect(await database.categories.toArray()).toEqual(syncSnapshot.categories);
+    expect(await database.bookmarks.toArray()).toEqual(syncSnapshot.bookmarks);
+    expect(await database.comments.toArray()).toEqual(syncSnapshot.comments);
+    expect(await database.readLater.toArray()).toEqual(syncSnapshot.readLater);
+    expect(await database.sessions.toArray()).toEqual(syncSnapshot.sessions);
+    expect(await database.bookmarkMappings.toArray()).toEqual([]);
+    expect(await database.userSettings.toArray()).toEqual([]);
+  });
+
+  it('keeps native bookmark mappings consistent with records retained by a snapshot', async () => {
+    await database.bookmarkMappings.bulkPut([
+      { nativeId: 'native-kept', localId: 'sync-bookmark', nodeType: 'bookmark', lastSyncAt: 1 },
+      { nativeId: 'native-removed', localId: 'deleted-bookmark', nodeType: 'bookmark', lastSyncAt: 1 },
+      { nativeId: 'folder-removed', categoryId: 'deleted-category', nodeType: 'folder', lastSyncAt: 1 },
+    ]);
+
+    await applySyncSnapshot(database, syncSnapshot);
+
+    expect(await database.bookmarkMappings.toArray()).toEqual([
+      { nativeId: 'native-kept', localId: 'sync-bookmark', nodeType: 'bookmark', lastSyncAt: 1 },
+    ]);
+  });
+
+  it('does not apply a snapshot if synced local data changed since it was collected', async () => {
+    await database.boards.put({ id: 'local-board', title: 'Before', sortOrder: 0, createdAt: 1, updatedAt: 1 });
+    const expected = await collectSyncSnapshot(database);
+    await database.boards.put({ id: 'local-board', title: 'Edited during sync', sortOrder: 0, createdAt: 1, updatedAt: 2 });
+
+    await expect(applySyncSnapshot(database, syncSnapshot, expected)).rejects.toThrow(/changed during sync/i);
+    expect(await database.boards.toArray()).toMatchObject([{ id: 'local-board', title: 'Edited during sync' }]);
+  });
+
+  it('persists and clears the common sync baseline', async () => {
+    const baseline = { snapshot: syncSnapshot, fileSha: 'blob-sha' };
+    await setSyncBaseline(database, baseline);
+    expect(await getSyncBaseline(database)).toEqual(baseline);
+
+    await clearSyncBaseline(database);
+    expect(await getSyncBaseline(database)).toBeUndefined();
+  });
+
+  it('stores independent baselines for each GitHub target', async () => {
+    await setSyncBaseline(database, { snapshot: syncSnapshot, fileSha: 'repo-a-sha' }, 'repo-a');
+
+    expect(await getSyncBaseline(database, 'repo-a')).toMatchObject({ fileSha: 'repo-a-sha' });
+    expect(await getSyncBaseline(database, 'repo-b')).toBeUndefined();
+  });
+
+  it('rolls back a failed snapshot write without changing existing data', async () => {
+    await createBoard({ id: 'local-board', title: 'Local', sortOrder: 0 }, database);
+    vi.spyOn(database.sessions, 'bulkPut').mockRejectedValueOnce(new Error('write failed'));
+
+    await expect(applySyncSnapshot(database, syncSnapshot)).rejects.toThrow('write failed');
+    expect(await database.boards.toArray()).toMatchObject([{ id: 'local-board', title: 'Local' }]);
   });
 
   it('performs CRUD for boards', async () => {
