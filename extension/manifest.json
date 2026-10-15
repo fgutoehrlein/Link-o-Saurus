@@ -35,7 +35,10 @@
     "tabs",
     "windows"
   ],
-  "host_permissions": [],
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://github.com/*"
+  ],
   "commands": {
     "_execute_action": {
       "suggested_key": {

@@ -1,0 +1,44 @@
+.github-sync-panel,
+.github-auth-options,
+.github-pat-setup,
+.github-sync-choice,
+.github-sync-conflicts,
+.github-sync-conflict {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.github-pat-setup summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.github-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.github-sync-choice,
+.github-sync-conflict {
+  border: 1px solid var(--options-border);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  background: var(--options-panel-muted);
+}
+
+.github-device-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.github-device-code strong {
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+}
+
+.github-sync-conflict p {
+  overflow-wrap: anywhere;
+}
