@@ -1817,23 +1817,30 @@ const DashboardApp: FunctionalComponent = () => {
         themeChoice={themeChoice}
       />
 
-      <br></br>
+      <nav className="dashboard-view-tabs" aria-label={translateText('Dashboard views', locale)}>
+        <button type="button" aria-current={activeView === 'bookmarks' ? 'page' : undefined} onClick={() => setActiveView('bookmarks')}>
+          {translateText('Bookmarks', locale)}
+        </button>
+        <button type="button" aria-current={activeView === 'sessions' ? 'page' : undefined} onClick={() => setActiveView('sessions')}>
+          {translateText('Sessions', locale)}
+        </button>
+      </nav>
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
-      <div className={combineClassNames('dashboard-main', activeView === 'bookmarks' && isDetailPanelOpen && 'detail-panel-open')}>
-        <DashboardSidebar
-          activeView={activeView}
-          activeTagFilterState={activeTagFilterState}
-          canUseCompactSidebar={canUseCompactSidebar}
-          isSidebarCompact={isSidebarCompact}
-          onOpenSettings={handleOpenSettings}
-          onSelectView={setActiveView}
-          onSelectTag={handleSelectTag}
-          onUpdateSidebarCompact={updateSidebarCompact}
-          sidebarOpen={sidebarOpen}
-          tags={tags}
-        />
+      <div className={combineClassNames('dashboard-main', activeView === 'sessions' && 'sessions-view', activeView === 'bookmarks' && isDetailPanelOpen && 'detail-panel-open')}>
+        {activeView === 'bookmarks' ? (
+          <DashboardSidebar
+            activeTagFilterState={activeTagFilterState}
+            canUseCompactSidebar={canUseCompactSidebar}
+            isSidebarCompact={isSidebarCompact}
+            onOpenSettings={handleOpenSettings}
+            onSelectTag={handleSelectTag}
+            onUpdateSidebarCompact={updateSidebarCompact}
+            sidebarOpen={sidebarOpen}
+            tags={tags}
+          />
+        ) : null}
         {activeView === 'bookmarks' ? <BookmarkWorkspace
           activeFilterChips={activeFilterChips}
           bookmarkCountLabel={bookmarkCountLabel}
