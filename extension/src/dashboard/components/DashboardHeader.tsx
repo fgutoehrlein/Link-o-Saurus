@@ -6,6 +6,8 @@ import linkOSaurusIcon from '../../../assets/link-o-saurus-icon.png';
 type ThemeChoice = UserSettings['theme'];
 
 type DashboardHeaderProps = {
+  readonly searchLabel: string;
+  readonly searchPlaceholder: string;
   readonly searchInputRef: RefObject<HTMLInputElement>;
   readonly searchQuery: string;
   readonly isSearchFocused: boolean;
@@ -31,6 +33,8 @@ const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly sty
 );
 
 export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
+  searchLabel,
+  searchPlaceholder,
   isSearchActive,
   isSearchFocused,
   onOpenSettings,
@@ -61,7 +65,7 @@ export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
         )}
       >
         <br></br>
-        <span className="search-field-label">Dashboard durchsuchen</span>
+        <span className="search-field-label">{searchLabel}</span>
         <span className="search-input-shell">
           <span className="search-input-icon" aria-hidden="true">
             <SearchIcon />
@@ -73,8 +77,8 @@ export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
             onInput={onSearchChange}
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
-            placeholder="Suche nach Titeln, URLs, Tags oder Notizen…"
-            aria-label="Dashboard durchsuchen"
+            placeholder={searchPlaceholder}
+            aria-label={searchLabel}
           />
           <kbd className="search-shortcut-hint" aria-hidden="true">
             {shortcutHint}

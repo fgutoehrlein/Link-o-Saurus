@@ -96,7 +96,7 @@ describe('buildBookmarkTreeRows', () => {
     expect(Array.from(expanded).sort()).toEqual(['category:c1', 'category:c2']);
   });
 
-  it('ignores malformed parent references and missing categories', () => {
+  it('shows unassigned bookmarks at the root and ignores malformed parent references', () => {
     const valid = bookmark('ok', 'c1', 'Ok', 1);
     const missingCategory = bookmark('missing-cat', 'does-not-exist', 'Bad', 2);
     const nullCategory = bookmark('null-cat', undefined, 'Bad2', 3);
@@ -113,6 +113,6 @@ describe('buildBookmarkTreeRows', () => {
       expandedFolderIds: new Set(['category:c1']),
     });
 
-    expect(rows.map((row) => row.id)).toEqual(['board:b1', 'category:c1', 'bookmark:ok']);
+    expect(rows.map((row) => row.id)).toEqual(['board:b1', 'category:c1', 'bookmark:ok', 'bookmark:null-cat']);
   });
 });
