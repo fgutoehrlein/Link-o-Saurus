@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { SessionPack } from '../../shared/types';
 import { translateText, useI18n } from '../../shared/i18n';
 import { getAllSessionTabIndexes, toggleSessionTabIndex } from '../session-selection';
+import { filterSessions, getVisibleSessionTabIndexes } from '../session-search';
 
 export type SessionRestoreProgress = {
   total: number;
@@ -12,6 +13,7 @@ export type SessionRestoreProgress = {
 
 type SessionWorkspaceProps = {
   readonly sessions: readonly SessionPack[];
+  readonly searchQuery: string;
   readonly busy: boolean;
   readonly error: string | null;
   readonly success: string | null;
@@ -26,6 +28,7 @@ const formatSavedAt = (timestamp: number, locale: string): string => new Date(ti
 
 export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
   sessions,
+  searchQuery,
   busy,
   error,
   success,
@@ -42,9 +45,14 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
   );
   const [lastFirstSessionId, setLastFirstSessionId] = useState<string | null>(sessions[0]?.id ?? null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const visibleSessions = useMemo(() => filterSessions(sessions, searchQuery), [sessions, searchQuery]);
   const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null,
-    [sessions, selectedSessionId],
+    () => visibleSessions.find((session) => session.id === selectedSessionId) ?? visibleSessions[0] ?? null,
+    [visibleSessions, selectedSessionId],
+  );
+  const visibleTabIndexes = useMemo(
+    () => selectedSession ? getVisibleSessionTabIndexes(selectedSession, searchQuery) : [],
+    [selectedSession, searchQuery],
   );
 
   const firstSessionId = sessions[0]?.id ?? null;
@@ -96,10 +104,14 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
           <p>{translateText('Noch keine Sessions gespeichert.', locale)}</p>
           <p>{translateText('Speichere das aktuelle Fenster, um Tabs später wieder zu öffnen.', locale)}</p>
         </div>
+      ) : visibleSessions.length === 0 ? (
+        <div className="session-workspace-empty">
+          <p>{translateText('Keine passenden Sessions oder Tabs gefunden.', locale)}</p>
+        </div>
       ) : (
         <div className="session-workspace-grid">
           <ul className="session-workspace-list" aria-label={translateText('Gespeicherte Sessions', locale)}>
-            {sessions.map((session) => (
+            {visibleSessions.map((session) => (
               <li key={session.id}>
                 <button
                   type="button"
@@ -142,35 +154,45 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
                 <label>
                   <input
                     type="checkbox"
-                    checked={selectedTabIndexes.size === selectedSession.tabs.length}
-                    onChange={(event) => setSelectedTabIndexes(
-                      event.currentTarget.checked
-                        ? new Set(getAllSessionTabIndexes(selectedSession.tabs.length))
-                        : new Set(),
-                    )}
+                    checked={visibleTabIndexes.length > 0 && visibleTabIndexes.every((index) => selectedTabIndexes.has(index))}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      setSelectedTabIndexes((previous) => {
+                        const next = new Set(previous);
+                        visibleTabIndexes.forEach((index) => checked ? next.add(index) : next.delete(index));
+                        return next;
+                      });
+                    }}
                   />
-                  {translateText('Alle Tabs auswählen', locale)}
+                  {translateText(searchQuery.trim() ? 'Alle angezeigten Tabs auswählen' : 'Alle Tabs auswählen', locale)}
                 </label>
                 <ul>
-                  {selectedSession.tabs.map((tab, index) => (
-                    <li key={`${selectedSession.id}-${index}`}>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={selectedTabIndexes.has(index)}
-                          onChange={() => setSelectedTabIndexes((previous) => toggleSessionTabIndex(previous, index, selectedSession.tabs.length))}
-                        />
-                        <span>
-                          <strong>{tab.title || tab.url}</strong>
-                          <small>{tab.url}</small>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
+                  {visibleTabIndexes.map((index) => {
+                    const tab = selectedSession.tabs[index];
+                    return (
+                      <li key={`${selectedSession.id}-${index}`}>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selectedTabIndexes.has(index)}
+                            onChange={() => setSelectedTabIndexes((previous) => toggleSessionTabIndex(previous, index, selectedSession.tabs.length))}
+                          />
+                          <span>
+                            <strong>{tab.title || tab.url}</strong>
+                            <small>{tab.url}</small>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
               <footer className="session-workspace-actions">
-                <button type="button" onClick={() => onRestoreSelected(selectedSession, [...selectedTabIndexes].sort((a, b) => a - b))} disabled={busy || selectedTabIndexes.size === 0}>
+                <button
+                  type="button"
+                  onClick={() => onRestoreSelected(selectedSession, visibleTabIndexes.filter((index) => selectedTabIndexes.has(index)))}
+                  disabled={busy || !visibleTabIndexes.some((index) => selectedTabIndexes.has(index))}
+                >
                   {translateText('Ausgewählte im aktuellen Fenster öffnen', locale)}
                 </button>
                 <button type="button" onClick={() => onRestoreAll(selectedSession)} disabled={busy}>

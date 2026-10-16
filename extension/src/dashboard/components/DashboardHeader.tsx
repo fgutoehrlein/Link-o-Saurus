@@ -6,7 +6,8 @@ import linkOSaurusIcon from '../../../assets/link-o-saurus-icon.png';
 type ThemeChoice = UserSettings['theme'];
 
 type DashboardHeaderProps = {
-  readonly showSearch?: boolean;
+  readonly searchLabel: string;
+  readonly searchPlaceholder: string;
   readonly searchInputRef: RefObject<HTMLInputElement>;
   readonly searchQuery: string;
   readonly isSearchFocused: boolean;
@@ -32,7 +33,8 @@ const FontAwesomeIcon: FunctionalComponent<{ readonly name: string; readonly sty
 );
 
 export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
-  showSearch = true,
+  searchLabel,
+  searchPlaceholder,
   isSearchActive,
   isSearchFocused,
   onOpenSettings,
@@ -52,7 +54,7 @@ export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
     <div className="header-titles">
       <h1>Link-O-Saurus</h1>
     </div>
-    {showSearch ? <div className="header-actions">
+    <div className="header-actions">
       <label
         className={combineClassNames(
           'search-field',
@@ -63,7 +65,7 @@ export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
         )}
       >
         <br></br>
-        <span className="search-field-label">Dashboard durchsuchen</span>
+        <span className="search-field-label">{searchLabel}</span>
         <span className="search-input-shell">
           <span className="search-input-icon" aria-hidden="true">
             <SearchIcon />
@@ -75,15 +77,15 @@ export const DashboardHeader: FunctionalComponent<DashboardHeaderProps> = ({
             onInput={onSearchChange}
             onFocus={onSearchFocus}
             onBlur={onSearchBlur}
-            placeholder="Suche nach Titeln, URLs, Tags oder Notizen…"
-            aria-label="Dashboard durchsuchen"
+            placeholder={searchPlaceholder}
+            aria-label={searchLabel}
           />
           <kbd className="search-shortcut-hint" aria-hidden="true">
             {shortcutHint}
           </kbd>
         </span>
       </label>
-    </div> : null}
+    </div>
     <div className="header-utility-actions" role="group" aria-label="Darstellung und Einstellungen">
       <div className="header-theme-toggle-group" role="group" aria-label="Theme auswählen">
         <button

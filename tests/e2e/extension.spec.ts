@@ -404,6 +404,8 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(viewTabs).toBeVisible();
     await viewTabs.getByRole('button', { name: 'Sessions' }).click();
     await expect(viewTabs.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page');
+    await expect(dashboardPage.getByRole('searchbox', { name: 'Search sessions and tabs' }))
+      .toHaveAttribute('placeholder', 'Search session names, tab titles or URLs…');
     await expect(dashboardPage.locator('.dashboard-sidebar')).toHaveCount(0);
     const sessionWorkspace = dashboardPage.locator('.session-workspace');
     await expect(sessionWorkspace).toBeVisible();

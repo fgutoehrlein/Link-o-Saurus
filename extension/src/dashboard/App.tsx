@@ -1806,7 +1806,13 @@ const DashboardApp: FunctionalComponent = () => {
       )}
     >
       <DashboardHeader
-        showSearch={activeView === 'bookmarks'}
+        searchLabel={translateText(activeView === 'sessions' ? 'Sessions und Tabs durchsuchen' : 'Dashboard durchsuchen', locale)}
+        searchPlaceholder={translateText(
+          activeView === 'sessions'
+            ? 'Suche nach Sitzungsnamen, Tab-Titeln oder URLs…'
+            : 'Suche nach Titeln, URLs, Tags oder Notizen…',
+          locale,
+        )}
         isSearchActive={isSearchActive}
         isSearchFocused={isSearchFocused}
         onOpenSettings={handleOpenSettings}
@@ -1884,6 +1890,7 @@ const DashboardApp: FunctionalComponent = () => {
         /> : (
           <SessionWorkspace
             sessions={sessions}
+            searchQuery={searchQuery}
             busy={sessionState.busy}
             error={sessionState.error}
             success={sessionSuccess}
