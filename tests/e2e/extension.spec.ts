@@ -417,6 +417,26 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
     await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
 
+    await dashboardPage.setViewportSize({ width: 1440, height: 768 });
+    const scrollMetrics = await dashboardPage.evaluate(() => {
+      const sidebar = document.querySelector('.dashboard-sidebar');
+      if (!sidebar) throw new Error('Bookmark sidebar is missing');
+      for (let index = 0; index < 30; index += 1) {
+        const item = document.createElement('div');
+        item.textContent = `Overflow fixture ${index}`;
+        item.style.cssText = 'height:40px;flex:none';
+        sidebar.append(item);
+      }
+      return {
+        documentHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        sidebarScrollHeight: sidebar.scrollHeight,
+        sidebarClientHeight: sidebar.clientHeight,
+      };
+    });
+    expect(scrollMetrics.documentHeight).toBe(scrollMetrics.viewportHeight);
+    expect(scrollMetrics.sidebarScrollHeight).toBeGreaterThan(scrollMetrics.sidebarClientHeight);
+
     await dashboardPage.close();
   });
 });
