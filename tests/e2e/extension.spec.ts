@@ -397,6 +397,8 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
+    await dashboardPage.getByRole('searchbox').fill('');
+    await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
 
     const viewTabs = dashboardPage.locator('.dashboard-view-tabs');
     await expect(viewTabs).toBeVisible();
@@ -410,6 +412,8 @@ test.describe('Link-O-Saurus extension', () => {
     await viewTabs.getByRole('button', { name: 'Bookmarks' }).click();
     await expect(dashboardPage.locator('.dashboard-sidebar')).toBeVisible();
     await expect(dashboardPage.locator('.session-workspace')).toHaveCount(0);
+    await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
+    await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
 
     await dashboardPage.close();
   });

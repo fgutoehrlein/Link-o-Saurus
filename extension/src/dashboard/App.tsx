@@ -415,6 +415,9 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   useEffect(() => {
+    if (activeView !== 'bookmarks') {
+      return undefined;
+    }
     const element = listContainerRef.current;
     if (!element) {
       return undefined;
@@ -455,7 +458,7 @@ const DashboardApp: FunctionalComponent = () => {
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [activeView]);
 
   useEffect(() => {
     const worker = new SearchWorkerFactory();
