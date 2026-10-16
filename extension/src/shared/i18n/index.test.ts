@@ -51,5 +51,7 @@ describe('i18n', () => {
     expect(translateText('Öffnen', 'ru')).toBe('Открыть');
     expect(translateText('Einstellungen', 'ja')).toBe('設定');
     expect(translateText('3 Tabs geöffnet.', 'es')).toBe('Se abrieron 3 pestañas.');
+    expect(translateText('Aktuelles Fenster speichern', 'en')).toBe('Save current window');
+    expect(translateText('Ausgewählte im aktuellen Fenster öffnen', 'en')).toBe('Open selected in current window');
   });
 });

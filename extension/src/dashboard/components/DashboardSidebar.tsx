@@ -1,5 +1,6 @@
 import type { FunctionalComponent } from 'preact';
 import type { Tag } from '../../shared/types';
+import { translateText, useI18n } from '../../shared/i18n';
 import {
   applyNegativeTagContextAction,
   getTagFilterMode,
@@ -10,6 +11,7 @@ import { SIDEBAR_ACTIONS } from '../ui-controls';
 import { combineClassNames } from '../utils/formatting';
 
 type DashboardSidebarProps = {
+  readonly activeView: 'bookmarks' | 'sessions';
   readonly tags: readonly Tag[];
   readonly activeTagFilterState: TagFilterState;
   readonly sidebarOpen: boolean;
@@ -18,20 +20,23 @@ type DashboardSidebarProps = {
   readonly onUpdateSidebarCompact: (compact: boolean) => void;
   readonly onSelectTag: (tag: string, mode: TagFilterMode) => void;
   readonly onOpenSettings: () => void;
-  readonly onOpenSessions: () => void;
+  readonly onSelectView: (view: 'bookmarks' | 'sessions') => void;
 };
 
 export const DashboardSidebar: FunctionalComponent<DashboardSidebarProps> = ({
+  activeView,
   activeTagFilterState,
   canUseCompactSidebar,
   isSidebarCompact,
-  onOpenSessions,
   onOpenSettings,
+  onSelectView,
   onSelectTag,
   onUpdateSidebarCompact,
   sidebarOpen,
   tags,
-}) => (
+}) => {
+  const { locale } = useI18n();
+  return (
   <aside
     className={combineClassNames(
       'dashboard-sidebar',
@@ -39,7 +44,15 @@ export const DashboardSidebar: FunctionalComponent<DashboardSidebarProps> = ({
       isSidebarCompact && canUseCompactSidebar && 'compact',
     )}
   >
-    <section className="sidebar-tags-section">
+    <nav className="dashboard-view-nav" aria-label="Dashboard">
+      <button type="button" aria-current={activeView === 'bookmarks' ? 'page' : undefined} onClick={() => onSelectView('bookmarks')}>
+        {translateText('Bookmarks', locale)}
+      </button>
+      <button type="button" aria-current={activeView === 'sessions' ? 'page' : undefined} onClick={() => onSelectView('sessions')}>
+        {translateText('Sessions', locale)}
+      </button>
+    </nav>
+    {activeView === 'bookmarks' ? <section className="sidebar-tags-section">
       <header className="sidebar-section-header sidebar-tags-header">
         <h2>
           {canUseCompactSidebar ? (
@@ -103,16 +116,14 @@ export const DashboardSidebar: FunctionalComponent<DashboardSidebarProps> = ({
           })}
         </ul>
       ) : null}
-    </section>
+    </section> : null}
     {!isSidebarCompact || !canUseCompactSidebar ? (
       <section className="sidebar-actions">
         <button type="button" onClick={onOpenSettings} title={SIDEBAR_ACTIONS.importExport.description}>
           {SIDEBAR_ACTIONS.importExport.label}
         </button>
-        <button type="button" onClick={onOpenSessions}>
-          Sessions
-        </button>
       </section>
     ) : null}
   </aside>
-);
+  );
+};

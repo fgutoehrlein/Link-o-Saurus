@@ -7,6 +7,7 @@ import {
 } from '../../shared/tag-filter';
 
 export type RouteSnapshot = {
+  readonly view: 'bookmarks' | 'sessions';
   readonly search: string;
   readonly boardId: string;
   readonly sortMode?: BookmarkSortMode;
@@ -82,6 +83,7 @@ export const parseInitialRoute = (): RouteSnapshot => {
   }
 
   const search = sanitizeRouteText(params.get('q') ?? '', ROUTE_MAX_SEARCH_LENGTH);
+  const view = params.get('view') === 'sessions' ? 'sessions' : 'bookmarks';
   const boardId = params.get('board')?.replace(ROUTE_CONTROL_CHARACTERS, '').trim() ?? '';
   const sortParam = (params.get('sort') ?? '').toLowerCase();
   const sortMode: BookmarkSortMode | undefined =
@@ -103,6 +105,7 @@ export const parseInitialRoute = (): RouteSnapshot => {
   });
 
   return {
+    view,
     search,
     boardId,
     sortMode,
@@ -117,6 +120,9 @@ export const parseInitialRoute = (): RouteSnapshot => {
 
 export const updateRouteHash = (snapshot: RouteSnapshot): void => {
   const params = new URLSearchParams();
+  if (snapshot.view === 'sessions') {
+    params.set('view', 'sessions');
+  }
   if (snapshot.search) {
     params.set('q', snapshot.search);
   }

@@ -152,4 +152,31 @@ describe('openDashboard parameter handling', () => {
     expect(mocks.tabsUpdate).toHaveBeenCalledWith(99, { active: true }, expect.any(Function));
     expect(mocks.tabsSendMessage).toHaveBeenCalledWith(99, { type: 'FOCUS_SEARCH', payload: { q: 'recent' } }, expect.any(Function));
   });
+
+  it('navigates an existing dashboard tab to the requested hash view', async () => {
+    mocks.tabsQuery.mockImplementation((_queryInfo: unknown, callback?: (tabs: any[]) => void) => {
+      callback?.([
+        {
+          id: 99,
+          url: 'chrome-extension://test-id/dashboard.html',
+          active: true,
+          windowId: 7,
+          index: 0,
+          highlighted: true,
+          incognito: false,
+          pinned: false,
+          discarded: false,
+          autoDiscardable: true,
+        },
+      ]);
+    });
+
+    await openDashboard({ hash: '/?view=sessions' });
+
+    expect(mocks.tabsUpdate).toHaveBeenCalledWith(
+      99,
+      { active: true, url: 'chrome-extension://test-id/dashboard.html#/?view=sessions' },
+      expect.any(Function),
+    );
+  });
 });
