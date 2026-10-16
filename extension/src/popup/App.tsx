@@ -2,6 +2,9 @@ import { FunctionalComponent } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import { listCategories } from '../shared/db';
 import type { Bookmark, Category } from '../shared/types';
+import { sendBackgroundMessage } from '../shared/messaging';
+import { translateText, useI18n } from '../shared/i18n';
+import { openDashboard } from '../shared/utils';
 import { PopupHeader } from './components/PopupHeader';
 import { PopupFooter } from './components/PopupFooter';
 import { QuickAccessList } from './components/QuickAccessList';
@@ -36,7 +39,11 @@ type PopupAppProps = {
 };
 
 const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
+  const { locale } = useI18n();
   const [showDetails, setShowDetails] = useState(false);
+  const [savingSession, setSavingSession] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const [sessionFeedback, setSessionFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
 
@@ -124,6 +131,33 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
       quickSave.setStatus({ tone: 'error', text: 'Aktualisieren fehlgeschlagen.' });
     }
   }, [popupSearch, quickSave]);
+
+  const handleSaveCurrentWindow = useCallback(async () => {
+    if (savingSession) {
+      return;
+    }
+    setSavingSession(true);
+    setSessionSaved(false);
+    setSessionFeedback(null);
+    try {
+      const response = await sendBackgroundMessage({ type: 'session.saveCurrentWindow' });
+      if (response.type !== 'session.saveCurrentWindow.result') {
+        throw new Error(translateText('Unerwartete Antwort beim Speichern.', locale));
+      }
+      setSessionSaved(true);
+      setSessionFeedback({
+        message: translateText(`Session mit ${response.session.tabs.length} Tabs gespeichert.`, locale),
+        error: false,
+      });
+    } catch (error) {
+      setSessionFeedback({
+        message: error instanceof Error ? translateText(error.message, locale) : translateText('Session konnte nicht gespeichert werden.', locale),
+        error: true,
+      });
+    } finally {
+      setSavingSession(false);
+    }
+  }, [locale, savingSession]);
 
   const handleSearchKeyDown = useCallback(
     (event: KeyboardEvent) => {
@@ -224,6 +258,22 @@ const App: FunctionalComponent<PopupAppProps> = ({ layout = 'popup' }) => {
           onToggleDetails={() => setShowDetails((value) => !value)}
           onUrlChange={quickSave.setUrl}
         />
+
+        <section className="popup-session-action" aria-label={translateText('Tab-Sessions sichern und wiederherstellen', locale)}>
+          <button type="button" onClick={() => void handleSaveCurrentWindow()} disabled={savingSession}>
+            {savingSession ? translateText('Speichern …', locale) : translateText('Aktuelles Fenster speichern', locale)}
+          </button>
+          {sessionFeedback ? (
+            <span role={sessionFeedback.error ? 'alert' : 'status'} aria-live="polite">
+              {sessionFeedback.message}
+            </span>
+          ) : null}
+          {sessionSaved ? (
+            <button type="button" className="popup-session-manage" onClick={() => void openDashboard({ hash: '/?view=sessions' })}>
+              {translateText('Sessions verwalten', locale)}
+            </button>
+          ) : null}
+        </section>
 
         {showDetails ? null : (
           <QuickAccessList

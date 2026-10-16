@@ -1,1 +1,51 @@
 :where(html) { }
+
+.popup-session-action {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.25rem 0;
+  flex-wrap: wrap;
+}
+
+.popup-session-action > button:first-child {
+  min-height: 36px;
+  border: 1px solid var(--popup-accent, #6366f1);
+  border-radius: 9px;
+  padding: 0.45rem 0.7rem;
+  background: var(--popup-accent, #6366f1);
+  color: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.popup-session-action > button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.popup-session-action > span {
+  flex-basis: 100%;
+  color: var(--text-muted-light, #64748b);
+  font-size: 0.75rem;
+}
+
+.popup-session-action > span[role='alert'] {
+  color: var(--danger, #b91c1c);
+}
+
+.popup-session-action .popup-session-manage {
+  border: 0;
+  padding: 0.4rem 0.2rem;
+  background: transparent;
+  color: var(--popup-accent, #4f46e5);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.popup-session-action button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

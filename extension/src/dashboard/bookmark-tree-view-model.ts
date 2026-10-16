@@ -54,7 +54,7 @@ export const getExpandedFolderIdsForBookmarks = ({
  * Invariants for robust import and mixed data quality:
  * - Root consists of all known boards. Missing references never create synthetic root cycles.
  * - Category nodes are attached to a board only if that board exists.
- * - Bookmarks with missing/malformed parent references (missing category or missing board) are skipped.
+ * - Bookmarks without a category appear at the root; malformed category/board references are skipped.
  * - The shape is acyclic because parent links are materialized once into fixed depth levels (board -> category -> bookmark).
  */
 export const buildBookmarkTreeRows = ({
@@ -72,6 +72,7 @@ export const buildBookmarkTreeRows = ({
 
   const boardById = new Map(rootBoards.map((item) => [item.board.id, item] as const));
   const categoryById = new Map<string, { id: string; category: Category; bookmarks: Bookmark[] }>();
+  const rootBookmarks: Bookmark[] = [];
 
   for (const category of categories) {
     const boardNode = boardById.get(category.boardId);
@@ -83,11 +84,17 @@ export const buildBookmarkTreeRows = ({
 
   for (const bookmarkId of filteredBookmarkIds) {
     const bookmark = bookmarksById.get(bookmarkId);
-    if (!bookmark?.categoryId) continue;
+    if (!bookmark) continue;
+    if (!bookmark.categoryId) {
+      rootBookmarks.push(bookmark);
+      continue;
+    }
     const categoryNode = categoryById.get(bookmark.categoryId);
     if (!categoryNode) continue;
     categoryNode.bookmarks.push(bookmark);
   }
+
+  rootBookmarks.sort(compareBookmarks);
 
   for (const boardNode of rootBoards) {
     boardNode.categories.sort((left, right) => compareFolders(left.category, right.category));
@@ -130,6 +137,10 @@ export const buildBookmarkTreeRows = ({
         rows.push({ kind: 'bookmark', id: `bookmark:${bookmark.id}`, bookmarkId: bookmark.id, depth: 2 });
       }
     }
+  }
+
+  for (const bookmark of rootBookmarks) {
+    rows.push({ kind: 'bookmark', id: `bookmark:${bookmark.id}`, bookmarkId: bookmark.id, depth: 0 });
   }
 
   return rows;

@@ -336,7 +336,7 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.close();
   });
 
-  test('supports dashboard deep links, bulk import, and session workflows', async () => {
+  test('supports dashboard deep links, bulk import, and tabbed session navigation', async () => {
     const sidePanelHarnessPage = await context.newPage();
     await openSidePanel(sidePanelHarnessPage, extensionId);
     await sidePanelHarnessPage.waitForFunction(
@@ -397,33 +397,59 @@ test.describe('Link-O-Saurus extension', () => {
     await dashboardPage.waitForFunction(() => window.__LINKOSAURUS_DASHBOARD_READY === true);
 
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
+    await dashboardPage.getByRole('searchbox').fill('');
+    await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
 
-    await dashboardPage.locator('.sidebar-actions button').nth(1).click();
-    const sessionModal = dashboardPage.locator('.modal:has-text("Sessions")');
-    await sessionModal.waitFor();
+    const viewTabs = dashboardPage.locator('.dashboard-view-tabs');
+    await expect(viewTabs).toBeVisible();
+    await viewTabs.getByRole('button', { name: 'Sessions' }).click();
+    await expect(viewTabs.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-current', 'page');
+    await expect(dashboardPage.getByRole('searchbox', { name: 'Search sessions and tabs' }))
+      .toHaveAttribute('placeholder', 'Search session names, tab titles or URLs…');
+    await expect(dashboardPage.locator('.dashboard-sidebar')).toHaveCount(0);
+    const sessionWorkspace = dashboardPage.locator('.session-workspace');
+    await expect(sessionWorkspace).toBeVisible();
+    await expect(sessionWorkspace.getByRole('button', { name: 'Save current window' })).toHaveClass(/primary/);
 
-    await dashboardPage.evaluate(() => {
-      window.__LINKOSAURUS_OPENED_TABS?.splice(0, window.__LINKOSAURUS_OPENED_TABS.length);
+    await viewTabs.getByRole('button', { name: 'Bookmarks' }).click();
+    await expect(dashboardPage.locator('.dashboard-sidebar')).toBeVisible();
+    await expect(dashboardPage.locator('.session-workspace')).toHaveCount(0);
+    await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
+    await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
+    const viewPanelMatchesTabWidth = await dashboardPage.evaluate(() => {
+      const tabs = document.querySelector('.dashboard-view-tabs');
+      const panel = document.querySelector('.dashboard-main');
+      if (!tabs || !panel) return false;
+      const tabsBounds = tabs.getBoundingClientRect();
+      const panelBounds = panel.getBoundingClientRect();
+      const panelStyle = getComputedStyle(panel);
+      return Math.abs(tabsBounds.left - panelBounds.left) < 1 &&
+        Math.abs(tabsBounds.right - panelBounds.right) < 1 &&
+        Number.parseFloat(panelStyle.borderLeftWidth) > 0 &&
+        Number.parseFloat(panelStyle.borderRightWidth) > 0 &&
+        Number.parseFloat(panelStyle.borderBottomWidth) > 0;
     });
+    expect(viewPanelMatchesTabWidth).toBe(true);
 
-    await sessionModal.locator('.modal-actions button').click();
-
-    const savedSession = sessionModal.locator('.session-list li').first();
-    await expect(savedSession).toBeVisible();
-
-    const openedBefore = await dashboardPage.evaluate(() => window.__LINKOSAURUS_OPENED_TABS?.length ?? 0);
-    await savedSession.locator('.session-actions button').first().click();
-    await dashboardPage.waitForFunction(
-      (previousCount) => (window.__LINKOSAURUS_OPENED_TABS?.length ?? 0) > previousCount,
-      openedBefore,
-      { timeout: 5000 },
-    );
-    const openedCount = await dashboardPage.evaluate(() => window.__LINKOSAURUS_OPENED_TABS?.length ?? 0);
-    expect(openedCount).toBeGreaterThanOrEqual(10);
-
-    await savedSession.locator('.session-actions button').nth(1).click();
-    await expect(sessionModal.locator('.session-list li')).toHaveCount(0);
-    await sessionModal.locator('.modal-content > header button').click();
+    await dashboardPage.setViewportSize({ width: 1440, height: 768 });
+    const scrollMetrics = await dashboardPage.evaluate(() => {
+      const sidebar = document.querySelector('.dashboard-sidebar');
+      if (!sidebar) throw new Error('Bookmark sidebar is missing');
+      for (let index = 0; index < 30; index += 1) {
+        const item = document.createElement('div');
+        item.textContent = `Overflow fixture ${index}`;
+        item.style.cssText = 'height:40px;flex:none';
+        sidebar.append(item);
+      }
+      return {
+        documentHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        sidebarScrollHeight: sidebar.scrollHeight,
+        sidebarClientHeight: sidebar.clientHeight,
+      };
+    });
+    expect(scrollMetrics.documentHeight).toBe(scrollMetrics.viewportHeight);
+    expect(scrollMetrics.sidebarScrollHeight).toBeGreaterThan(scrollMetrics.sidebarClientHeight);
 
     await dashboardPage.close();
   });

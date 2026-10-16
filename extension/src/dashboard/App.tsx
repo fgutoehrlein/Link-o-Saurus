@@ -12,9 +12,7 @@ import type { VariableSizeList as VariableSizeListHandle } from 'react-window';
 import SearchWorkerFactory from '../shared/search-worker?worker&module';
 import {
   createBookmark,
-  createSession,
   deleteBookmarks,
-  deleteSession,
   getUserSettings,
   listBoards,
   listBookmarks,
@@ -37,7 +35,7 @@ import type {
 import type { SearchHit, SearchWorker } from '../shared/search-worker';
 import { canonicalizeTagId, normalizeTagList } from '../shared/tag-utils';
 import { normalizeUrl } from '../shared/url';
-import { isDashboardMessage } from '../shared/messaging';
+import { isDashboardMessage, sendBackgroundMessage } from '../shared/messaging';
 import { translateText, useI18n } from '../shared/i18n';
 import {
   EMPTY_TAG_FILTER_STATE,
@@ -63,8 +61,8 @@ import {
   DashboardHeader,
   DashboardSidebar,
   BookmarkWorkspace,
-  SessionDialog,
-  type SessionDialogState,
+  SessionWorkspace,
+  type SessionRestoreProgress,
 } from './components';
 import {
   ROUTE_MAX_SEARCH_LENGTH,
@@ -174,70 +172,6 @@ const generateId = (): string => {
   return `bookmark-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const containsTabsPermission = async (): Promise<boolean> => {
-  if (typeof chrome === 'undefined' || !chrome.permissions?.contains) {
-    return false;
-  }
-  return new Promise((resolve) => {
-    chrome.permissions.contains({ permissions: ['tabs'] }, (granted) => {
-      resolve(Boolean(granted));
-    });
-  });
-};
-
-const requestTabsPermission = async (): Promise<boolean> => {
-  if (typeof chrome === 'undefined' || !chrome.permissions?.request) {
-    return false;
-  }
-  return new Promise((resolve) => {
-    chrome.permissions.request({ permissions: ['tabs'] }, (granted) => {
-      resolve(Boolean(granted));
-    });
-  });
-};
-
-const queryCurrentWindowTabs = async (): Promise<chrome.tabs.Tab[]> => {
-  if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
-    return [];
-  }
-  return new Promise((resolve, reject) => {
-    chrome.tabs.query({ currentWindow: true }, (tabs) => {
-      const error = chrome.runtime?.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(tabs ?? []);
-    });
-  });
-};
-
-const openTabs = async (tabs: SessionPack['tabs']): Promise<void> => {
-  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-    for (const tab of tabs) {
-      if (!tab.url) {
-        continue;
-      }
-      await new Promise<void>((resolve, reject) => {
-        chrome.tabs.create({ url: tab.url, active: false }, () => {
-          const error = chrome.runtime?.lastError;
-          if (error) {
-            reject(new Error(error.message));
-            return;
-          }
-          resolve();
-        });
-      });
-    }
-  } else {
-    tabs.forEach((tab) => {
-      if (tab.url) {
-        window.open(tab.url, '_blank', 'noopener,noreferrer');
-      }
-    });
-  }
-};
-
 const openBookmarkLink = async (bookmark: Bookmark): Promise<string | undefined> => {
   const url = bookmark.url?.trim();
   if (!url) {
@@ -317,6 +251,7 @@ const DashboardApp: FunctionalComponent = () => {
   const [bookmarks, setBookmarks] = useState<readonly Bookmark[]>([]);
   const [tags, setTags] = useState<readonly Tag[]>([]);
   const [sessions, setSessions] = useState<readonly SessionPack[]>([]);
+  const [activeView, setActiveView] = useState<'bookmarks' | 'sessions'>(() => parseInitialRoute().view);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeBoardId, setActiveBoardId] = useState<string>('');
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
@@ -337,8 +272,9 @@ const DashboardApp: FunctionalComponent = () => {
   const [searchGeneration, setSearchGeneration] = useState<number>(0);
   const [viewportWidth, setViewportWidth] = useState<number>(() => window.innerWidth || MIN_RESIZE_WIDTH);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => window.innerWidth >= 900);
-  const [isSessionDialogOpen, setSessionDialogOpen] = useState<boolean>(false);
-  const [sessionState, setSessionState] = useState<SessionDialogState>({ busy: false, error: null });
+  const [sessionState, setSessionState] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  const [sessionSuccess, setSessionSuccess] = useState<string | null>(null);
+  const [sessionRestoreProgress, setSessionRestoreProgress] = useState<SessionRestoreProgress | null>(null);
   const [draft, setDraft] = useState<DraftBookmark | null>(null);
   const [detailState, setDetailState] = useState<DraftBookmark | null>(null);
   const [batchMove, setBatchMove] = useState<BatchMoveState>({ boardId: '', categoryId: '' });
@@ -479,6 +415,9 @@ const DashboardApp: FunctionalComponent = () => {
   }, []);
 
   useEffect(() => {
+    if (activeView !== 'bookmarks') {
+      return undefined;
+    }
     const element = listContainerRef.current;
     if (!element) {
       return undefined;
@@ -519,7 +458,7 @@ const DashboardApp: FunctionalComponent = () => {
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [activeView]);
 
   useEffect(() => {
     const worker = new SearchWorkerFactory();
@@ -541,6 +480,7 @@ const DashboardApp: FunctionalComponent = () => {
   useEffect(() => {
     const snapshot = parseInitialRoute();
     initialRouteRef.current = snapshot;
+    setActiveView(snapshot.view);
     setSearchQuery(snapshot.search);
     setActiveBoardId(snapshot.boardId);
     if (snapshot.sortMode) {
@@ -568,6 +508,7 @@ const DashboardApp: FunctionalComponent = () => {
         return;
       }
       const nextSnapshot = parseInitialRoute();
+      setActiveView(nextSnapshot.view);
       setSearchQuery(nextSnapshot.search);
       setActiveBoardId(nextSnapshot.boardId);
       if (nextSnapshot.sortMode) {
@@ -597,6 +538,7 @@ const DashboardApp: FunctionalComponent = () => {
 
   useEffect(() => {
     const snapshot: RouteSnapshot = {
+      view: activeView,
       search: searchQuery,
       boardId: activeBoardId,
       sortMode: bookmarkSortMode,
@@ -609,7 +551,7 @@ const DashboardApp: FunctionalComponent = () => {
     };
     hashSyncRef.current = true;
     updateRouteHash(snapshot);
-  }, [searchQuery, activeBoardId, bookmarkSortMode, activeTagFilters, draft?.title, draft?.url, draft?.tags]);
+  }, [activeView, searchQuery, activeBoardId, bookmarkSortMode, activeTagFilters, draft?.title, draft?.url, draft?.tags]);
 
   useEffect(() => {
     let listener:
@@ -710,6 +652,28 @@ const DashboardApp: FunctionalComponent = () => {
       console.error('Failed to refresh tags', error);
     }
   }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      setSessions(await listSessions());
+    } catch (error) {
+      console.error('Failed to refresh sessions', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== 'sessions') {
+      return;
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSessions();
+      }
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    refreshWhenVisible();
+    return () => document.removeEventListener('visibilitychange', refreshWhenVisible);
+  }, [activeView, refreshSessions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1628,57 +1592,84 @@ const DashboardApp: FunctionalComponent = () => {
 
   const handleSessionSave = useCallback(async () => {
     setSessionState({ busy: true, error: null });
+    setSessionSuccess(null);
     try {
-      if (!(await containsTabsPermission()) && !(await requestTabsPermission())) {
-        throw new Error('Berechtigung erforderlich.');
+      const response = await sendBackgroundMessage({ type: 'session.saveCurrentWindow' });
+      if (response.type !== 'session.saveCurrentWindow.result') {
+        throw new Error('Unerwartete Antwort beim Speichern.');
       }
-      const tabs = await queryCurrentWindowTabs();
-      const filtered = tabs
-        .filter((tab) => tab.url && !tab.url.startsWith('chrome://'))
-        .map((tab) => ({ url: tab.url as string, title: tab.title ?? '', favIconUrl: tab.favIconUrl ?? '' }));
-      const session = await createSession({
-        id: crypto.randomUUID(),
-        title: `Session ${new Date().toLocaleString(locale)}`,
-        tabs: filtered,
-        savedAt: Date.now(),
-      });
-      setSessions((previous) => [session, ...previous]);
+      setSessions((previous) => [response.session, ...previous.filter((session) => session.id !== response.session.id)]);
       setSessionState({ busy: false, error: null });
-      setStatusMessage('Session gespeichert.');
+      const message = translateText(`Session mit ${response.session.tabs.length} Tabs gespeichert.`, locale);
+      setSessionSuccess(message);
+      setStatusMessage(message);
     } catch (error) {
       console.error('Failed to save session', error);
-      setSessionState({ busy: false, error: 'Session konnte nicht gespeichert werden.' });
+      setSessionState({ busy: false, error: error instanceof Error ? error.message : 'Session konnte nicht gespeichert werden.' });
     }
   }, [locale]);
 
-  const handleSessionOpen = useCallback(async (session: SessionPack) => {
+  const handleSessionOpen = useCallback(async (session: SessionPack, tabIndexes?: number[]) => {
     setSessionState({ busy: true, error: null });
+    setSessionSuccess(null);
+    setSessionRestoreProgress(null);
     try {
-      if (!(await containsTabsPermission()) && !(await requestTabsPermission())) {
-        throw new Error('Berechtigung erforderlich.');
+      const response = tabIndexes
+        ? await sendBackgroundMessage({ type: 'session.openSelected', sessionId: session.id, tabIndexes })
+        : await sendBackgroundMessage({ type: 'session.openAll', sessionId: session.id });
+      const expectedType = tabIndexes ? 'session.openSelected.result' : 'session.openAll.result';
+      if (response.type !== expectedType) {
+        throw new Error('Unerwartete Antwort beim Öffnen.');
       }
-      await openTabs(session.tabs);
       setSessionState({ busy: false, error: null });
-      setStatusMessage('Session geöffnet.');
+      setSessionSuccess(translateText('Session geöffnet.', locale));
+      setStatusMessage(translateText('Session geöffnet.', locale));
     } catch (error) {
       console.error('Failed to open session', error);
-      setSessionState({ busy: false, error: 'Session konnte nicht geöffnet werden.' });
-    }
-  }, []);
-
-  const handleSessionDelete = useCallback(async (session: SessionPack) => {
-    if (!window.confirm(translateText(`Session "${session.title}" löschen?`, locale))) {
-      return;
-    }
-    try {
-      await deleteSession(session.id);
-      setSessions((previous) => previous.filter((entry) => entry.id !== session.id));
-      setStatusMessage('Session gelöscht.');
-    } catch (error) {
-      console.error('Failed to delete session', error);
-      setSessionState({ busy: false, error: 'Session konnte nicht gelöscht werden.' });
+      setSessionState({ busy: false, error: error instanceof Error ? error.message : 'Session konnte nicht geöffnet werden.' });
+      setSessionRestoreProgress(null);
     }
   }, [locale]);
+
+  const handleSessionDelete = useCallback(async (session: SessionPack) => {
+    setSessionState({ busy: true, error: null });
+    setSessionSuccess(null);
+    try {
+      const response = await sendBackgroundMessage({ type: 'session.delete', sessionId: session.id });
+      if (response.type !== 'session.delete.result') {
+        throw new Error('Unerwartete Antwort beim Löschen.');
+      }
+      setSessions((previous) => previous.filter((entry) => entry.id !== session.id));
+      setSessionSuccess(translateText('Session gelöscht.', locale));
+      setStatusMessage(translateText('Session gelöscht.', locale));
+      setSessionState({ busy: false, error: null });
+    } catch (error) {
+      console.error('Failed to delete session', error);
+      setSessionState({ busy: false, error: error instanceof Error ? error.message : 'Session konnte nicht gelöscht werden.' });
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) {
+      return;
+    }
+    const listener = (message: unknown) => {
+      if (!message || typeof message !== 'object') {
+        return;
+      }
+      const progress = message as Partial<SessionRestoreProgress> & { type?: string };
+      if (
+        progress.type === 'session.restore.progress' &&
+        typeof progress.total === 'number' &&
+        typeof progress.opened === 'number' &&
+        typeof progress.failed === 'number'
+      ) {
+        setSessionRestoreProgress({ total: progress.total, opened: progress.opened, failed: progress.failed });
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
 
   const hasActiveDetailContext = draft !== null || selectedIds.length > 0;
 
@@ -1815,6 +1806,13 @@ const DashboardApp: FunctionalComponent = () => {
       )}
     >
       <DashboardHeader
+        searchLabel={translateText(activeView === 'sessions' ? 'Sessions und Tabs durchsuchen' : 'Dashboard durchsuchen', locale)}
+        searchPlaceholder={translateText(
+          activeView === 'sessions'
+            ? 'Suche nach Sitzungsnamen, Tab-Titeln oder URLs…'
+            : 'Suche nach Titeln, URLs, Tags oder Notizen…',
+          locale,
+        )}
         isSearchActive={isSearchActive}
         isSearchFocused={isSearchFocused}
         onOpenSettings={handleOpenSettings}
@@ -1828,23 +1826,31 @@ const DashboardApp: FunctionalComponent = () => {
         themeChoice={themeChoice}
       />
 
-      <br></br>
+      <nav className="dashboard-view-tabs" aria-label={translateText('Dashboard views', locale)}>
+        <button type="button" aria-current={activeView === 'bookmarks' ? 'page' : undefined} onClick={() => setActiveView('bookmarks')}>
+          {translateText('Bookmarks', locale)}
+        </button>
+        <button type="button" aria-current={activeView === 'sessions' ? 'page' : undefined} onClick={() => setActiveView('sessions')}>
+          {translateText('Sessions', locale)}
+        </button>
+      </nav>
       <div className="status sr-only" aria-live="polite">
         {liveStatusMessage}
       </div>
-      <div className={combineClassNames('dashboard-main', isDetailPanelOpen && 'detail-panel-open')}>
-        <DashboardSidebar
-          activeTagFilterState={activeTagFilterState}
-          canUseCompactSidebar={canUseCompactSidebar}
-          isSidebarCompact={isSidebarCompact}
-          onOpenSessions={() => setSessionDialogOpen(true)}
-          onOpenSettings={handleOpenSettings}
-          onSelectTag={handleSelectTag}
-          onUpdateSidebarCompact={updateSidebarCompact}
-          sidebarOpen={sidebarOpen}
-          tags={tags}
-        />
-        <BookmarkWorkspace
+      <div className={combineClassNames('dashboard-main', activeView === 'sessions' && 'sessions-view', activeView === 'bookmarks' && isDetailPanelOpen && 'detail-panel-open')}>
+        {activeView === 'bookmarks' ? (
+          <DashboardSidebar
+            activeTagFilterState={activeTagFilterState}
+            canUseCompactSidebar={canUseCompactSidebar}
+            isSidebarCompact={isSidebarCompact}
+            onOpenSettings={handleOpenSettings}
+            onSelectTag={handleSelectTag}
+            onUpdateSidebarCompact={updateSidebarCompact}
+            sidebarOpen={sidebarOpen}
+            tags={tags}
+          />
+        ) : null}
+        {activeView === 'bookmarks' ? <BookmarkWorkspace
           activeFilterChips={activeFilterChips}
           bookmarkCountLabel={bookmarkCountLabel}
           bookmarkSortMode={bookmarkSortMode}
@@ -1881,8 +1887,21 @@ const DashboardApp: FunctionalComponent = () => {
           tileListData={tileListData}
           tileRowCount={tileRows.length}
           treeRowCount={treeRows.length}
-        />
-        {isDetailPanelOpen ? (
+        /> : (
+          <SessionWorkspace
+            sessions={sessions}
+            searchQuery={searchQuery}
+            busy={sessionState.busy}
+            error={sessionState.error}
+            success={sessionSuccess}
+            restoreProgress={sessionRestoreProgress}
+            onSave={() => void handleSessionSave()}
+            onDelete={(session) => void handleSessionDelete(session)}
+            onRestoreAll={(session) => void handleSessionOpen(session)}
+            onRestoreSelected={(session, indexes) => void handleSessionOpen(session, indexes)}
+          />
+        )}
+        {activeView === 'bookmarks' && isDetailPanelOpen ? (
           <aside
             className={combineClassNames(
               'detail-column',
@@ -1960,16 +1979,6 @@ const DashboardApp: FunctionalComponent = () => {
       </div>
 
 
-      {isSessionDialogOpen ? (
-        <SessionDialog
-          sessions={sessions}
-          state={sessionState}
-          onClose={() => setSessionDialogOpen(false)}
-          onSave={handleSessionSave}
-          onOpen={handleSessionOpen}
-          onDelete={handleSessionDelete}
-        />
-      ) : null}
     </div>
   );
 };

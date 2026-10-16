@@ -18,20 +18,19 @@ type DashboardSidebarProps = {
   readonly onUpdateSidebarCompact: (compact: boolean) => void;
   readonly onSelectTag: (tag: string, mode: TagFilterMode) => void;
   readonly onOpenSettings: () => void;
-  readonly onOpenSessions: () => void;
 };
 
 export const DashboardSidebar: FunctionalComponent<DashboardSidebarProps> = ({
   activeTagFilterState,
   canUseCompactSidebar,
   isSidebarCompact,
-  onOpenSessions,
   onOpenSettings,
   onSelectTag,
   onUpdateSidebarCompact,
   sidebarOpen,
   tags,
-}) => (
+}) => {
+  return (
   <aside
     className={combineClassNames(
       'dashboard-sidebar',
@@ -109,10 +108,8 @@ export const DashboardSidebar: FunctionalComponent<DashboardSidebarProps> = ({
         <button type="button" onClick={onOpenSettings} title={SIDEBAR_ACTIONS.importExport.description}>
           {SIDEBAR_ACTIONS.importExport.label}
         </button>
-        <button type="button" onClick={onOpenSessions}>
-          Sessions
-        </button>
       </section>
     ) : null}
   </aside>
-);
+  );
+};
