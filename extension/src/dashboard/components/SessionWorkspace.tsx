@@ -84,7 +84,7 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
           <h2 id="session-workspace-title">{translateText('Sessions', locale)}</h2>
           <p>{translateText('Speichere ein Fenster und setze später dort fort.', locale)}</p>
         </div>
-        <button type="button" onClick={onSave} disabled={busy}>
+        <button type="button" className="primary" onClick={onSave} disabled={busy}>
           {busy ? translateText('Speichern …', locale) : translateText('Aktuelles Fenster speichern', locale)}
         </button>
       </header>
@@ -136,7 +136,7 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
                   {confirmDeleteId === selectedSession.id ? (
                     <>
                       <span>{translateText('Session löschen?', locale)}</span>
-                      <button type="button" onClick={() => onDelete(selectedSession)} disabled={busy}>
+                      <button type="button" className="danger" onClick={() => onDelete(selectedSession)} disabled={busy}>
                         {translateText('Löschen', locale)}
                       </button>
                       <button type="button" onClick={() => setConfirmDeleteId(null)} disabled={busy}>
@@ -144,7 +144,7 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
                       </button>
                     </>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDeleteId(selectedSession.id)} disabled={busy}>
+                    <button type="button" className="danger" onClick={() => setConfirmDeleteId(selectedSession.id)} disabled={busy}>
                       {translateText('Löschen', locale)}
                     </button>
                   )}
@@ -190,6 +190,7 @@ export const SessionWorkspace: FunctionalComponent<SessionWorkspaceProps> = ({
               <footer className="session-workspace-actions">
                 <button
                   type="button"
+                  className="primary"
                   onClick={() => onRestoreSelected(selectedSession, visibleTabIndexes.filter((index) => selectedTabIndexes.has(index)))}
                   disabled={busy || !visibleTabIndexes.some((index) => selectedTabIndexes.has(index))}
                 >

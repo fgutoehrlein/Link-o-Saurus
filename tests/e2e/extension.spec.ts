@@ -409,13 +409,27 @@ test.describe('Link-O-Saurus extension', () => {
     await expect(dashboardPage.locator('.dashboard-sidebar')).toHaveCount(0);
     const sessionWorkspace = dashboardPage.locator('.session-workspace');
     await expect(sessionWorkspace).toBeVisible();
-    await expect(sessionWorkspace.getByRole('button', { name: 'Save current window' })).toBeVisible();
+    await expect(sessionWorkspace.getByRole('button', { name: 'Save current window' })).toHaveClass(/primary/);
 
     await viewTabs.getByRole('button', { name: 'Bookmarks' }).click();
     await expect(dashboardPage.locator('.dashboard-sidebar')).toBeVisible();
     await expect(dashboardPage.locator('.session-workspace')).toHaveCount(0);
     await expect(dashboardPage.locator('.list-header h2')).toContainText(/Bookmarks \(20/);
     await expect(dashboardPage.locator('.bookmark-list')).toContainText(deepLinkTitle);
+    const viewPanelMatchesTabWidth = await dashboardPage.evaluate(() => {
+      const tabs = document.querySelector('.dashboard-view-tabs');
+      const panel = document.querySelector('.dashboard-main');
+      if (!tabs || !panel) return false;
+      const tabsBounds = tabs.getBoundingClientRect();
+      const panelBounds = panel.getBoundingClientRect();
+      const panelStyle = getComputedStyle(panel);
+      return Math.abs(tabsBounds.left - panelBounds.left) < 1 &&
+        Math.abs(tabsBounds.right - panelBounds.right) < 1 &&
+        Number.parseFloat(panelStyle.borderLeftWidth) > 0 &&
+        Number.parseFloat(panelStyle.borderRightWidth) > 0 &&
+        Number.parseFloat(panelStyle.borderBottomWidth) > 0;
+    });
+    expect(viewPanelMatchesTabWidth).toBe(true);
 
     await dashboardPage.setViewportSize({ width: 1440, height: 768 });
     const scrollMetrics = await dashboardPage.evaluate(() => {
