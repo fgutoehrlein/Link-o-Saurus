@@ -1838,6 +1838,18 @@ const DashboardApp: FunctionalComponent = () => {
         {liveStatusMessage}
       </div>
       <div className={combineClassNames('dashboard-main', activeView === 'sessions' && 'sessions-view', activeView === 'bookmarks' && isDetailPanelOpen && 'detail-panel-open')}>
+        {activeView === 'bookmarks' && isSidebarCompact && canUseCompactSidebar ? (
+          <button
+            type="button"
+            className="sidebar-reopen-button detail-toggle-button"
+            aria-expanded={false}
+            aria-label="Tags-Leiste erweitern"
+            title="Tags-Leiste erweitern"
+            onClick={() => updateSidebarCompact(false)}
+          >
+            Tags <span aria-hidden="true">→</span>
+          </button>
+        ) : null}
         {activeView === 'bookmarks' ? (
           <DashboardSidebar
             activeTagFilterState={activeTagFilterState}
@@ -1855,13 +1867,11 @@ const DashboardApp: FunctionalComponent = () => {
           bookmarkCountLabel={bookmarkCountLabel}
           bookmarkSortMode={bookmarkSortMode}
           bookmarkViewMode={bookmarkViewMode}
-          canUseCompactSidebar={canUseCompactSidebar}
           getRowHeight={getRowHeight}
           getTileRowHeight={getTileRowHeight}
           hasActiveFilters={hasActiveFilters}
           isDetailPanelOpen={isDetailPanelOpen}
           isSearching={isSearching}
-          isSidebarCompact={isSidebarCompact}
           listContainerRef={listContainerRef}
           listData={listData}
           listHeight={listHeight}
@@ -1877,7 +1887,6 @@ const DashboardApp: FunctionalComponent = () => {
             tileListRef.current = instance;
           }}
           onToggleFilterDetails={() => setShowFilterDetails((value) => !value)}
-          onUpdateSidebarCompact={updateSidebarCompact}
           onViewModeChange={handleViewModeChange}
           searchQuery={searchQuery}
           searchResultLabel={searchResultLabel}

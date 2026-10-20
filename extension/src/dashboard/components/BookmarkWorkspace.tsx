@@ -1,4 +1,5 @@
 import type { FunctionalComponent, RefObject } from 'preact';
+import { useCallback, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { VariableSizeList as VariableSizeListHandle } from 'react-window';
 import type { BookmarkSortMode } from '../../shared/types';
 import type { BookmarkViewMode } from '../view-mode';
@@ -55,8 +56,6 @@ type BookmarkWorkspaceProps = {
   readonly bookmarkViewMode: BookmarkViewMode;
   readonly selectedCount: number;
   readonly selectedCountLabel: string;
-  readonly isSidebarCompact: boolean;
-  readonly canUseCompactSidebar: boolean;
   readonly searchResultLabel: string;
   readonly showFilterDetails: boolean;
   readonly isDetailPanelOpen: boolean;
@@ -76,7 +75,6 @@ type BookmarkWorkspaceProps = {
   readonly onViewModeChange: (mode: BookmarkViewMode) => void | Promise<void>;
   readonly onClearSelection: () => void;
   readonly onCreateBookmark: () => void;
-  readonly onUpdateSidebarCompact: (compact: boolean) => void;
   readonly onToggleFilterDetails: () => void;
   readonly onOpenDetailPanel: () => void;
   readonly onResetAllFilters: () => void;
@@ -89,13 +87,11 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
   bookmarkCountLabel,
   bookmarkSortMode,
   bookmarkViewMode,
-  canUseCompactSidebar,
   getRowHeight,
   getTileRowHeight,
   hasActiveFilters,
   isDetailPanelOpen,
   isSearching,
-  isSidebarCompact,
   listContainerRef,
   listData,
   listHeight,
@@ -107,7 +103,6 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
   onSortModeChange,
   onTileListRef,
   onToggleFilterDetails,
-  onUpdateSidebarCompact,
   onViewModeChange,
   searchQuery,
   searchResultLabel,
@@ -117,7 +112,32 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
   tileListData,
   tileRowCount,
   treeRowCount,
-}) => (
+}) => {
+  const bookmarkListElementRef = useRef<HTMLDivElement | null>(null);
+  const [scrollEdges, setScrollEdges] = useState({ above: false, below: false });
+  const updateScrollEdges = useCallback(() => {
+    const element = bookmarkListElementRef.current;
+    const next = {
+      above: Boolean(element && element.scrollTop > 1),
+      below: Boolean(element && element.scrollTop + element.clientHeight < element.scrollHeight - 1),
+    };
+    setScrollEdges((current) =>
+      current.above === next.above && current.below === next.below ? current : next,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    const element = bookmarkListElementRef.current;
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateScrollEdges);
+    if (element) {
+      observer?.observe(element);
+      if (element.firstElementChild) observer?.observe(element.firstElementChild);
+    }
+    updateScrollEdges();
+    return () => observer?.disconnect();
+  }, [bookmarkViewMode, listHeight, tileRowCount, treeRowCount, updateScrollEdges]);
+
+  return (
   <section className="bookmark-list" role="tree" aria-multiselectable="true" aria-label="Bookmark-Hierarchie">
     <div className="list-header">
       <h2>{bookmarkCountLabel}</h2>
@@ -177,21 +197,6 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
     </div>
     <div className="active-tag-filters" role="status" aria-live="polite">
       <div className="active-tag-filters-header">
-        {isSidebarCompact && canUseCompactSidebar ? (
-          <button
-            type="button"
-            className="sidebar-tags-title-toggle in-filter-row"
-            aria-pressed={isSidebarCompact}
-            aria-label="Tags-Leiste erweitern"
-            title="Tags-Leiste erweitern"
-            onClick={() => onUpdateSidebarCompact(false)}
-          >
-            <span className="sidebar-tags-title-text">Tags</span>
-            <span aria-hidden="true" className="sidebar-tags-collapse-arrow">
-              →
-            </span>
-          </button>
-        ) : null}
         <div className="active-filter-copy">
           <p className="active-tag-filters-title">Aktive Filter</p>
           <div className="active-filter-summary">{searchResultLabel}</div>
@@ -288,6 +293,13 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
               estimatedItemSize={DEFAULT_BOOKMARK_ROW_HEIGHT}
               overscanCount={6}
               itemData={listData}
+              className={combineClassNames(
+                'bookmark-scroll-list',
+                scrollEdges.above && 'has-scroll-above',
+                scrollEdges.below && 'has-scroll-below',
+              )}
+              outerRef={bookmarkListElementRef}
+              onScroll={updateScrollEdges}
               ref={onListRef}
             >
               {BookmarkRowRenderer}
@@ -303,7 +315,13 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
                 estimatedItemSize={DEFAULT_TILE_ROW_HEIGHT}
                 overscanCount={4}
                 itemData={tileListData}
-                className="bookmark-tiles-list"
+                className={combineClassNames(
+                  'bookmark-scroll-list bookmark-tiles-list',
+                  scrollEdges.above && 'has-scroll-above',
+                  scrollEdges.below && 'has-scroll-below',
+                )}
+                outerRef={bookmarkListElementRef}
+                onScroll={updateScrollEdges}
                 ref={onTileListRef}
               >
                 {BookmarkTileRowRenderer}
@@ -314,4 +332,5 @@ export const BookmarkWorkspace: FunctionalComponent<BookmarkWorkspaceProps> = ({
       ) : null}
     </div>
   </section>
-);
+  );
+};
